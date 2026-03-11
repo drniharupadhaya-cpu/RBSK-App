@@ -365,18 +365,21 @@ elif menu == "2. Child Screening":
 elif menu == "3. 4D Defect Registry":
     st.title("🔍 4D Defect Command Center")
     
-    # --- 1. THE REFER CARD PDF ENGINE ---
+    # --- 1. THE REFER CARD PDF ENGINE (UNICODE SAFE) ---
     def generate_refer_card(data):
+        # We use 'fpdf2' which handles UTF-8 (Gujarati) natively
         pdf = FPDF()
         pdf.add_page()
         
-        # Load Gujarati Font if available
-        try:
-            pdf.add_font('Gujarati', '', 'gujarati.ttf', uni=True)
+        # Load Gujarati Font
+        # IMPORTANT: gujarati.ttf MUST be in your GitHub folder
+        font_path = "gujarati.ttf"
+        if os.path.exists(font_path):
+            pdf.add_font('Gujarati', '', font_path)
             pdf.set_font('Gujarati', '', 12)
             f_gu = 'Gujarati'
-        except:
-            st.warning("⚠️ 'gujarati.ttf' not found. Using Arial. Gujarati text may not appear correctly.")
+        else:
+            st.error("🚨 FONT MISSING: Please upload 'gujarati.ttf' to GitHub.")
             pdf.set_font('Arial', '', 12)
             f_gu = 'Arial'
 
@@ -391,7 +394,7 @@ elif menu == "3. 4D Defect Registry":
         pdf.ln(5)
 
         # Personal Details Section
-        pdf.set_font(f_gu, 'B', 11)
+        pdf.set_font(f_gu, '', 11)
         pdf.cell(190, 8, f"બાળકનું પૂરુ નામ (Name): {data.get('Name', '')}", border='B', ln=True)
         
         col1_w = 95
@@ -424,7 +427,7 @@ elif menu == "3. 4D Defect Registry":
         pdf.set_font('Arial', 'B', 11)
         pdf.cell(190, 10, "SUSPECTED CONDITION / બીમારીની વિગત", border=1, ln=True, fill=True)
         pdf.set_font(f_gu, '', 12)
-        pdf.multi_cell(190, 15, f"\n {data.get('Condition', 'None')} \n", border=1)
+        pdf.multi_cell(190, 10, f"\n {data.get('Condition', 'None')} \n", border=1)
         
         pdf.ln(10)
         pdf.set_font('Arial', 'B', 10)
@@ -437,7 +440,8 @@ elif menu == "3. 4D Defect Registry":
         pdf.cell(95, 8, "Medical Officer Signature")
         pdf.cell(95, 8, "Institute/AWC Stamp", ln=True)
 
-        return pdf.output(dest="S").encode("latin-1")
+        # THIS IS THE FIX: output() in fpdf2 returns bytes directly, no need to encode!
+        return pdf.output()
 
     # --- 2. THE REGISTRY & HUNTER ---
     def has_defect(val):
@@ -1342,6 +1346,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
