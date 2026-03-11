@@ -1135,11 +1135,13 @@ elif menu == "11. Annual FY Planner":
             st.write("- **Field Work:** Mop-up rounds for absent children only.")
             st.write("- **Admin:** Success story generation, data entry, and final state-level reporting.")
 # ==========================================
-# MODULE 12: AUTOMATED STATE REPORTING (FORM III)
+# MODULE 12: AUTOMATED STATE REPORTING & SCOREBOARD
 # ==========================================
 elif menu == "12. Automated State Report":
-    st.title("📄 Automated MPR Generator (Form III)")
-    st.write("Instantly aggregates daily screenings into the official Govt Age & Gender buckets.")
+    st.title("📄 Reporting & Team Scoreboard")
+    st.write("Generate official Form III exports and track your team's annual targets.")
+
+    tab_form3, tab_scoreboard = st.tabs(["📄 Form III (Govt Export)", "🎯 Live Scoreboard (Target vs. Achievement)"])
 
     @st.cache_data(ttl=60)
     def load_daily_screenings():
@@ -1152,9 +1154,9 @@ elif menu == "12. Automated State Report":
             return pd.DataFrame(), pd.DataFrame()
 
     df_aw_daily, df_sch_daily = load_daily_screenings()
+    df_combined = pd.DataFrame()
 
     if not df_aw_daily.empty or not df_sch_daily.empty:
-        # --- 1. COMBINE AND CLEAN THE DATA ---
         if not df_aw_daily.empty: df_aw_daily['Source'] = 'Anganwadi'
         if not df_sch_daily.empty: df_sch_daily['Source'] = 'School'
         
@@ -1178,8 +1180,10 @@ elif menu == "12. Automated State Report":
             df_combined[dob_col] = pd.to_datetime(df_combined[dob_col], errors='coerce')
             df_combined = df_combined.dropna(subset=[date_col])
             df_combined['Month_Year'] = df_combined[date_col].dt.strftime('%B %Y')
-            
-            # --- 2. REPORT FILTERING ---
+
+    # --- TAB 1: FORM III EXPORT (IRONED OUT) ---
+    with tab_form3:
+        if not df_combined.empty and date_col and dob_col:
             available_months = df_combined['Month_Year'].dropna().unique().tolist()
             if not available_months:
                 st.warning("No valid dates found in the screening logs.")
@@ -1189,7 +1193,6 @@ elif menu == "12. Automated State Report":
                 
                 report_df = df_combined[df_combined['Month_Year'] == selected_month].copy()
                 
-                # --- 3. THE MAGIC MATH (AGE BUCKETING) ---
                 report_df['Age_Years'] = (report_df[date_col] - report_df[dob_col]).dt.days / 365.25
                 
                 def bucket_age(age):
@@ -1205,7 +1208,6 @@ elif menu == "12. Automated State Report":
                 else:
                     report_df['Clean_Gender'] = "U"
 
-                # --- 4. BUILD THE DASHBOARD ---
                 st.divider()
                 st.markdown(f"### 📊 Official Form III Output: **{selected_month}**")
                 st.write(f"Total Children Screened this month: **{len(report_df)}**")
@@ -1228,23 +1230,21 @@ elif menu == "12. Automated State Report":
                 render_bucket_stats("6-18 Years", col_6_18)
 
                 st.divider()
-                
-                # --- 5. AUTOMATED 4D & MALNUTRITION TALLY ---
                 st.markdown("### 🚨 Disease & Malnutrition Referrals (Current Month)")
                 
                 m1, m2 = st.columns(2)
                 with m1:
-                    st.write("**Nutritional Triage (From Anganwadis)**")
+                    st.write("**Nutritional Triage**")
                     if status_col:
                         sam_count = len(report_df[report_df[status_col].astype(str).str.upper() == 'SAM'])
                         mam_count = len(report_df[report_df[status_col].astype(str).str.upper() == 'MAM'])
-                        st.error(f"🔴 SAM Cases Identified: **{sam_count}**")
-                        st.warning(f"🟡 MAM Cases Identified: **{mam_count}**")
+                        st.error(f"🔴 SAM Cases: **{sam_count}**")
+                        st.warning(f"🟡 MAM Cases: **{mam_count}**")
                     else:
                         st.write("No nutrition status column found.")
                         
                 with m2:
-                    st.write("**Other 4D Conditions Found**")
+                    st.write("**4D Conditions Found**")
                     if disease_col:
                         def is_real_disease(val):
                             clean = str(val).strip().lower()
@@ -1258,11 +1258,9 @@ elif menu == "12. Automated State Report":
                         else:
                             st.success("No 4D diseases logged this month!")
                             
-                # --- 6. EXPORT PERFECTLY STREAMLINED CSV ---
                 st.divider()
                 st.markdown("### 📥 Download Cleaned Report")
                 
-                # Build a brand new, clean dataframe just for the CSV
                 export_df = pd.DataFrame()
                 export_df['Screening Date'] = report_df[date_col].dt.strftime('%d-%m-%Y')
                 export_df['Source'] = report_df['Source']
@@ -1276,7 +1274,6 @@ elif menu == "12. Automated State Report":
                 if status_col: export_df['Nutrition (SAM/MAM)'] = report_df[status_col]
                 if disease_col: export_df['4D Condition Found'] = report_df[disease_col]
 
-                # Show a preview of the clean data before downloading
                 with st.expander("👁️ Preview Streamlined CSV Data"):
                     st.dataframe(export_df, use_container_width=True, hide_index=True)
 
@@ -1288,9 +1285,47 @@ elif menu == "12. Automated State Report":
                     mime="text/csv",
                 )
         else:
-            st.warning("Could not find 'Date of Screening' or 'DOB' columns in your daily screening sheets to calculate ages.")
-    else:
-        st.info("No daily screening data found yet. Start screening children in Module 2!")
+            st.info("No valid daily screening data found yet to generate Form III. Start screening in Module 2!")
+
+    # --- TAB 2: LIVE SCOREBOARD (DR. NIHAR) ---
+    with tab_scoreboard:
+        st.subheader("🏆 Live Performance Scoreboard")
+        st.markdown("**Team:** Dr. Nihar (MHT-1240315) | **Block:** Visavadar")
+        
+        # Hardcoded Target for Dr. Nihar based on TEAMIDVISE.csv
+        annual_target = 12794
+        
+        if not df_combined.empty:
+            total_achieved = len(df_combined)
+            
+            # Calculate Percentage
+            achievement_pct = (total_achieved / annual_target) * 100
+            
+            # Prevent progress bar from breaking if you somehow go over 100%
+            progress_bar_val = min(achievement_pct / 100.0, 1.0)
+            
+            st.markdown("### 📈 FY Cumulative Progress")
+            
+            # The big metrics
+            s1, s2, s3 = st.columns(3)
+            s1.metric("Annual Target", f"{annual_target:,}")
+            s2.metric("Total Achieved", f"{total_achieved:,}", delta="Children Screened")
+            s3.metric("Achievement %", f"{achievement_pct:.2f}%")
+            
+            # The Visual Progress Bar
+            st.progress(progress_bar_val)
+            
+            st.divider()
+            
+            # Quick breakdown of WHERE the screenings happened
+            st.markdown("### 🏢 Screening Breakdown by Source")
+            source_counts = df_combined['Source'].value_counts().reset_index()
+            source_counts.columns = ['Location Type', 'Children Screened']
+            st.dataframe(source_counts, use_container_width=True, hide_index=True)
+            
+        else:
+            st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
