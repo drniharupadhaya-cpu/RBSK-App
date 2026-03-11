@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import gspread
-from google.oauth2.service_account import Credentials  # <-- NEW UPGRADED LOGIN LIBRARY
 import json
 from fpdf import FPDF
 import tempfile
@@ -9,11 +8,9 @@ import os
 
 @st.cache_data(ttl=60)
 def load_all_data():
-    scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    # --- THE NEW BULLETPROOF DIRECT LOGIN ---
     creds_dict = json.loads(st.secrets["gcp_service_account"])
-    # <-- NEW UPGRADED LOGIN METHOD
-    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
-    client = gspread.authorize(creds)
+    client = gspread.service_account_from_dict(creds_dict)
     
     sheet_url = "https://docs.google.com/spreadsheets/d/1i5wAkI7k98E80qhHRe6xQOhF4Qj9Z0DH8wjPsQ7gRZc/edit?gid=2111634358#gid=2111634358"
     spreadsheet = client.open_by_url(sheet_url)
@@ -431,13 +428,11 @@ elif menu == "7. Anemia Tracker":
     with tab_dash:
         st.subheader("Anemia Analytics Overview")
         if not df_anemia.empty:
-            # Clean the data so we can do math on the Hb levels
             df_anemia['HB LEVEL'] = pd.to_numeric(df_anemia['HB LEVEL'], errors='coerce')
 
             m1, m2, m3 = st.columns(3)
             m1.metric("Total Children Screened", len(df_anemia))
             
-            # Count how many are Severe
             severe_cases = len(df_anemia[df_anemia['SEVERITY'].astype(str).str.strip().str.upper() == 'SEVERE'])
             m2.metric("Total Severe Cases", severe_cases)
             
@@ -489,7 +484,6 @@ elif menu == "7. Anemia Tracker":
                 elif hb_level == 0.0:
                     st.error("🚨 Please enter a valid Hb level greater than 0.")
                 else:
-                    # THE MAGIC: Auto-categorization logic
                     if hb_level < 8.0:
                         calculated_severity = "Severe"
                     elif 8.0 <= hb_level <= 10.9:
@@ -500,10 +494,8 @@ elif menu == "7. Anemia Tracker":
                         calculated_severity = "Normal"
 
                     try:
-                        # Save directly to the ANEMIA tab
                         anemia_sheet = spreadsheet.worksheet("ANEMIA")
                         
-                        # Data exactly matching your flattened headers
                         row_data = [
                             facility, str(camp_date), village, child_name, 
                             str(dob), gender, hb_level, calculated_severity
@@ -514,4 +506,4 @@ elif menu == "7. Anemia Tracker":
                         st.toast("✅ Anemia Record Saved!", icon="🩸")
                         st.success(f"✅ Saved **{child_name}**! With an Hb of {hb_level}, they were automatically categorized as: **{calculated_severity}**.")
                     except Exception as e:
-                        st.error(f"⚠️ Error: Could not find the 'ANEMIA' tab in Google Sheets. Please ensure it is spelled exactly 'ANEMIA'. Detail: {e}")
+                        st.error(f"⚠️ Error: Could not find the 'ANEMIA' tab. Detail: {e}")
