@@ -16,18 +16,15 @@ st.set_page_config(page_title="RBSK Manager", page_icon="🩺", layout="wide")
 def load_all_data():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     
-    # 1. Securely load the credentials from Streamlit's Vault
     creds_dict = json.loads(st.secrets["gcp_service_account"])
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     
-    # 2. Authorize the connection
     client = gspread.authorize(creds)
     
-    # 3. Open the Google Sheet (MAKE SURE TO PASTE YOUR REAL LINK HERE!)
+    # REMEMBER TO PASTE YOUR REAL GOOGLE SHEET LINK HERE:
     sheet_url = "https://docs.google.com/spreadsheets/d/1i5wAkI7k98E80qhHRe6xQOhF4Qj9Z0DH8wjPsQ7gRZc/edit?gid=1684288682#gid=1684288682" 
     spreadsheet = client.open_by_url(sheet_url)
     
-    # 4. Download and clean the data
     df_4d = pd.DataFrame(spreadsheet.worksheet("4d_list").get_all_records()).astype(str)
     df_schools = pd.DataFrame(spreadsheet.worksheet("school_details").get_all_records()).astype(str)
     df_aw = pd.DataFrame(spreadsheet.worksheet("aw_data").get_all_records()).astype(str)
@@ -559,4 +556,5 @@ elif menu == "6. Success Story Builder":
         else:
             st.error("⚠️ The headers in your Google Sheet are still not exactly 'NAME', 'VILLAGE', and '4D'.")
     else:
+
         st.warning("No 4D Defect records found to create a success story.")
