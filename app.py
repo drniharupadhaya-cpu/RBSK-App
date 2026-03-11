@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials  # <-- NEW UPGRADED LOGIN LIBRARY
 import json
 from fpdf import FPDF
 import tempfile
@@ -11,8 +11,10 @@ import os
 def load_all_data():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds_dict = json.loads(st.secrets["gcp_service_account"])
-    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    # <-- NEW UPGRADED LOGIN METHOD
+    creds = Credentials.from_service_account_info(creds_dict, scopes=scope)
     client = gspread.authorize(creds)
+    
     sheet_url = "https://docs.google.com/spreadsheets/d/1i5wAkI7k98E80qhHRe6xQOhF4Qj9Z0DH8wjPsQ7gRZc/edit?gid=2111634358#gid=2111634358"
     spreadsheet = client.open_by_url(sheet_url)
     
@@ -20,7 +22,6 @@ def load_all_data():
     df_schools = pd.DataFrame(spreadsheet.worksheet("school_details").get_all_records()).astype(str)
     df_aw = pd.DataFrame(spreadsheet.worksheet("aw_data").get_all_records()).astype(str)
     
-    # Load the new ANEMIA sheet!
     try:
         df_anemia = pd.DataFrame(spreadsheet.worksheet("ANEMIA").get_all_records()).astype(str)
     except:
@@ -51,7 +52,7 @@ menu = st.sidebar.radio("Go to:",
         "4. Visual Analysis", 
         "5. HBNC Newborn Visit", 
         "6. Success Story Builder",
-        "7. Anemia Tracker"  # NEW MENU ITEM!
+        "7. Anemia Tracker"
     ]
 )
 
@@ -502,8 +503,7 @@ elif menu == "7. Anemia Tracker":
                         # Save directly to the ANEMIA tab
                         anemia_sheet = spreadsheet.worksheet("ANEMIA")
                         
-                        # Data exactly matching your flattened headers: 
-                        # PHC/CHC/UPHC, CAMP DATE, VILLAGE, CHILD NAME, DOB, GENDER, HB LEVEL, SEVERITY
+                        # Data exactly matching your flattened headers
                         row_data = [
                             facility, str(camp_date), village, child_name, 
                             str(dob), gender, hb_level, calculated_severity
@@ -515,5 +515,3 @@ elif menu == "7. Anemia Tracker":
                         st.success(f"✅ Saved **{child_name}**! With an Hb of {hb_level}, they were automatically categorized as: **{calculated_severity}**.")
                     except Exception as e:
                         st.error(f"⚠️ Error: Could not find the 'ANEMIA' tab in Google Sheets. Please ensure it is spelled exactly 'ANEMIA'. Detail: {e}")
-
-
