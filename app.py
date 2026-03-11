@@ -1141,7 +1141,6 @@ elif menu == "12. Automated State Report":
     st.title("📄 Automated MPR Generator (Form III)")
     st.write("Instantly aggregates daily screenings into the official Govt Age & Gender buckets.")
 
-    # --- DYNAMIC DATA LOADER FOR DAILY SCREENINGS ---
     @st.cache_data(ttl=60)
     def load_daily_screenings():
         try:
@@ -1156,14 +1155,11 @@ elif menu == "12. Automated State Report":
 
     if not df_aw_daily.empty or not df_sch_daily.empty:
         # --- 1. COMBINE AND CLEAN THE DATA ---
-        # Standardize columns to merge Anganwadi and School sheets safely
         if not df_aw_daily.empty: df_aw_daily['Source'] = 'Anganwadi'
         if not df_sch_daily.empty: df_sch_daily['Source'] = 'School'
         
-        # Combine them
         df_combined = pd.concat([df_aw_daily, df_sch_daily], ignore_index=True)
         
-        # We need flexible column finders because column names might vary slightly
         def find_col(df, keywords):
             for col in df.columns:
                 if any(k.lower() in col.lower() for k in keywords): return col
@@ -1173,17 +1169,14 @@ elif menu == "12. Automated State Report":
         dob_col = find_col(df_combined, ['dob', 'date of birth'])
         gender_col = find_col(df_combined, ['gender', 'sex'])
         disease_col = find_col(df_combined, ['disease', '4d', 'defect'])
-        status_col = find_col(df_combined, ['status', 'sam', 'mam']) # From our new Autopilot!
+        status_col = find_col(df_combined, ['status', 'sam', 'mam'])
+        name_col = find_col(df_combined, ['name', 'child', 'student', 'beneficiary'])
+        inst_col = find_col(df_combined, ['inst', 'school', 'awc', 'center'])
 
         if date_col and dob_col:
-            # Convert to actual dates for mathematical calculation
             df_combined[date_col] = pd.to_datetime(df_combined[date_col], errors='coerce')
             df_combined[dob_col] = pd.to_datetime(df_combined[dob_col], errors='coerce')
-            
-            # Drop rows where we don't have a screening date
             df_combined = df_combined.dropna(subset=[date_col])
-            
-            # Create a Month-Year column for the dropdown filter (e.g., "February 2026")
             df_combined['Month_Year'] = df_combined[date_col].dt.strftime('%B %Y')
             
             # --- 2. REPORT FILTERING ---
@@ -1194,11 +1187,9 @@ elif menu == "12. Automated State Report":
                 c1, c2 = st.columns(2)
                 selected_month = c1.selectbox("📅 Select Reporting Month:", available_months)
                 
-                # Filter data to ONLY the selected month
                 report_df = df_combined[df_combined['Month_Year'] == selected_month].copy()
                 
                 # --- 3. THE MAGIC MATH (AGE BUCKETING) ---
-                # Calculate exact age in years at the time of screening
                 report_df['Age_Years'] = (report_df[date_col] - report_df[dob_col]).dt.days / 365.25
                 
                 def bucket_age(age):
@@ -1209,7 +1200,6 @@ elif menu == "12. Automated State Report":
                 
                 report_df['Govt_Age_Bucket'] = report_df['Age_Years'].apply(bucket_age)
                 
-                # Clean up Gender to just M/F
                 if gender_col:
                     report_df['Clean_Gender'] = report_df[gender_col].astype(str).str.upper().str[0]
                 else:
@@ -1220,7 +1210,6 @@ elif menu == "12. Automated State Report":
                 st.markdown(f"### 📊 Official Form III Output: **{selected_month}**")
                 st.write(f"Total Children Screened this month: **{len(report_df)}**")
 
-                # The 3 Main Columns for Age Buckets
                 col_0_3, col_3_6, col_6_18 = st.columns(3)
                 
                 def render_bucket_stats(bucket_name, column_ui):
@@ -1257,7 +1246,6 @@ elif menu == "12. Automated State Report":
                 with m2:
                     st.write("**Other 4D Conditions Found**")
                     if disease_col:
-                        # Filter out 'None', 'NA', blank strings
                         def is_real_disease(val):
                             clean = str(val).strip().lower()
                             return clean not in ['', 'nan', 'none', 'no', 'null', 'na', 'false']
@@ -1270,13 +1258,33 @@ elif menu == "12. Automated State Report":
                         else:
                             st.success("No 4D diseases logged this month!")
                             
-                # --- EXPORT TO CSV BUTTON ---
+                # --- 6. EXPORT PERFECTLY STREAMLINED CSV ---
                 st.divider()
-                csv = report_df.to_csv(index=False).encode('utf-8')
+                st.markdown("### 📥 Download Cleaned Report")
+                
+                # Build a brand new, clean dataframe just for the CSV
+                export_df = pd.DataFrame()
+                export_df['Screening Date'] = report_df[date_col].dt.strftime('%d-%m-%Y')
+                export_df['Source'] = report_df['Source']
+                export_df['Institution'] = report_df[inst_col] if inst_col else "Unknown"
+                export_df['Child Name'] = report_df[name_col] if name_col else "Unknown"
+                export_df['DOB'] = report_df[dob_col].dt.strftime('%d-%m-%Y')
+                export_df['Calculated Age (Yrs)'] = report_df['Age_Years'].round(2)
+                export_df['Govt Age Bucket'] = report_df['Govt_Age_Bucket']
+                export_df['Gender'] = report_df['Clean_Gender']
+                
+                if status_col: export_df['Nutrition (SAM/MAM)'] = report_df[status_col]
+                if disease_col: export_df['4D Condition Found'] = report_df[disease_col]
+
+                # Show a preview of the clean data before downloading
+                with st.expander("👁️ Preview Streamlined CSV Data"):
+                    st.dataframe(export_df, use_container_width=True, hide_index=True)
+
+                csv = export_df.to_csv(index=False).encode('utf-8')
                 st.download_button(
-                    label="⬇️ Download Raw Monthly Data (CSV)",
+                    label="⬇️ Download Streamlined Monthly Data (CSV)",
                     data=csv,
-                    file_name=f"RBSK_MPR_{selected_month}.csv",
+                    file_name=f"RBSK_MPR_Cleaned_{selected_month}.csv",
                     mime="text/csv",
                 )
         else:
