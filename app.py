@@ -6,34 +6,38 @@ from fpdf import FPDF
 import tempfile
 import os
 
-@st.cache_data(ttl=60)
-def load_all_data():
-    # --- THE NEW BULLETPROOF DIRECT LOGIN ---
+# --- 1. GET THE LIVE DATABASE CONNECTION (DO NOT CACHE THIS!) ---
+def get_spreadsheet():
     creds_dict = json.loads(st.secrets["gcp_service_account"])
     client = gspread.service_account_from_dict(creds_dict)
-    
     sheet_url = "https://docs.google.com/spreadsheets/d/1i5wAkI7k98E80qhHRe6xQOhF4Qj9Z0DH8wjPsQ7gRZc/edit?gid=2111634358#gid=2111634358"
-    spreadsheet = client.open_by_url(sheet_url)
+    return client.open_by_url(sheet_url)
+
+# --- 2. GET THE PURE DATA (CACHE THIS FOR SPEED) ---
+@st.cache_data(ttl=60)
+def load_all_data():
+    sheet = get_spreadsheet()
     
-    df_4d = pd.DataFrame(spreadsheet.worksheet("4d_list").get_all_records()).astype(str)
-    df_schools = pd.DataFrame(spreadsheet.worksheet("school_details").get_all_records()).astype(str)
-    df_aw = pd.DataFrame(spreadsheet.worksheet("aw_data").get_all_records()).astype(str)
+    df_4d = pd.DataFrame(sheet.worksheet("4d_list").get_all_records()).astype(str)
+    df_schools = pd.DataFrame(sheet.worksheet("school_details").get_all_records()).astype(str)
+    df_aw = pd.DataFrame(sheet.worksheet("aw_data").get_all_records()).astype(str)
     
     try:
-        df_anemia = pd.DataFrame(spreadsheet.worksheet("ANEMIA").get_all_records()).astype(str)
+        df_anemia = pd.DataFrame(sheet.worksheet("ANEMIA").get_all_records()).astype(str)
     except:
         df_anemia = pd.DataFrame()
     
     try:
-        df_students = pd.DataFrame(spreadsheet.worksheet("students_data").get_all_records()).astype(str)
+        df_students = pd.DataFrame(sheet.worksheet("students_data").get_all_records()).astype(str)
     except:
         df_students = pd.DataFrame() 
         
-    return df_4d, df_schools, df_aw, df_students, df_anemia, spreadsheet
+    return df_4d, df_schools, df_aw, df_students, df_anemia
 
-# Actually load the data into the app!
+# --- 3. ACTIVATE BOTH ---
 try:
-    df_4d, df_schools, df_aw, df_students, df_anemia, spreadsheet = load_all_data()
+    spreadsheet = get_spreadsheet()  # Fresh, live connection for saving data
+    df_4d, df_schools, df_aw, df_students, df_anemia = load_all_data() # Frozen data for viewing
 except Exception as e:
     st.error(f"Could not connect to Google Sheets. Please check your Secret Vault. Error: {e}")
     st.stop()
