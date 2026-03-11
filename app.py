@@ -43,11 +43,7 @@ if menu == "1. Daily Tour Plan":
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client=gspread.authorize(creds)
 sheet_url ="https://docs.google.com/spreadsheets/d/1i5wAkI7k98E80qhHRe6xQOhF4Qj9Z0DH8wjPsQ7gRZc/edit?gid=2111634358#gid=2111634358"
-    
-    
-    # !!! PASTE YOUR GOOGLE SHEET LINK HERE !!!
-     
-    spreadsheet = client.open_by_url(sheet_url)
+spreadsheet = client.open_by_url(sheet_url)
 
     try:
         planner_sheet = spreadsheet.worksheet("tour_plan")
@@ -545,6 +541,7 @@ elif menu == "6. Success Story Builder":
     else:
 
         st.warning("No 4D Defect records found to create a success story.")
+
 
 
 
