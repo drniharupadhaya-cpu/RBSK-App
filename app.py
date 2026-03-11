@@ -60,7 +60,7 @@ menu = st.sidebar.radio("Go to:",
         "5. HBNC Newborn Visit", 
         "6. Success Story Builder",
         "7. Anemia Tracker",
-        "8. School Directory"  # <-- NEW MENU ITEM!
+        "8. School Directory"
         "9. Anganwadi Directory"
     ]
 )
@@ -662,4 +662,5 @@ if menu == "9. Anganwadi Directory":
 
     else:
         st.error("⚠️ Could not load 'aw_master_directory'. Check your sheet tab name!")
+
 
