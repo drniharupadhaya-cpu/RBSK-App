@@ -1,27 +1,22 @@
 import json
 import streamlit as st
+import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-import pandas as pd
-import datetime  # <--- ADD THIS LINE
+import json
 from fpdf import FPDF
 import tempfile
 import os
 
-# --- APP SETUP ---
-st.set_page_config(page_title="RBSK Manager", page_icon="🩺", layout="wide")
-
-# --- CONNECT TO DATABASE ---
 @st.cache_data(ttl=60)
 def load_all_data():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    
     creds_dict = json.loads(st.secrets["gcp_service_account"])
     creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-        client = gspread.authorize(creds)
+    client = gspread.authorize(creds)
     
     # REMEMBER TO PASTE YOUR REAL GOOGLE SHEET LINK HERE:
-    sheet_url = "https://docs.google.com/spreadsheets/d/1i5wAkI7k98E80qhHRe6xQOhF4Qj9Z0DH8wjPsQ7gRZc/edit?gid=1684288682#gid=1684288682" 
+    sheet_url = "PASTE_YOUR_LONG_GOOGLE_SHEET_LINK_HERE" 
     spreadsheet = client.open_by_url(sheet_url)
     
     df_4d = pd.DataFrame(spreadsheet.worksheet("4d_list").get_all_records()).astype(str)
@@ -557,4 +552,5 @@ elif menu == "6. Success Story Builder":
     else:
 
         st.warning("No 4D Defect records found to create a success story.")
+
 
