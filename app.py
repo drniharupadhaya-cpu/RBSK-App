@@ -24,31 +24,31 @@ def load_all_data():
     
     try:
         df_anemia = pd.DataFrame(sheet.worksheet("ANEMIA").get_all_records()).astype(str)
-    except:
-        df_anemia = pd.DataFrame()
+    except: df_anemia = pd.DataFrame()
     
     try:
         df_students = pd.DataFrame(sheet.worksheet("students_data").get_all_records()).astype(str)
-    except:
-        df_students = pd.DataFrame() 
+    except: df_students = pd.DataFrame() 
 
     try:
         df_directory = pd.DataFrame(sheet.worksheet("ALL SCHOOL DETAILS").get_all_records()).astype(str)
-    except:
-        df_directory = pd.DataFrame()
+    except: df_directory = pd.DataFrame()
 
-    # --- NEW: LOAD ONLY THE ANGANWADI CONTACT DIRECTORY ---
     try:
         df_aw_contacts = pd.DataFrame(sheet.worksheet("aw_master_directory").get_all_records()).astype(str)
-    except:
-        df_aw_contacts = pd.DataFrame()
+    except: df_aw_contacts = pd.DataFrame()
         
-    return df_4d, df_schools, df_aw, df_students, df_anemia, df_directory, df_aw_contacts
+    # --- NEW: LOAD MASTER STAFF DIRECTORY ---
+    try:
+        df_staff = pd.DataFrame(sheet.worksheet("master_staff_directory").get_all_records()).astype(str)
+    except: df_staff = pd.DataFrame()
+
+    return df_4d, df_schools, df_aw, df_students, df_anemia, df_directory, df_aw_contacts, df_staff
 
 # --- 3. ACTIVATE BOTH ---
 try:
     spreadsheet = get_spreadsheet() 
-    df_4d, df_schools, df_aw, df_students, df_anemia, df_directory, df_aw_contacts = load_all_data() 
+    df_4d, df_schools, df_aw, df_students, df_anemia, df_directory, df_aw_contacts, df_staff = load_all_data() 
 except Exception as e:
     st.error(f"Could not connect to Google Sheets. Please check your Secret Vault. Error: {e}")
     st.stop()
@@ -66,7 +66,8 @@ menu = st.sidebar.radio("Go to:",
         "6. Success Story Builder",
         "7. Anemia Tracker",
         "8. School Directory",
-        "9. Anganwadi Directory"  # <-- NEW MENU ITEM!
+        "9. Anganwadi Directory",
+        "10. Staff Directory"  # <-- NEW MENU ITEM!
     ]
 )
 
@@ -433,7 +434,7 @@ elif menu == "6. Success Story Builder":
         st.warning("No 4D Defect records found.")
 
 # ==========================================
-# MODULE 7: ANEMIA TRACKER (LEVEL 2 UPGRADE!)
+# MODULE 7: ANEMIA TRACKER
 # ==========================================
 elif menu == "7. Anemia Tracker":
     st.title("🩸 Anemia Camp & Analytics Dashboard")
@@ -599,37 +600,108 @@ elif menu == "8. School Directory":
         st.error("⚠️ Could not load data from the 'ALL SCHOOL DETAILS' tab.")
 
 # ==========================================
-# MODULE 9: ANGANWADI DIRECTORY (SIMPLE PHONEBOOK)
+# MODULE 9: ANGANWADI DIRECTORY 
 # ==========================================
 elif menu == "9. Anganwadi Directory":
     st.title("👶 Anganwadi Contact Directory")
     st.write("Instantly look up Anganwadi Workers and their contact numbers.")
 
     if not df_aw_contacts.empty:
-        # We find the column that looks like the AWC Name by searching for "Name" or "AWC"
-        awc_col = df_aw_contacts.columns[0] # Default to the first column
+        awc_col = df_aw_contacts.columns[0] 
         for col in df_aw_contacts.columns:
             if 'AWC' in col.upper() or 'NAME' in col.upper():
                 awc_col = col
                 break
                 
-        # Build the dropdown list
         awc_options = sorted([str(x) for x in df_aw_contacts[awc_col].unique() if str(x) != 'nan' and str(x).strip() != ''])
         selected_awc = st.selectbox("Select an Anganwadi Center:", ["-- Select Center --"] + awc_options)
         
         if selected_awc != "-- Select Center --":
-            # Pull the data row for that specific AWC
             contact_info = df_aw_contacts[df_aw_contacts[awc_col] == selected_awc].iloc[0]
             
             st.divider()
             st.subheader(f"🏠 {selected_awc}")
             
-            # Dynamically display EVERY column you have in that row (Worker Name, Phone, Sector, etc.)
             for col in df_aw_contacts.columns:
-                if col != awc_col:  # Skip showing the name twice
+                if col != awc_col:  
                     val = str(contact_info[col]).strip()
                     if val not in ['', 'nan', 'None']:
                         st.success(f"**{col}:** {val}")
                         
     else:
         st.error("⚠️ Could not load data from the 'aw_master_directory' tab. Please ensure the tab is spelled exactly right in your Google Sheet.")
+
+# ==========================================
+# MODULE 10: STAFF DIRECTORY (NEW!)
+# ==========================================
+elif menu == "10. Staff Directory":
+    st.title("👨‍⚕️ Master Staff Directory")
+    st.write("Search and contact your medical team members instantly.")
+
+    if not df_staff.empty:
+        # Dynamically find the Designation/Role column if it exists
+        desig_col = None
+        for col in df_staff.columns:
+            if "DESIGNATION" in col.upper() or "ROLE" in col.upper() or "POST" in col.upper():
+                desig_col = col
+                break
+
+        # Display Filters
+        col1, col2 = st.columns(2)
+        with col1:
+            search_query = st.text_input("🔍 Search by Name:")
+        with col2:
+            if desig_col:
+                roles = ["All"] + sorted([str(x) for x in df_staff[desig_col].unique() if str(x).strip() not in ['', 'nan']])
+                selected_role = st.selectbox("⚕️ Filter by Designation:", roles)
+            else:
+                selected_role = "All"
+
+        # Apply Filters
+        filtered_staff = df_staff.copy()
+        
+        if search_query:
+            # Search across all columns for the typed name
+            mask = filtered_staff.astype(str).apply(lambda x: x.str.contains(search_query, case=False, na=False)).any(axis=1)
+            filtered_staff = filtered_staff[mask]
+
+        if desig_col and selected_role != "All":
+            filtered_staff = filtered_staff[filtered_staff[desig_col] == selected_role]
+
+        st.divider()
+
+        # Display the results
+        if not filtered_staff.empty:
+            st.write(f"Showing {len(filtered_staff)} staff member(s):")
+            
+            for idx, row in filtered_staff.iterrows():
+                with st.container():
+                    st.markdown("---")
+                    
+                    # Try to find the Name column dynamically
+                    name_col = df_staff.columns[0]
+                    for col in df_staff.columns:
+                        if "NAME" in col.upper():
+                            name_col = col
+                            break
+                    
+                    st.subheader(f"👤 {row[name_col]}")
+                    
+                    info_c1, info_c2 = st.columns(2)
+                    
+                    # Display the remaining data for this person
+                    for col in df_staff.columns:
+                        if col != name_col:
+                            val = str(row[col]).strip()
+                            if val not in ['', 'nan', 'None']:
+                                
+                                # CLICK-TO-CALL MAGIC: If it looks like a phone column, make it a clickable link!
+                                if "MOB" in col.upper() or "PHO" in col.upper() or "CONTACT" in col.upper() or "NUM" in col.upper():
+                                    info_c1.markdown(f"**{col}:** [{val}](tel:{val}) 📞")
+                                else:
+                                    info_c2.write(f"**{col}:** {val}")
+        else:
+            st.warning("No staff members found matching your search.")
+            
+    else:
+        st.error("⚠️ Could not load data from the 'master_staff_directory' tab. Please ensure it is spelled exactly right.")
