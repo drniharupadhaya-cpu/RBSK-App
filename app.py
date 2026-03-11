@@ -14,7 +14,7 @@ def get_spreadsheet():
     return client.open_by_url(sheet_url)
 
 # --- 2. GET THE PURE DATA (CACHE THIS FOR SPEED) ---
-@st.cache_data(ttl=60)
+@st.cache_data(ttl=600)
 def load_all_data():
     sheet = get_spreadsheet()
     
@@ -798,3 +798,4 @@ elif menu == "10. Staff Directory":
             st.warning("No staff members found matching your filters.")
     else:
         st.error("⚠️ Could not load data from the 'master_staff_directory' tab.")
+
