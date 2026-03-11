@@ -23,7 +23,7 @@ def load_all_data():
     # 2. Authorize the connection
     client = gspread.authorize(creds)
     
-    # 3. Open the Google Sheet (Make sure to paste your real link here!)
+    # 3. Open the Google Sheet (MAKE SURE TO PASTE YOUR REAL LINK HERE!)
     sheet_url = "https://docs.google.com/spreadsheets/d/1i5wAkI7k98E80qhHRe6xQOhF4Qj9Z0DH8wjPsQ7gRZc/edit?gid=1684288682#gid=1684288682" 
     spreadsheet = client.open_by_url(sheet_url)
     
