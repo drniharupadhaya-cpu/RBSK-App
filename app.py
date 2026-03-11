@@ -70,7 +70,7 @@ menu = st.sidebar.radio("Go to:",
         "7. Anemia Tracker",
         "8. School Directory",
         "9. Anganwadi Directory",
-        "10. Staff Directory"
+        "10. Staff Directory",
         "11. Annual FY Planner"  # <-- ADD THIS NEW LINE!
     ]
 )
@@ -1068,5 +1068,6 @@ elif menu == "11. Annual FY Planner":
         with st.expander("🌼 March 2027 (Mop-Up & Reporting)"):
             st.write("- **Field Work:** Mop-up rounds for absent children only.")
             st.write("- **Admin:** Success story generation, data entry, and final state-level reporting.")
+
 
 
