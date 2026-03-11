@@ -165,11 +165,43 @@ if menu == "1. Daily Tour Plan":
             st.info("No visits available to edit.")
 
 # ==========================================
-# MODULE 2: EMR SCREENING WITH HISTORY
+# MODULE 2: EMR SCREENING (WITH WHO Z-SCORE & MUAC AUTOPILOT)
 # ==========================================
 elif menu == "2. Child Screening":
     st.title("📝 EMR Screening Form")
-    st.write("View historical data and enter new vitals.")
+    st.write("View historical data, enter new vitals, and auto-triage malnutrition.")
+
+    # --- CLINICAL MATH ENGINE: WHO WEIGHT-FOR-HEIGHT REFERENCE ---
+    def get_whz_status(gender, height_cm, weight_kg):
+        # Simplified WHO Weight-for-Height table (Height: [Boy-3SD, Boy-2SD, Girl-3SD, Girl-2SD])
+        # Covers standard Anganwadi age heights (65cm to 120cm)
+        who_table = {
+            65: [5.9, 6.4, 5.5, 6.0], 70: [6.8, 7.4, 6.4, 7.0],
+            75: [7.6, 8.3, 7.3, 8.0], 80: [8.5, 9.2, 8.2, 9.0],
+            85: [9.3, 10.1, 9.1, 9.9], 90: [10.2, 11.1, 10.0, 10.9],
+            95: [11.2, 12.1, 10.9, 11.9], 100: [12.2, 13.3, 11.9, 13.0],
+            105: [13.3, 14.5, 13.0, 14.3], 110: [14.4, 15.8, 14.1, 15.6],
+            115: [15.5, 17.1, 15.3, 17.0], 120: [16.6, 18.4, 16.5, 18.4]
+        }
+        
+        # Snap to the closest height in the reference table
+        if height_cm < 65 or height_cm > 120:
+            return "Out of bounds" # Fallback to MUAC if outside standard range
+            
+        closest_h = min(who_table.keys(), key=lambda k: abs(k - height_cm))
+        refs = who_table[closest_h]
+        
+        # Check Gender (M or F) to apply correct thresholds
+        if str(gender).upper().startswith('M'):
+            sam_cutoff, mam_cutoff = refs[0], refs[1]
+        else:
+            sam_cutoff, mam_cutoff = refs[2], refs[3]
+            
+        # Classify
+        if weight_kg < sam_cutoff: return "SAM"
+        elif weight_kg < mam_cutoff: return "MAM"
+        else: return "Normal"
+
 
     category = st.radio("Select Visit Type:", ["🏫 Schools", "👶 Anganwadi"], horizontal=True)
     st.divider()
@@ -270,7 +302,7 @@ elif menu == "2. Child Screening":
                     if category == "👶 Anganwadi":
                         muac = st.number_input("MUAC (cm)", min_value=0.0, step=0.1)
                     else:
-                        muac = "N/A"
+                        muac = 0.0
                         st.text_input("MUAC (cm)", value="Not required", disabled=True)
                 with v_col4: hb = st.number_input("Hb %", min_value=0.0, step=0.1)
 
@@ -281,15 +313,48 @@ elif menu == "2. Child Screening":
                     if final_child_name == "" or height == 0 or weight == 0:
                         st.error("🚨 Please fill out Name, Height, and Weight.")
                     else:
+                        # --- AUTOPILOT SAM/MAM CALCULATION (WHZ + MUAC) ---
+                        final_status = "Normal"
+                        
+                        if category == "👶 Anganwadi":
+                            # 1. Calculate MUAC Status
+                            muac_status = "Normal"
+                            if 0 < muac < 11.5: muac_status = "SAM"
+                            elif 11.5 <= muac < 12.5: muac_status = "MAM"
+                            
+                            # 2. Calculate WHO Z-Score Status (Weight for Height)
+                            whz_status = get_whz_status(gender, height, weight)
+                            
+                            # 3. Take the MOST SEVERE Diagnosis
+                            if muac_status == "SAM" or whz_status == "SAM":
+                                final_status = "SAM"
+                            elif muac_status == "MAM" or whz_status == "MAM":
+                                final_status = "MAM"
+                                
+                            st.info(f"**Clinical Breakdown:** MUAC indicates *{muac_status}* | WHZ indicates *{whz_status}*")
+                        
                         try:
+                            # 1. Save to standard daily screening sheet
                             if category == "👶 Anganwadi":
                                 target_sheet = spreadsheet.worksheet("daily_screenings_aw")
-                                target_sheet.append_row([str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height, weight, muac, hb, disease, updated_contact, techo_id])
+                                target_sheet.append_row([str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height, weight, muac, hb, disease, updated_contact, techo_id, final_status])
                             else:
                                 target_sheet = spreadsheet.worksheet("daily_screenings_schools")
                                 target_sheet.append_row([str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height, weight, hb, disease, updated_contact])
                             
                             st.success(f"✅ Successfully recorded screening for {final_child_name}!")
+
+                            # 2. TRIGGER CMTC REFERRAL IF SAM OR MAM
+                            if final_status in ["SAM", "MAM"]:
+                                st.error(f"🚨 CLINICAL ALERT: Child classified as **{final_status}**.")
+                                try:
+                                    cmtc_sheet = spreadsheet.worksheet("cmtc_referrals")
+                                    cmtc_sheet.append_row([str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height, weight, muac, final_status, updated_contact])
+                                    st.toast("Child automatically added to CMTC Registry!", icon="🏥")
+                                    st.warning(f"🏥 Added to CMTC Referral List for immediate follow-up.")
+                                except Exception as e:
+                                    st.error(f"⚠️ Could not save to 'cmtc_referrals'. Did you create the tab? Error: {e}")
+
                         except Exception as e:
                             st.error(f"⚠️ Error saving data: {e}")
 
@@ -1068,6 +1133,7 @@ elif menu == "11. Annual FY Planner":
         with st.expander("🌼 March 2027 (Mop-Up & Reporting)"):
             st.write("- **Field Work:** Mop-up rounds for absent children only.")
             st.write("- **Admin:** Success story generation, data entry, and final state-level reporting.")
+
 
 
 
