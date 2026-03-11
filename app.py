@@ -365,23 +365,46 @@ elif menu == "2. Child Screening":
 elif menu == "3. 4D Defect Registry":
     st.title("🔍 4D Defect Command Center")
     
-    # --- 1. THE REFER CARD PDF ENGINE (UNICODE SAFE) ---
+    # --- 1. THE REFER CARD PDF ENGINE (CRASH-PROOF) ---
     def generate_refer_card(data):
-        # We use 'fpdf2' which handles UTF-8 (Gujarati) natively
         pdf = FPDF()
         pdf.add_page()
         
-        # Load Gujarati Font
-        # IMPORTANT: gujarati.ttf MUST be in your GitHub folder
+        # Check if font exists
         font_path = "gujarati.ttf"
-        if os.path.exists(font_path):
+        font_exists = os.path.exists(font_path)
+        
+        if font_exists:
             pdf.add_font('Gujarati', '', font_path)
             pdf.set_font('Gujarati', '', 12)
             f_gu = 'Gujarati'
+            # Gujarati Labels
+            lbl_title = "રાષ્ટ્રીય બાળ સ્વાસ્થ્ય કાર્યક્રમ (સંદર્ભ કાર્ડ)"
+            lbl_name = "બાળકનું પૂરુ નામ (Name)"
+            lbl_gender = "જાતિ (Gender)"
+            lbl_dob = "જન્મ તારીખ (DOB)"
+            lbl_age = "ઉંમર (Age)"
+            lbl_father = "પિતાનું નામ (Father)"
+            lbl_mother = "માતાનું નામ (Mother)"
+            lbl_address = "સરનામું (Address)"
+            lbl_village = "ગામ (Village)"
+            lbl_taluka = "તાલુકો (Taluka)"
+            lbl_condition = "બીમારીની વિગત"
         else:
-            st.error("🚨 FONT MISSING: Please upload 'gujarati.ttf' to GitHub.")
+            # English Fallback Labels (Prevents Crash)
             pdf.set_font('Arial', '', 12)
             f_gu = 'Arial'
+            lbl_title = "RBSK Refer Card (Font Missing)"
+            lbl_name = "Name"
+            lbl_gender = "Gender"
+            lbl_dob = "DOB"
+            lbl_age = "Age"
+            lbl_father = "Father's Name"
+            lbl_mother = "Mother's Name"
+            lbl_address = "Address"
+            lbl_village = "Village"
+            lbl_taluka = "Taluka"
+            lbl_condition = "Suspected Condition"
 
         # Draw the Border
         pdf.rect(5, 5, 200, 287)
@@ -390,31 +413,30 @@ elif menu == "3. 4D Defect Registry":
         pdf.set_font('Arial', 'B', 16)
         pdf.cell(190, 10, "RBSK - REFER CARD", ln=True, align='C')
         pdf.set_font(f_gu, '', 14)
-        pdf.cell(190, 8, "રાષ્ટ્રીય બાળ સ્વાસ્થ્ય કાર્યક્રમ (સંદર્ભ કાર્ડ)", ln=True, align='C')
+        pdf.cell(190, 8, lbl_title, ln=True, align='C')
         pdf.ln(5)
 
         # Personal Details Section
         pdf.set_font(f_gu, '', 11)
-        pdf.cell(190, 8, f"બાળકનું પૂરુ નામ (Name): {data.get('Name', '')}", border='B', ln=True)
+        pdf.cell(190, 8, f"{lbl_name}: {data.get('Name', '')}", border='B', ln=True)
         
         col1_w = 95
-        pdf.cell(col1_w, 8, f"જાતિ (Gender): {data.get('Gender', '')}", border='R')
-        pdf.cell(col1_w, 8, f"જન્મ તારીખ (DOB): {data.get('DOB', '')}", ln=True)
+        pdf.cell(col1_w, 8, f"{lbl_gender}: {data.get('Gender', '')}", border='R')
+        pdf.cell(col1_w, 8, f"{lbl_dob}: {data.get('DOB', '')}", ln=True)
         
-        pdf.cell(col1_w, 8, f"ઉંમર (Age): {data.get('Age', '')}", border='R')
+        pdf.cell(col1_w, 8, f"{lbl_age}: {data.get('Age', '')}", border='R')
         pdf.cell(col1_w, 8, f"Techo ID: {data.get('Techo', 'N/A')}", ln=True)
         
         pdf.ln(2)
-        pdf.cell(190, 8, f"પિતાનું નામ (Father): {data.get('Father', '')}", ln=True)
-        pdf.cell(190, 8, f"માતાનું નામ (Mother): {data.get('Mother', '')}", ln=True)
-        pdf.cell(190, 8, f"સરનામું (Address): {data.get('Address', '')}", ln=True)
-        pdf.cell(col1_w, 8, f"ગામ (Village): {data.get('Village', '')}", border='R')
-        pdf.cell(col1_w, 8, f"તાલુકો (Taluka): {data.get('Taluka', 'Visavadar')}", ln=True)
+        pdf.cell(190, 8, f"{lbl_father}: {data.get('Father', '')}", ln=True)
+        pdf.cell(190, 8, f"{lbl_mother}: {data.get('Mother', '')}", ln=True)
+        pdf.cell(190, 8, f"{lbl_address}: {data.get('Address', '')}", ln=True)
+        pdf.cell(col1_w, 8, f"{lbl_village}: {data.get('Village', '')}", border='R')
+        pdf.cell(col1_w, 8, f"{lbl_taluka}: {data.get('Taluka', 'Visavadar')}", ln=True)
 
         pdf.ln(5)
         pdf.set_font('Arial', 'B', 12)
-        pdf.cell(190, 8, "4D CATEGORY / તપાસણીની વિગત", ln=True)
-        pdf.set_font(f_gu, '', 10)
+        pdf.cell(190, 8, "4D CATEGORY", ln=True)
         
         categories = ["Birth Defect", "Deficiency", "Disease", "Development Delay"]
         selected_cat = data.get('Category', 'Other')
@@ -425,9 +447,11 @@ elif menu == "3. 4D Defect Registry":
 
         pdf.set_fill_color(240, 240, 240)
         pdf.set_font('Arial', 'B', 11)
-        pdf.cell(190, 10, "SUSPECTED CONDITION / બીમારીની વિગત", border=1, ln=True, fill=True)
+        pdf.cell(190, 10, lbl_condition.upper(), border=1, ln=True, fill=True)
         pdf.set_font(f_gu, '', 12)
-        pdf.multi_cell(190, 10, f"\n {data.get('Condition', 'None')} \n", border=1)
+        # Handle the clinical findings carefully
+        condition_text = data.get('Condition', 'None')
+        pdf.multi_cell(190, 10, f"\n {condition_text} \n", border=1)
         
         pdf.ln(10)
         pdf.set_font('Arial', 'B', 10)
@@ -440,7 +464,6 @@ elif menu == "3. 4D Defect Registry":
         pdf.cell(95, 8, "Medical Officer Signature")
         pdf.cell(95, 8, "Institute/AWC Stamp", ln=True)
 
-        # THIS IS THE FIX: output() in fpdf2 returns bytes directly, no need to encode!
         return pdf.output()
 
     # --- 2. THE REGISTRY & HUNTER ---
@@ -1346,6 +1369,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
