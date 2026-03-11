@@ -20,16 +20,22 @@ def load_all_data():
     df_schools = pd.DataFrame(spreadsheet.worksheet("school_details").get_all_records()).astype(str)
     df_aw = pd.DataFrame(spreadsheet.worksheet("aw_data").get_all_records()).astype(str)
     
+    # Load the new ANEMIA sheet!
+    try:
+        df_anemia = pd.DataFrame(spreadsheet.worksheet("ANEMIA").get_all_records()).astype(str)
+    except:
+        df_anemia = pd.DataFrame()
+    
     try:
         df_students = pd.DataFrame(spreadsheet.worksheet("students_data").get_all_records()).astype(str)
     except:
         df_students = pd.DataFrame() 
         
-    return df_4d, df_schools, df_aw, df_students, spreadsheet
+    return df_4d, df_schools, df_aw, df_students, df_anemia, spreadsheet
 
 # Actually load the data into the app!
 try:
-    df_4d, df_schools, df_aw, df_students, spreadsheet = load_all_data()
+    df_4d, df_schools, df_aw, df_students, df_anemia, spreadsheet = load_all_data()
 except Exception as e:
     st.error(f"Could not connect to Google Sheets. Please check your Secret Vault. Error: {e}")
     st.stop()
@@ -38,7 +44,15 @@ except Exception as e:
 st.sidebar.title("🩺 RBSK Menu")
 st.sidebar.write("Dr. Workspace")
 menu = st.sidebar.radio("Go to:", 
-    ["1. Daily Tour Plan", "2. Child Screening", "3. 4D Defect Registry", "4. Visual Analysis", "5. HBNC Newborn Visit", "6. Success Story Builder"]
+    [
+        "1. Daily Tour Plan", 
+        "2. Child Screening", 
+        "3. 4D Defect Registry", 
+        "4. Visual Analysis", 
+        "5. HBNC Newborn Visit", 
+        "6. Success Story Builder",
+        "7. Anemia Tracker"  # NEW MENU ITEM!
+    ]
 )
 
 # ==========================================
@@ -57,7 +71,6 @@ if menu == "1. Daily Tour Plan":
 
     tab_view, tab_add, tab_edit = st.tabs(["📅 View Schedule", "➕ Plan New Visit", "✏️ Edit / Delete Visit"])
 
-    # --- TAB 1: VIEWING THE SCHEDULE ---
     with tab_view:
         st.subheader("Upcoming Medical Tours")
         if not df_plan.empty:
@@ -68,7 +81,6 @@ if menu == "1. Daily Tour Plan":
         else:
             st.info("No upcoming tours planned yet.")
 
-    # --- TAB 2: ADDING A NEW VISIT ---
     with tab_add:
         st.subheader("Schedule a New Field Visit")
         with st.form("add_tour_form"):
@@ -90,19 +102,15 @@ if menu == "1. Daily Tour Plan":
                 else:
                     day_of_week = visit_date.strftime("%A") 
                     planner_sheet.append_row([str(visit_date), day_of_week, location, activity])
-                    
                     st.toast("✅ Data Saved Successfully!", icon="🎉")
                     st.success(f"✅ Successfully scheduled: {activity} at {location} on {visit_date}!")
                     st.rerun()
 
-    # --- TAB 3: EDIT OR DELETE A VISIT ---
     with tab_edit:
         st.subheader("Modify an Existing Visit")
         if not df_plan.empty:
             df_plan['Select_Label'] = df_plan['Date'].astype(str) + " | " + df_plan['Location'] + " (" + df_plan['Activity'] + ")"
-            
             selected_label = st.selectbox("Select a visit to edit:", df_plan['Select_Label'].tolist())
-            
             selected_idx = df_plan[df_plan['Select_Label'] == selected_label].index[0]
             sheet_row = int(selected_idx) + 2 
             
@@ -113,27 +121,22 @@ if menu == "1. Daily Tour Plan":
                 
                 new_date = st.date_input("Update Date", value=curr_date)
                 new_loc = st.text_input("Update Location", value=curr_loc)
-                
                 options = ["School Screening", "Anganvadi Screening", "Delivery Point Visit", "HBNC Visit", "Meeting", "Training", "Other"]
                 default_idx = options.index(curr_act) if curr_act in options else 0
                 new_act = st.selectbox("Update Activity", options, index=default_idx)
                 
                 st.divider()
                 delete_checkbox = st.checkbox("🚨 Delete this visit entirely (Cannot be undone)")
-                
                 update_btn = st.form_submit_button("💾 Update / Delete Plan")
 
                 if update_btn:
                     if delete_checkbox:
                         planner_sheet.delete_rows(sheet_row)
-                        st.toast("✅ Visit Deleted Successfully!", icon="🗑️")
                         st.success("✅ The visit was removed from your schedule.")
                         st.rerun()
                     else:
                         new_day = new_date.strftime("%A")
                         planner_sheet.update(range_name=f"A{sheet_row}:D{sheet_row}", values=[[str(new_date), new_day, new_loc, new_act]])
-                        
-                        st.toast("✅ Update Saved Successfully!", icon="✨")
                         st.success(f"✅ Visit updated to: {new_loc} on {new_date}")
                         st.rerun()
         else:
@@ -178,39 +181,30 @@ elif menu == "2. Child Screening":
         )
         
         if selected_child != "-- Select Child --":
-            
             if selected_child == "➕ Register New Child":
                 st.subheader("🆕 Register New Child")
                 new_child_name = st.text_input("Enter Child's Full Name")
-                
                 col_n1, col_n2, col_n3 = st.columns(3)
-                with col_n1:
-                    dob = st.date_input("Date of Birth")
-                with col_n2:
-                    gender = st.selectbox("Gender", ["M", "F"])
-                with col_n3:
-                    parent = st.text_input("Parent's Name")
-                
+                with col_n1: dob = st.date_input("Date of Birth")
+                with col_n2: gender = st.selectbox("Gender", ["M", "F"])
+                with col_n3: parent = st.text_input("Parent's Name")
                 existing_contact = ""
                 final_child_name = new_child_name
                 
             else:
                 st.subheader("👤 Child Profile & History")
                 final_child_name = selected_child
-                
                 if category == "👶 Anganwadi":
                     child_info = filtered_children[filtered_children['Beneficiary Name'] == selected_child].iloc[0]
                     dob = child_info.get('DoB', 'N/A')
                     gender = child_info.get('Gender', 'N/A')
                     parent = child_info.get('Mother Name', 'N/A')
                     existing_contact = "" 
-                    
                     hist_h = child_info.get('Height', 'N/A')
                     hist_w = child_info.get('Weight', 'N/A')
                     hist_wasting = child_info.get('Wasting', 'N/A')
                     hist_disease = child_info.get('4d', 'None')
                     hist_hb = "N/A" 
-                    
                 else:
                     child_info = filtered_children[filtered_children['StudentName'] == selected_child].iloc[0]
                     dob = child_info.get('DOB', 'N/A')
@@ -218,7 +212,6 @@ elif menu == "2. Child Screening":
                     parent = child_info.get('FatherName', 'N/A')
                     contact_val = child_info.get('CONTACT NUMBER', '')
                     existing_contact = str(contact_val) if str(contact_val) != "nan" else ""
-                    
                     hist_h = child_info.get('HEIGHT', 'N/A')
                     hist_w = child_info.get('WEIGHT', 'N/A')
                     hist_wasting = "N/A"
@@ -234,66 +227,49 @@ elif menu == "2. Child Screening":
                 hist_cols = st.columns(4)
                 hist_cols[0].metric(label="Previous Height", value=f"{hist_h} cm" if str(hist_h) != "nan" else "N/A")
                 hist_cols[1].metric(label="Previous Weight", value=f"{hist_w} kg" if str(hist_w) != "nan" else "N/A")
-                
                 if category == "👶 Anganwadi":
                     hist_cols[2].metric(label="Previous Status", value=str(hist_wasting) if str(hist_wasting) != "nan" else "N/A")
                 else:
                     hist_cols[2].metric(label="Previous Hb", value=f"{hist_hb} %" if str(hist_hb) != "nan" else "N/A")
-                    
                 hist_cols[3].metric(label="Previous 4D", value=str(hist_disease) if str(hist_disease) != "nan" else "None")
 
             st.divider()
             st.subheader("🩺 Enter New Screening Vitals")
             with st.form("vitals_form"):
                 screening_date = st.date_input("Date of Screening")
-                
                 c_col1, c_col2 = st.columns(2)
-                with c_col1:
-                    updated_contact = st.text_input("📞 Contact Number", value=existing_contact, placeholder="Enter 10-digit number")
-                with c_col2:
-                    if category == "👶 Anganwadi":
-                        techo_id = st.text_input("🆔 Techo ID", placeholder="Enter Techo ID here")
-                    else:
-                        techo_id = "N/A"
+                with c_col1: updated_contact = st.text_input("📞 Contact Number", value=existing_contact)
+                with c_col2: techo_id = st.text_input("🆔 Techo ID") if category == "👶 Anganwadi" else "N/A"
 
                 v_col1, v_col2, v_col3, v_col4 = st.columns(4)
-                with v_col1:
-                    height = st.number_input("Height (cm)", min_value=0.0, step=0.5)
-                with v_col2:
-                    weight = st.number_input("Weight (kg)", min_value=0.0, step=0.1)
+                with v_col1: height = st.number_input("Height (cm)", min_value=0.0, step=0.5)
+                with v_col2: weight = st.number_input("Weight (kg)", min_value=0.0, step=0.1)
                 with v_col3:
                     if category == "👶 Anganwadi":
                         muac = st.number_input("MUAC (cm)", min_value=0.0, step=0.1)
                     else:
                         muac = "N/A"
-                        st.text_input("MUAC (cm)", value="Not required for Schools", disabled=True)
-                with v_col4:
-                    hb = st.number_input("Hemoglobin (Hb %)", min_value=0.0, step=0.1)
+                        st.text_input("MUAC (cm)", value="Not required", disabled=True)
+                with v_col4: hb = st.number_input("Hb %", min_value=0.0, step=0.1)
 
-                disease = st.text_input("🦠 Disease / Defect Identified (4D)", placeholder="Type 'None' or describe the defect...")
-
+                disease = st.text_input("🦠 Disease Identified (4D)", placeholder="Type 'None' or describe...")
                 save_btn = st.form_submit_button("💾 Save Screening Data")
 
                 if save_btn:
-                    if final_child_name == "":
-                        st.error("🚨 Please enter a name for the child.")
-                    elif height == 0 or weight == 0:
-                        st.error("🚨 Height and Weight cannot be 0.")
+                    if final_child_name == "" or height == 0 or weight == 0:
+                        st.error("🚨 Please fill out Name, Height, and Weight.")
                     else:
                         try:
                             if category == "👶 Anganwadi":
                                 target_sheet = spreadsheet.worksheet("daily_screenings_aw")
-                                row_to_save = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height, weight, muac, hb, disease, updated_contact, techo_id]
+                                target_sheet.append_row([str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height, weight, muac, hb, disease, updated_contact, techo_id])
                             else:
                                 target_sheet = spreadsheet.worksheet("daily_screenings_schools")
-                                row_to_save = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height, weight, hb, disease, updated_contact]
+                                target_sheet.append_row([str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height, weight, hb, disease, updated_contact])
                             
-                            target_sheet.append_row(row_to_save)
-                            
-                            st.toast("✅ Vitals Saved to Cloud!", icon="🏥")
-                            st.success(f"✅ Successfully recorded screening for {final_child_name} in {category} Database!")
+                            st.success(f"✅ Successfully recorded screening for {final_child_name}!")
                         except Exception as e:
-                            st.error(f"⚠️ Error saving data: Please ensure your tabs are named 'daily_screenings_aw' and 'daily_screenings_schools'. Error details: {e}")
+                            st.error(f"⚠️ Error saving data: {e}")
 
 # ==========================================
 # MODULE 3: 4D DEFECT REGISTRY
@@ -304,9 +280,7 @@ elif menu == "3. 4D Defect Registry":
 
     if search_term:
         mask = df_4d.astype(str).apply(lambda x: x.str.contains(search_term, case=False)).any(axis=1)
-        filtered_df = df_4d[mask]
-        st.dataframe(filtered_df, use_container_width=True)
-        st.success(f"Found {len(filtered_df)} matching records.")
+        st.dataframe(df_4d[mask], use_container_width=True)
     else:
         st.dataframe(df_4d, use_container_width=True)
 
@@ -315,199 +289,231 @@ elif menu == "3. 4D Defect Registry":
 # ==========================================
 elif menu == "4. Visual Analysis":
     st.title("📊 Interactive Data Analysis")
-    st.write("Live breakdown of your field data.")
-    
     col1, col2 = st.columns(2)
-    
     with col1:
         st.subheader("Total Students by School")
         if not df_schools.empty and 'School' in df_schools.columns and 'TOTAL' in df_schools.columns:
             df_schools['TOTAL'] = pd.to_numeric(df_schools['TOTAL'], errors='coerce').fillna(0)
-            
-            top_schools = df_schools.sort_values(by='TOTAL', ascending=False).head(10)
-            st.bar_chart(data=top_schools, x='School', y='TOTAL')
-            
+            st.bar_chart(data=df_schools.sort_values(by='TOTAL', ascending=False).head(10), x='School', y='TOTAL')
     with col2:
         st.subheader("Gender Distribution (Anganwadis)")
         if not df_aw.empty and 'Gender' in df_aw.columns:
-            gender_counts = df_aw['Gender'].value_counts()
-            st.bar_chart(gender_counts)
+            st.bar_chart(df_aw['Gender'].value_counts())
 
 # ==========================================
 # MODULE 5: HBNC NEWBORN VISIT
 # ==========================================
 elif menu == "5. HBNC Newborn Visit":
-    st.title("🍼 HBNC Neonatal Visit Interface")
-    st.write("Record critical Home Based Newborn Care observations.")
-
+    st.title("🍼 HBNC Neonatal Visit")
     with st.form("hbnc_form"):
-        st.markdown("#### 👶 Newborn & Parent Details")
+        st.markdown("#### 👶 Details")
         c1, c2, c3 = st.columns(3)
-        with c1:
-            visit_date = st.date_input("📅 Date of Home Visit")
-        with c2:
-            child_name = st.text_input("Child's Name", placeholder="e.g., Baby of Ashaben")
-        with c3:
-            techo_id = st.text_input("🆔 Techo ID")
+        with c1: visit_date = st.date_input("Date of Visit")
+        with c2: child_name = st.text_input("Child's Name")
+        with c3: techo_id = st.text_input("Techo ID")
             
         c4, c5 = st.columns(2)
-        with c4:
-            parent_name = st.text_input("Mother/Father's Name")
-        with c5:
-            contact_number = st.text_input("📞 Contact Number")
+        with c4: parent_name = st.text_input("Parent's Name")
+        with c5: contact_number = st.text_input("Contact Number")
 
         st.divider()
-
         st.markdown("#### 🏥 Birth History")
         b1, b2, b3, b4 = st.columns(4)
-        with b1:
-            dob = st.date_input("🎂 Date of Birth")
-        with b2:
-            birth_weight = st.number_input("⚖️ Birth Weight (kg)", min_value=0.0, step=0.1)
-        with b3:
-            delivery_type = st.selectbox("🩸 Delivery Type", ["Normal Delivery (ND)", "C-Section (LSCS)", "Instrumental"])
-        with b4:
-            delivery_point = st.selectbox("📍 Delivery Point", [
-                "Vatsalya Hospital", "SDH Visavadar", "Jay Ambe Hospital", 
-                "CHC/PHC", "Home Delivery", "Other Private Hospital"
-            ])
+        with b1: dob = st.date_input("Date of Birth")
+        with b2: birth_weight = st.number_input("Birth Weight (kg)", min_value=0.0, step=0.1)
+        with b3: delivery_type = st.selectbox("Delivery Type", ["Normal Delivery (ND)", "C-Section (LSCS)", "Instrumental"])
+        with b4: delivery_point = st.selectbox("Delivery Point", ["Vatsalya Hospital", "SDH Visavadar", "Jay Ambe Hospital", "CHC/PHC", "Home Delivery", "Other Private Hospital"])
 
         st.divider()
+        disease = st.text_input("🦠 Disease / Defect Identified?", placeholder="e.g., Cleft lip, None")
+        observations = st.text_area("📝 Clinical Observations", height=100)
 
-        st.markdown("#### 🩺 Clinical Examination & Observations")
-        
-        disease = st.text_input("🦠 Any Disease / Defect Identified?", placeholder="e.g., Cleft lip, suspected CHD, None")
-        
-        observations = st.text_area(
-            "📝 Current Clinical Observations", 
-            placeholder="Describe the baby's condition (e.g., Breastfeeding well, mild jaundice, cord stump clean and dry, active cry...)",
-            height=100
-        )
-
-        submit_hbnc = st.form_submit_button("💾 Save HBNC Record to Cloud")
-
-        if submit_hbnc:
+        if st.form_submit_button("💾 Save HBNC Record"):
             if child_name == "" or parent_name == "":
-                st.error("🚨 Please enter both the Child's Name and Parent's Name.")
-            elif birth_weight < 1.0:
-                st.warning("⚠️ Warning: Birth weight is unusually low. Please double-check.")
+                st.error("🚨 Enter Child and Parent Name.")
             else:
                 try:
-                    hbnc_sheet = spreadsheet.worksheet("hbnc_screenings")
-                    
-                    row_data = [
-                        str(visit_date), child_name, parent_name, contact_number, 
-                        str(dob), birth_weight, delivery_type, delivery_point, 
-                        techo_id, disease, observations
-                    ]
-                    
-                    hbnc_sheet.append_row(row_data)
-                    
-                    st.toast("✅ HBNC Record Saved!", icon="🍼")
-                    st.success(f"✅ Successfully recorded the Home Visit for {child_name}.")
+                    spreadsheet.worksheet("hbnc_screenings").append_row([str(visit_date), child_name, parent_name, contact_number, str(dob), birth_weight, delivery_type, delivery_point, techo_id, disease, observations])
+                    st.success(f"✅ Recorded Visit for {child_name}.")
                 except Exception as e:
-                    st.error(f"⚠️ Error: Could not find 'hbnc_screenings' tab. Please create it in Google Sheets! Detail: {e}")
+                    st.error(f"⚠️ Error: Could not find 'hbnc_screenings' tab. {e}")
 
 # ==========================================
 # MODULE 6: SUCCESS STORY BUILDER
 # ==========================================
 elif menu == "6. Success Story Builder":
     st.title("🌟 Success Story Generator")
-    st.write("Create official PDF reports for children successfully treated under RBSK.")
-
     if not df_4d.empty:
         df_4d.columns = df_4d.columns.astype(str).str.strip().str.upper()
-        
         if 'NAME' in df_4d.columns and '4D' in df_4d.columns and 'VILLAGE' in df_4d.columns:
-            
-            # THIS IS THE LINE THAT WENT MISSING!
             df_4d['Select_Label'] = df_4d['NAME'].astype(str) + " (" + df_4d['4D'].astype(str) + ") - " + df_4d['VILLAGE'].astype(str)
             selected_label = st.selectbox("Select Treated Child from 4D Registry:", ["-- Select --"] + df_4d['Select_Label'].tolist())
             
             if selected_label != "-- Select --":
                 child_data = df_4d[df_4d['Select_Label'] == selected_label].iloc[0]
-                
                 with st.form("success_story_form"):
                     st.subheader("📝 Treatment Summary")
-                    
                     col1, col2 = st.columns(2)
                     with col1:
-                        treatment_place = st.text_input("Hospital / Treatment Center", placeholder="e.g., DEIC Junagadh")
-                        surgery_date = st.date_input("Date of Successful Treatment")
+                        treatment_place = st.text_input("Treatment Center")
+                        surgery_date = st.date_input("Date of Treatment")
                     with col2:
-                        doctor_notes = st.text_area("Doctor's Narrative", placeholder="Describe the intervention...", height=100)
+                        doctor_notes = st.text_area("Doctor's Narrative", height=100)
                     
-                    st.subheader("📸 Upload Photos (Optional)")
+                    st.subheader("📸 Upload Photos")
                     col3, col4 = st.columns(2)
-                    with col3:
-                        img_before = st.file_uploader("Upload 'Before' Photo", type=["jpg", "jpeg", "png"])
-                    with col4:
-                        img_after = st.file_uploader("Upload 'After' Photo", type=["jpg", "jpeg", "png"])
+                    with col3: img_before = st.file_uploader("Upload 'Before' Photo", type=["jpg", "jpeg", "png"])
+                    with col4: img_after = st.file_uploader("Upload 'After' Photo", type=["jpg", "jpeg", "png"])
                     
-                    generate_btn = st.form_submit_button("📄 Prepare Official PDF Report")
-                    
-                if generate_btn:
-                    if treatment_place == "" or doctor_notes == "":
-                        st.error("🚨 Please fill in the Treatment Center and Doctor's Narrative.")
-                    else:
-                        with st.spinner("Generating PDF..."):
-                            pdf = FPDF()
-                            pdf.add_page()
-                            pdf.set_auto_page_break(auto=True, margin=15)
-                            
-                            pdf.set_font("Arial", "B", 16)
-                            pdf.cell(200, 10, txt="RBSK SUCCESS STORY REPORT", ln=True, align='C')
-                            pdf.ln(10)
-                            
-                            pdf.set_font("Arial", "B", 12)
-                            pdf.cell(200, 10, txt="PATIENT DETAILS", ln=True, align='L')
-                            pdf.set_font("Arial", "", 12)
-                            pdf.cell(200, 8, txt=f"Name: {child_data['NAME']}", ln=True)
-                            pdf.cell(200, 8, txt=f"Village: {child_data['VILLAGE']}", ln=True)
-                            pdf.cell(200, 8, txt=f"Identified Defect: {child_data['4D']}", ln=True)
-                            
-                            mob = child_data.get('MOBILE NO', child_data.get('MOBILE', 'N/A'))
-                            pdf.cell(200, 8, txt=f"Mobile Number: {mob}", ln=True)
-                            pdf.ln(5)
-                            
-                            pdf.set_font("Arial", "B", 12)
-                            pdf.cell(200, 10, txt="TREATMENT SUMMARY", ln=True, align='L')
-                            pdf.set_font("Arial", "", 12)
-                            pdf.cell(200, 8, txt=f"Treated At: {treatment_place}", ln=True)
-                            pdf.cell(200, 8, txt=f"Treatment Date: {surgery_date}", ln=True)
-                            pdf.multi_cell(0, 8, txt=f"Doctor's Narrative:\n{doctor_notes}")
-                            pdf.ln(10)
-                            
-                            if img_before or img_after:
+                    if st.form_submit_button("📄 Prepare Official PDF Report"):
+                        if treatment_place == "" or doctor_notes == "":
+                            st.error("🚨 Fill in Treatment Center and Narrative.")
+                        else:
+                            with st.spinner("Generating PDF..."):
+                                pdf = FPDF()
+                                pdf.add_page()
+                                pdf.set_auto_page_break(auto=True, margin=15)
+                                pdf.set_font("Arial", "B", 16)
+                                pdf.cell(200, 10, txt="RBSK SUCCESS STORY REPORT", ln=True, align='C')
+                                pdf.ln(10)
                                 pdf.set_font("Arial", "B", 12)
-                                pdf.cell(200, 10, txt="CLINICAL PHOTOGRAPHS", ln=True, align='L')
+                                pdf.cell(200, 10, txt="PATIENT DETAILS", ln=True, align='L')
+                                pdf.set_font("Arial", "", 12)
+                                pdf.cell(200, 8, txt=f"Name: {child_data['NAME']}", ln=True)
+                                pdf.cell(200, 8, txt=f"Village: {child_data['VILLAGE']}", ln=True)
+                                pdf.cell(200, 8, txt=f"Identified Defect: {child_data['4D']}", ln=True)
+                                mob = child_data.get('MOBILE NO', child_data.get('MOBILE', 'N/A'))
+                                pdf.cell(200, 8, txt=f"Mobile Number: {mob}", ln=True)
+                                pdf.ln(5)
+                                pdf.set_font("Arial", "B", 12)
+                                pdf.cell(200, 10, txt="TREATMENT SUMMARY", ln=True, align='L')
+                                pdf.set_font("Arial", "", 12)
+                                pdf.cell(200, 8, txt=f"Treated At: {treatment_place}", ln=True)
+                                pdf.cell(200, 8, txt=f"Treatment Date: {surgery_date}", ln=True)
+                                pdf.multi_cell(0, 8, txt=f"Doctor's Narrative:\n{doctor_notes}")
+                                pdf.ln(10)
                                 
-                                if img_before:
-                                    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_b:
-                                        tmp_b.write(img_before.read())
-                                        tmp_b_name = tmp_b.name
-                                    pdf.image(tmp_b_name, x=20, w=70)
-                                    os.remove(tmp_b_name) 
-                                        
-                                if img_after:
-                                    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_a:
-                                        tmp_a.write(img_after.read())
-                                        tmp_a_name = tmp_a.name
-                                    pdf.image(tmp_a_name, x=110, w=70) 
-                                    os.remove(tmp_a_name) 
-                            
-                            pdf_output = pdf.output(dest="S").encode("latin-1")
-                            
-                            st.success("✅ PDF Generated Successfully!")
-                            st.download_button(
-                                label="⬇️ Download PDF Report",
-                                data=pdf_output,
-                                file_name=f"Success_Story_{child_data['NAME']}.pdf",
-                                mime="application/pdf"
-                            )
+                                if img_before or img_after:
+                                    pdf.set_font("Arial", "B", 12)
+                                    pdf.cell(200, 10, txt="CLINICAL PHOTOGRAPHS", ln=True, align='L')
+                                    if img_before:
+                                        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_b:
+                                            tmp_b.write(img_before.read())
+                                            tmp_b_name = tmp_b.name
+                                        pdf.image(tmp_b_name, x=20, w=70)
+                                        os.remove(tmp_b_name) 
+                                    if img_after:
+                                        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_a:
+                                            tmp_a.write(img_after.read())
+                                            tmp_a_name = tmp_a.name
+                                        pdf.image(tmp_a_name, x=110, w=70) 
+                                        os.remove(tmp_a_name) 
+                                
+                                pdf_output = pdf.output(dest="S").encode("latin-1")
+                                st.success("✅ PDF Generated Successfully!")
+                                st.download_button(label="⬇️ Download PDF Report", data=pdf_output, file_name=f"Success_Story_{child_data['NAME']}.pdf", mime="application/pdf")
         else:
-            st.error("⚠️ The headers in your Google Sheet are still not exactly 'NAME', 'VILLAGE', and '4D'.")
+            st.error("⚠️ Headers in 4d_list must be 'NAME', 'VILLAGE', and '4D'.")
     else:
-        st.warning("No 4D Defect records found to create a success story.")
+        st.warning("No 4D Defect records found.")
+
+# ==========================================
+# MODULE 7: ANEMIA TRACKER (NEW!)
+# ==========================================
+elif menu == "7. Anemia Tracker":
+    st.title("🩸 Anemia Camp & Analytics Dashboard")
+    st.write("Track Hemoglobin levels and let the app automatically categorize severity.")
+
+    tab_dash, tab_entry = st.tabs(["📈 Interactive Dashboard", "➕ Enter New Camp Data"])
+
+    # --- TAB 1: THE DASHBOARD ---
+    with tab_dash:
+        st.subheader("Anemia Analytics Overview")
+        if not df_anemia.empty:
+            # Clean the data so we can do math on the Hb levels
+            df_anemia['HB LEVEL'] = pd.to_numeric(df_anemia['HB LEVEL'], errors='coerce')
+
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Total Children Screened", len(df_anemia))
+            
+            # Count how many are Severe
+            severe_cases = len(df_anemia[df_anemia['SEVERITY'].astype(str).str.strip().str.upper() == 'SEVERE'])
+            m2.metric("Total Severe Cases", severe_cases)
+            
+            avg_hb = df_anemia['HB LEVEL'].mean()
+            m3.metric("Average Hb Level", f"{avg_hb:.1f} g/dL" if pd.notna(avg_hb) else "N/A")
+
+            st.divider()
+            
+            col_chart1, col_chart2 = st.columns(2)
+            with col_chart1:
+                st.write("**Severity Breakdown**")
+                sev_counts = df_anemia['SEVERITY'].value_counts()
+                st.bar_chart(sev_counts, color="#FF4B4B")
+                
+            with col_chart2:
+                st.write("**Cases by Village/Location**")
+                village_counts = df_anemia['VILLAGE'].value_counts().head(10)
+                st.bar_chart(village_counts)
+
+            st.write("**Recent Master Registry Entries**")
+            st.dataframe(df_anemia.tail(10), use_container_width=True)
+            
+        else:
+            st.info("No data available in the ANEMIA sheet yet.")
+
+    # --- TAB 2: THE ENTRY PORTAL ---
+    with tab_entry:
+        st.subheader("Log New Anemia Screening")
+        with st.form("anemia_form"):
+            a_col1, a_col2 = st.columns(2)
+            with a_col1:
+                facility = st.text_input("PHC / CHC / UPHC")
+                camp_date = st.date_input("Camp Date")
+                village = st.text_input("Village Location")
+            with a_col2:
+                child_name = st.text_input("Child's Name")
+                dob = st.date_input("Date of Birth")
+                gender = st.selectbox("Gender", ["M", "F"])
+
+            st.markdown("---")
+            st.write("**Clinical Results**")
+            hb_level = st.number_input("Hemoglobin (Hb) Level (g/dL)", min_value=0.0, max_value=25.0, step=0.1)
+
+            submit_anemia = st.form_submit_button("💾 Save & Auto-Categorize")
+
+            if submit_anemia:
+                if facility == "" or child_name == "":
+                    st.error("🚨 Please fill in both the Facility and Child Name.")
+                elif hb_level == 0.0:
+                    st.error("🚨 Please enter a valid Hb level greater than 0.")
+                else:
+                    # THE MAGIC: Auto-categorization logic
+                    if hb_level < 8.0:
+                        calculated_severity = "Severe"
+                    elif 8.0 <= hb_level <= 10.9:
+                        calculated_severity = "Moderate"
+                    elif 11.0 <= hb_level <= 11.4:
+                        calculated_severity = "Mild"
+                    else:
+                        calculated_severity = "Normal"
+
+                    try:
+                        # Save directly to the ANEMIA tab
+                        anemia_sheet = spreadsheet.worksheet("ANEMIA")
+                        
+                        # Data exactly matching your flattened headers: 
+                        # PHC/CHC/UPHC, CAMP DATE, VILLAGE, CHILD NAME, DOB, GENDER, HB LEVEL, SEVERITY
+                        row_data = [
+                            facility, str(camp_date), village, child_name, 
+                            str(dob), gender, hb_level, calculated_severity
+                        ]
+                        
+                        anemia_sheet.append_row(row_data)
+                        
+                        st.toast("✅ Anemia Record Saved!", icon="🩸")
+                        st.success(f"✅ Saved **{child_name}**! With an Hb of {hb_level}, they were automatically categorized as: **{calculated_severity}**.")
+                    except Exception as e:
+                        st.error(f"⚠️ Error: Could not find the 'ANEMIA' tab in Google Sheets. Please ensure it is spelled exactly 'ANEMIA'. Detail: {e}")
 
 
