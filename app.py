@@ -57,7 +57,8 @@ if menu == "1. Daily Tour Plan":
     st.write("Plan, edit, and track your medical team's field visits.")
 
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-    creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+    creds_dict = json.loads(st.secrets["gcp_service_account"])
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
     client = gspread.authorize(creds)
     
     # !!! PASTE YOUR GOOGLE SHEET LINK HERE !!!
