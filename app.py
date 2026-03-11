@@ -71,6 +71,7 @@ menu = st.sidebar.radio("Go to:",
         "8. School Directory",
         "9. Anganwadi Directory",
         "10. Staff Directory"
+        "11. Annual FY Planner"  # <-- ADD THIS NEW LINE!
     ]
 )
 
@@ -940,4 +941,132 @@ elif menu == "10. Staff Directory":
             st.warning("No staff members found matching your filters.")
     else:
         st.error("⚠️ Could not load data from the 'master_staff_directory' tab.")
+# ==========================================
+# MODULE 11: ANNUAL FY PLANNER (2026-2027)
+# ==========================================
+elif menu == "11. Annual FY Planner":
+    st.title("📅 FY 2026-2027 Strategic Planner")
+    st.write("Annual roadmap, campaign timelines, and real-time workload calculations.")
+
+    tab_timeline, tab_calculator, tab_monthly = st.tabs([
+        "📊 Interactive Master Timeline", "🧮 Workload & Resource Calculator", "📋 Monthly Target Focus"
+    ])
+
+    # --- TAB 1: GANTT CHART TIMELINE ---
+    with tab_timeline:
+        st.subheader("RBSK Annual Campaign Roadmap (Apr 2026 - Mar 2027)")
+        st.write("Hover over the blocks to see specific dates and campaign details.")
+        
+        schedule_data = [
+            {"Task": "AWC Cycle 1", "Start": "2026-04-01", "Finish": "2026-09-30", "Category": "Anganwadi"},
+            {"Task": "AWC Cycle 2", "Start": "2026-10-01", "Finish": "2027-02-28", "Category": "Anganwadi"},
+            {"Task": "School Summer Vacations", "Start": "2026-04-15", "Finish": "2026-06-10", "Category": "Vacations/Exams"},
+            {"Task": "Diwali Vacations", "Start": "2026-10-20", "Finish": "2026-11-10", "Category": "Vacations/Exams"},
+            {"Task": "HBNC & Delivery Points Focus", "Start": "2026-04-01", "Finish": "2026-06-15", "Category": "Special Focus"},
+            {"Task": "MR Vaccine Campaign (Schools)", "Start": "2026-06-15", "Finish": "2026-08-31", "Category": "Special Focus"},
+            {"Task": "School Main Screening Phase", "Start": "2026-11-11", "Finish": "2027-02-28", "Category": "Schools"},
+            {"Task": "Buffer & Mop-up Month", "Start": "2027-03-01", "Finish": "2027-03-31", "Category": "Buffer"}
+        ]
+        
+        df_schedule = pd.DataFrame(schedule_data)
+        
+        fig_gantt = px.timeline(
+            df_schedule, x_start="Start", x_end="Finish", y="Task", color="Category",
+            color_discrete_map={
+                "Anganwadi": "#2ca02c", "Schools": "#1f77b4", 
+                "Vacations/Exams": "#7f7f7f", "Special Focus": "#ff7f0e", "Buffer": "#d62728"
+            }
+        )
+        fig_gantt.update_yaxes(autorange="reversed") 
+        st.plotly_chart(fig_gantt, use_container_width=True)
+
+
+    # --- TAB 2: TRUE CALENDAR WORKLOAD CALCULATOR ---
+    with tab_calculator:
+        st.subheader("⚙️ Target Feasibility Calculator")
+        st.write("Calculates exact working days available in FY 2026-27 and compares it to your caseload.")
+        
+        if not df_aw_master.empty and not df_all_students.empty:
+            total_awc_kids = len(df_aw_master)
+            total_school_kids = len(df_all_students)
+            total_screenings_target = (total_awc_kids * 2) + total_school_kids
+            
+            # --- TRUE CALENDAR MATH (Apr 1, 2026 - Mar 31, 2027) ---
+            fy_dates = pd.date_range(start="2026-04-01", end="2027-03-31")
+            total_days_in_fy = len(fy_dates) # 365
+            sundays = (fy_dates.weekday == 6).sum() # 52
+            saturdays = (fy_dates.weekday == 5).sum() # 52
+            
+            st.markdown("### 1. Available Time (FY 26-27)")
+            c1, c2, c3 = st.columns(3)
+            public_holidays = c1.number_input("Public Holidays (Weekdays)", min_value=0, max_value=40, value=18)
+            
+            # 52 half-Saturdays equals exactly 26 full working days lost.
+            saturday_loss = saturdays * 0.5
+            available_working_days = total_days_in_fy - sundays - public_holidays - saturday_loss
+            
+            c2.metric("Total Days in FY", total_days_in_fy)
+            c3.metric("Net Working Days Available", f"{available_working_days:g}")
+            
+            st.markdown("### 2. Team Capacity (1 MHT = 4 Members)")
+            c4, c5 = st.columns(2)
+            with c4:
+                daily_target = st.slider("Target Screenings per day (for your team)", min_value=40, max_value=120, value=70, step=5)
+            with c5:
+                st.info("🧑‍⚕️ **Team Size:** 1 Dedicated Mobile Health Team")
+                active_teams = 1 # Hardcoded strictly to your single 4-person team
+            
+            daily_district_capacity = daily_target * active_teams
+            working_days_needed = total_screenings_target / daily_district_capacity if daily_district_capacity > 0 else 0
+            
+            st.divider()
+            st.markdown("### 📊 The Final Verdict")
+            
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Total Screenings Required", f"{total_screenings_target:,}")
+            m2.metric("Working Days Needed", f"{working_days_needed:.1f}")
+            
+            margin = available_working_days - working_days_needed
+            m3.metric("Buffer Days (+/-)", f"{margin:.1f}")
+            
+            if margin >= 30:
+                st.success(f"✅ **HIGHLY FEASIBLE:** Your team needs {working_days_needed:.1f} days. You have {available_working_days:g} days available. You will easily finish with a comfortable {margin:.1f} day buffer!")
+            elif margin >= 0:
+                st.warning(f"⚠️ **TIGHT SCHEDULE:** Your team needs {working_days_needed:.1f} days. You have {available_working_days:g} days available. You will finish, but there is very little room for sick days or delays.")
+            else:
+                st.error(f"🚨 **MATHEMATICALLY IMPOSSIBLE:** You need {working_days_needed:.1f} days, but only have {available_working_days:g} working days. You MUST increase your daily average above {daily_target} kids/day.")
+        else:
+            st.warning("⚠️ Cannot calculate. Ensure 'aw new data' and '1240315 ALL STUDENTS NAMES' are loaded.")
+
+
+    # --- TAB 3: MONTHLY BREAKDOWN ---
+    with tab_monthly:
+        st.subheader("📋 Team Focus by Month")
+        
+        with st.expander("🌸 April - May 2026 (Exams & Summer Vacation)"):
+            st.write("- **Schools:** CLOSED (Exams and Vacations).")
+            st.write("- **AWC Focus:** Launch AWC Cycle 1.")
+            st.write("- **Special Tasks:** Heavy focus on Delivery Point screening and HBNC (Newborn) visits.")
+            
+        with st.expander("☀️ June - August 2026 (MR Campaign)"):
+            st.write("- **Schools:** REOPENED. Priority shifted to MR Vaccine Campaigns.")
+            st.write("- **AWC Focus:** Continue AWC Cycle 1 seamlessly alongside MR tracking.")
+            
+        with st.expander("🍂 September 2026 (Mid-Year Deadline)"):
+            st.write("- **AWC Focus:** CRITICAL - Finish 100% of AWC Cycle 1.")
+            st.write("- **Schools:** Preparation for main screening phase post-MR campaign.")
+            
+        with st.expander("🪔 October - November 2026 (Diwali Shift)"):
+            st.write("- **Schools:** Paused during Diwali holidays. Resume heavy screening mid-November.")
+            st.write("- **AWC Focus:** Launch AWC Cycle 2 immediately after Diwali.")
+            
+        with st.expander("❄️ December 2026 - February 2027 (The Final Push)"):
+            st.write("- **Schools:** Full speed school screenings.")
+            st.write("- **AWC Focus:** Full speed AWC Cycle 2.")
+            st.write("- **Goal:** Achieve 95%+ completion by Feb 28 to avoid year-end rush.")
+            
+        with st.expander("🌼 March 2027 (Mop-Up & Reporting)"):
+            st.write("- **Field Work:** Mop-up rounds for absent children only.")
+            st.write("- **Admin:** Success story generation, data entry, and final state-level reporting.")
+
 
