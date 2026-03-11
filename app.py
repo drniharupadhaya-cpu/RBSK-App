@@ -5,6 +5,8 @@ import json
 from fpdf import FPDF
 import tempfile
 import os
+import time
+import plotly.express as px  # <-- NEW: THE GRAPHICS ENGINE!
 
 # --- 1. GET THE LIVE DATABASE CONNECTION ---
 def get_spreadsheet():
@@ -13,25 +15,21 @@ def get_spreadsheet():
     sheet_url = "https://docs.google.com/spreadsheets/d/1i5wAkI7k98E80qhHRe6xQOhF4Qj9Z0DH8wjPsQ7gRZc/edit?gid=2111634358#gid=2111634358"
     return client.open_by_url(sheet_url)
 
-import time # <-- Make sure this is at the very top of your file with the other imports!
-
 # --- 2. GET THE PURE DATA (WITH SMART AUTO-RETRY) ---
 @st.cache_data(ttl=600)
 def load_all_data():
     sheet = get_spreadsheet()
     
-    # SMART LOADER: If Google yells "Slow down!" (Error 429), it waits and tries again!
     def safe_load(tab_name, retries=3):
         for attempt in range(retries):
             try:
                 df = pd.DataFrame(sheet.worksheet(tab_name).get_all_records()).astype(str)
-                df.columns = df.columns.str.strip() # Destroys hidden spaces
+                df.columns = df.columns.str.strip() 
                 return df
             except Exception as e:
                 error_msg = str(e)
                 if '429' in error_msg or 'RESOURCE_EXHAUSTED' in error_msg:
                     if attempt < retries - 1:
-                        # Wait 10 seconds and try again
                         time.sleep(10)
                         continue 
                 st.error(f"🚨 FAILED ON TAB '{tab_name}': {e}")
@@ -76,7 +74,8 @@ menu = st.sidebar.radio("Go to:",
     ]
 )
 
-# ... [Modules 1 and 2 remain exactly the same as before] ...
+# ... [Modules 1, 2, and 3 remain exactly the same as before] ...
+
 # ==========================================
 # MODULE 1: DAILY TOUR PLANNER
 # ==========================================
@@ -294,7 +293,7 @@ elif menu == "2. Child Screening":
                             st.error(f"⚠️ Error saving data: {e}")
 
 # ==========================================
-# MODULE 3: 4D DEFECT COMMAND CENTER (BULLETPROOF FIX)
+# MODULE 3: 4D DEFECT COMMAND CENTER
 # ==========================================
 elif menu == "3. 4D Defect Registry":
     st.title("🔍 4D Defect Command Center")
@@ -305,9 +304,6 @@ elif menu == "3. 4D Defect Registry":
         return clean_val not in ['', 'nan', 'none', 'no', 'null', 'na', 'false']
 
     if not df_aw_master.empty and not df_all_students.empty:
-        
-        # --- DYNAMIC COLUMN HUNTER ---
-        # Instead of hardcoding '4d', this automatically finds the column whether it's '4d', '4D', or '4d '
         sch_4d_col = next((col for col in df_all_students.columns if col.lower() == '4d'), None)
         sch_dis_col = next((col for col in df_all_students.columns if col.lower() == 'disabilityname'), None)
         aw_4d_col = next((col for col in df_aw_master.columns if col.lower() == '4d'), None)
@@ -325,18 +321,12 @@ elif menu == "3. 4D Defect Registry":
                 aw_loc_df = df_aw_master[df_aw_master['Sector Name'].astype(str).str.strip() == selected_loc]
                 sch_loc_df = df_all_students[df_all_students['Village'].astype(str).str.strip() == selected_loc]
                 
-                # Check Anganwadi defects safely
                 aw_defects = pd.DataFrame()
-                if aw_4d_col:
-                    aw_defects = aw_loc_df[aw_loc_df[aw_4d_col].apply(has_defect)]
+                if aw_4d_col: aw_defects = aw_loc_df[aw_loc_df[aw_4d_col].apply(has_defect)]
                 
-                # Check School defects safely
                 sch_mask = pd.Series(False, index=sch_loc_df.index)
-                if sch_4d_col:
-                    sch_mask = sch_mask | sch_loc_df[sch_4d_col].apply(has_defect)
-                if sch_dis_col:
-                    sch_mask = sch_mask | sch_loc_df[sch_dis_col].apply(has_defect)
-                    
+                if sch_4d_col: sch_mask = sch_mask | sch_loc_df[sch_4d_col].apply(has_defect)
+                if sch_dis_col: sch_mask = sch_mask | sch_loc_df[sch_dis_col].apply(has_defect)
                 sch_defects = sch_loc_df[sch_mask]
                 
                 st.markdown(f"### 📊 Health Overview: {selected_loc}")
@@ -389,8 +379,7 @@ elif menu == "3. 4D Defect Registry":
                 if is_aw:
                     inst_df = df_aw_master[df_aw_master['AWC Name'].astype(str).str.strip() == selected_inst]
                     defects_df = pd.DataFrame()
-                    if aw_4d_col:
-                        defects_df = inst_df[inst_df[aw_4d_col].apply(has_defect)]
+                    if aw_4d_col: defects_df = inst_df[inst_df[aw_4d_col].apply(has_defect)]
                     
                     st.markdown(f"### 📊 Data for: {selected_inst}")
                     m1, m2 = st.columns(2)
@@ -408,10 +397,8 @@ elif menu == "3. 4D Defect Registry":
                     inst_df = df_all_students[df_all_students['School'].astype(str).str.strip() == selected_inst]
                     
                     sch_mask = pd.Series(False, index=inst_df.index)
-                    if sch_4d_col:
-                        sch_mask = sch_mask | inst_df[sch_4d_col].apply(has_defect)
-                    if sch_dis_col:
-                        sch_mask = sch_mask | inst_df[sch_dis_col].apply(has_defect)
+                    if sch_4d_col: sch_mask = sch_mask | inst_df[sch_4d_col].apply(has_defect)
+                    if sch_dis_col: sch_mask = sch_mask | inst_df[sch_dis_col].apply(has_defect)
                         
                     defects_df = inst_df[sch_mask]
                     
@@ -422,7 +409,6 @@ elif menu == "3. 4D Defect Registry":
                     
                     if not defects_df.empty:
                         st.write("**📋 Patient List**")
-                        
                         display_df = defects_df[['StudentName']].copy()
                         display_df['Recorded Defect'] = defects_df.apply(
                             lambda r: f"{r.get(sch_4d_col,'')} | {r.get(sch_dis_col,'')}".strip(' |'), axis=1
@@ -434,23 +420,156 @@ elif menu == "3. 4D Defect Registry":
     else:
         st.warning("⚠️ Could not load data from 'aw new data' or '1240315 ALL STUDENTS NAMES'. Please check your sheet names.")
 
-# ... [Modules 4 through 10 remain exactly the same as before] ...
 
 # ==========================================
-# MODULE 4: VISUAL ANALYSIS
+# MODULE 4: THE LIVING DASHBOARD (NEW!)
 # ==========================================
 elif menu == "4. Visual Analysis":
-    st.title("📊 Interactive Data Analysis")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("Total Students by School")
-        if not df_schools.empty and 'School' in df_schools.columns and 'TOTAL' in df_schools.columns:
-            df_schools['TOTAL'] = pd.to_numeric(df_schools['TOTAL'], errors='coerce').fillna(0)
-            st.bar_chart(data=df_schools.sort_values(by='TOTAL', ascending=False).head(10), x='School', y='TOTAL')
-    with col2:
-        st.subheader("Gender Distribution (Anganwadis)")
-        if not df_aw.empty and 'Gender' in df_aw.columns:
-            st.bar_chart(df_aw['Gender'].value_counts())
+    st.title("📈 District Health Command Dashboard")
+    st.write("Living, breathing visual analytics of your entire RBSK program.")
+
+    # Helper function for defect checking
+    def has_defect(val):
+        clean_val = str(val).strip().lower()
+        return clean_val not in ['', 'nan', 'none', 'no', 'null', 'na', 'false']
+
+    tab_funnel, tab_treemap, tab_velocity, tab_pyramid = st.tabs([
+        "🎯 Coverage Funnel", "🗺️ Hotspot Treemap", "⏱️ Screening Velocity", "⚖️ Demographic Pyramid"
+    ])
+
+    # --- TAB 1: THE ROI FUNNEL ---
+    with tab_funnel:
+        st.subheader("RBSK Program Funnel")
+        st.write("Tracking the pipeline from total enrollment to successful surgical treatment.")
+        
+        # Calculate numbers dynamically
+        target_pop = len(df_aw_master) + len(df_all_students)
+        
+        aw_4d_col = next((col for col in df_aw_master.columns if col.lower() == '4d'), None)
+        sch_4d_col = next((col for col in df_all_students.columns if col.lower() == '4d'), None)
+        sch_dis_col = next((col for col in df_all_students.columns if col.lower() == 'disabilityname'), None)
+        
+        identified_4d = 0
+        if aw_4d_col and not df_aw_master.empty:
+            identified_4d += len(df_aw_master[df_aw_master[aw_4d_col].apply(has_defect)])
+        if not df_all_students.empty:
+            sch_mask = pd.Series(False, index=df_all_students.index)
+            if sch_4d_col: sch_mask = sch_mask | df_all_students[sch_4d_col].apply(has_defect)
+            if sch_dis_col: sch_mask = sch_mask | df_all_students[sch_dis_col].apply(has_defect)
+            identified_4d += len(df_all_students[sch_mask])
+            
+        treated_cases = len(df_4d) if not df_4d.empty else 0
+        
+        funnel_data = dict(
+            Stage=["1. Target Population", "2. Identified 4D Cases", "3. Successfully Treated"],
+            Count=[target_pop, identified_4d, treated_cases]
+        )
+        
+        # 
+        fig_funnel = px.funnel(funnel_data, x='Count', y='Stage', color='Stage',
+                               color_discrete_sequence=['#1f77b4', '#ff7f0e', '#2ca02c'])
+        st.plotly_chart(fig_funnel, use_container_width=True)
+
+
+    # --- TAB 2: HEALTH HOTSPOT TREEMAP ---
+    with tab_treemap:
+        st.subheader("Anemia Hotspots by Region")
+        st.write("Click on a PHC block to zoom into specific high-risk villages.")
+        
+        if not df_anemia.empty:
+            tree_df = df_anemia.copy()
+            # Clean columns for the map
+            tree_df = tree_df.dropna(subset=['PHC/CHC/UPHC', 'VILLAGE', 'SEVERITY'])
+            tree_df = tree_df[tree_df['PHC/CHC/UPHC'].astype(str).str.strip() != 'nan']
+            tree_df['District'] = "Main District" # Root node
+            
+            # 
+            fig_tree = px.treemap(
+                tree_df, 
+                path=['District', 'PHC/CHC/UPHC', 'VILLAGE', 'SEVERITY'],
+                color='SEVERITY',
+                color_discrete_map={
+                    'Normal': '#2ca02c', 'Mild': '#fdb863', 
+                    'Moderate': '#e66101', 'Severe': '#b2182b', 'nan': '#808080'
+                }
+            )
+            fig_tree.update_traces(root_color="lightgrey")
+            fig_tree.update_layout(margin=dict(t=10, l=10, r=10, b=10))
+            st.plotly_chart(fig_tree, use_container_width=True)
+        else:
+            st.info("Not enough data in the ANEMIA sheet to build the Hotspot Treemap.")
+
+
+    # --- TAB 3: SCREENING VELOCITY ---
+    with tab_velocity:
+        st.subheader("Screening Velocity (The District Pulse)")
+        st.write("Tracking your team's momentum and daily medical camp output.")
+        
+        if not df_anemia.empty and 'CAMP DATE' in df_anemia.columns:
+            trend_df = df_anemia.copy()
+            trend_df['CAMP DATE'] = pd.to_datetime(trend_df['CAMP DATE'], errors='coerce')
+            trend_df = trend_df.dropna(subset=['CAMP DATE'])
+            
+            # Count how many kids were screened on each date
+            daily_counts = trend_df.groupby('CAMP DATE').size().reset_index(name='Children Screened')
+            daily_counts = daily_counts.sort_values('CAMP DATE')
+            
+            fig_line = px.line(daily_counts, x='CAMP DATE', y='Children Screened', markers=True,
+                               title="Daily Anemia Screenings Over Time")
+            fig_line.update_traces(line_color='#d62728', line_width=3)
+            st.plotly_chart(fig_line, use_container_width=True)
+        else:
+            st.info("Need more 'CAMP DATE' data in the ANEMIA sheet to calculate velocity.")
+
+
+    # --- TAB 4: DEMOGRAPHIC PYRAMID ---
+    with tab_pyramid:
+        st.subheader("Demographic Disease Pyramid")
+        st.write("Analyzing Nutritional Status (Stunting/Wasting) by Gender in Anganwadis.")
+        
+        if not df_aw_master.empty and 'Gender' in df_aw_master.columns:
+            pyr_df = df_aw_master.copy()
+            
+            # Create a simple "Age Group" proxy based on Beneficiary Type
+            if 'Beneficiary Type' in pyr_df.columns:
+                pyr_df['Category'] = pyr_df['Beneficiary Type']
+            else:
+                pyr_df['Category'] = "General Enrollment"
+                
+            # Filter down to children with nutritional risks
+            risk_df = pyr_df[
+                (pyr_df['Stunting'].astype(str).str.lower() != 'normal') | 
+                (pyr_df['Wasting'].astype(str).str.lower() != 'normal')
+            ]
+            
+            if not risk_df.empty:
+                # Group by Category and Gender
+                pyramid_data = risk_df.groupby(['Category', 'Gender']).size().reset_index(name='Count')
+                
+                # Make Male numbers negative so they draw on the left side of the pyramid!
+                def adjust_count(row):
+                    if str(row['Gender']).upper().startswith('M'): return -row['Count']
+                    return row['Count']
+                    
+                pyramid_data['Pyramid_Count'] = pyramid_data.apply(adjust_count, axis=1)
+                
+                # 
+
+[Image of a population pyramid chart]
+
+                fig_pyr = px.bar(pyramid_data, y='Category', x='Pyramid_Count', color='Gender', 
+                                 orientation='h', title="Children with Nutritional Risks (Boys vs Girls)",
+                                 color_discrete_map={'M': '#1f77b4', 'F': '#e377c2', 'Male': '#1f77b4', 'Female': '#e377c2'})
+                
+                fig_pyr.update_layout(barmode='relative', xaxis_title="Count (Boys Left | Girls Right)")
+                st.plotly_chart(fig_pyr, use_container_width=True)
+            else:
+                st.success("No widespread nutritional risks identified to build the pyramid!")
+        else:
+            st.info("Missing 'Gender' column in Anganwadi data.")
+
+
+# ... [Modules 5 through 10 remain exactly the same as before] ...
 
 # ==========================================
 # MODULE 5: HBNC NEWBORN VISIT
@@ -821,4 +940,3 @@ elif menu == "10. Staff Directory":
             st.warning("No staff members found matching your filters.")
     else:
         st.error("⚠️ Could not load data from the 'master_staff_directory' tab.")
-
