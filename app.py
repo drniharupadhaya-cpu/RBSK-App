@@ -45,10 +45,13 @@ client=gspread.authorize(creds)
 sheet_url ="https://docs.google.com/spreadsheets/d/1i5wAkI7k98E80qhHRe6xQOhF4Qj9Z0DH8wjPsQ7gRZc/edit?gid=2111634358#gid=2111634358"
 spreadsheet = client.open_by_url(sheet_url)
 
-    try:
-        planner_sheet = spreadsheet.worksheet("tour_plan")
+    
         df_plan = pd.DataFrame(planner_sheet.get_all_records())
+    try:
+        df_students =pd.DataFrame(spreadsheet.worksheet("students_data").get_all_records()).astype(str)
     except:
+        df_students = pd.DataFrame()
+    return df_4d, df_schools, df_aw, df_students, spreadsheet
         st.error("⚠️ Could not find the 'tour_plan' tab.")
         st.stop()
 
@@ -541,6 +544,7 @@ elif menu == "6. Success Story Builder":
     else:
 
         st.warning("No 4D Defect records found to create a success story.")
+
 
 
 
