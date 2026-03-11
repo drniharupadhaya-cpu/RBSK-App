@@ -414,6 +414,9 @@ elif menu == "5. HBNC Newborn Visit":
 elif menu == "6. Success Story Builder":
     st.title("🌟 Success Story Generator")
     st.write("Create official PDF reports for children successfully treated under RBSK.")
+    st.info(f"🔍 X-RAY: Total patients found: {len(df_4d)}")
+    st.info(f"🔍 X-RAY: Exact columns found: {list(df_4d.columns)}")
+    st.dataframe(df_4d)
 
     if not df_4d.empty:
         df_4d.columns = df_4d.columns.astype(str).str.strip().str.upper()
@@ -421,3 +424,4 @@ elif menu == "6. Success Story Builder":
         if 'NAME' in df_4d.columns and '4D' in df_4d.columns and 'VILLAGE' in df_4d.columns:
             
             df_4d['Select_Label'] = df_4d['NAME'].astype(str) + " (" + df_4d['4D'].astype(str) + ") - " + df_4d['VILLAGE'].astype(str)
+
