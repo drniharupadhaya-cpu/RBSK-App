@@ -38,7 +38,6 @@ def load_all_data():
         df_aw_contacts = pd.DataFrame(sheet.worksheet("aw_master_directory").get_all_records()).astype(str)
     except: df_aw_contacts = pd.DataFrame()
         
-    # --- NEW: LOAD MASTER STAFF DIRECTORY ---
     try:
         df_staff = pd.DataFrame(sheet.worksheet("master_staff_directory").get_all_records()).astype(str)
     except: df_staff = pd.DataFrame()
@@ -67,7 +66,7 @@ menu = st.sidebar.radio("Go to:",
         "7. Anemia Tracker",
         "8. School Directory",
         "9. Anganwadi Directory",
-        "10. Staff Directory"  # <-- NEW MENU ITEM!
+        "10. Staff Directory"
     ]
 )
 
@@ -632,76 +631,75 @@ elif menu == "9. Anganwadi Directory":
         st.error("⚠️ Could not load data from the 'aw_master_directory' tab. Please ensure the tab is spelled exactly right in your Google Sheet.")
 
 # ==========================================
-# MODULE 10: STAFF DIRECTORY (NEW!)
+# MODULE 10: STAFF DIRECTORY (TABLE VIEW)
 # ==========================================
 elif menu == "10. Staff Directory":
     st.title("👨‍⚕️ Master Staff Directory")
-    st.write("Search and contact your medical team members instantly.")
+    st.write("Filter by Headquarter or Designation to find your team members instantly.")
 
     if not df_staff.empty:
-        # Dynamically find the Designation/Role column if it exists
+        # Dynamically find the columns for our dropdown filters
         desig_col = None
+        hq_col = None
+        
         for col in df_staff.columns:
-            if "DESIGNATION" in col.upper() or "ROLE" in col.upper() or "POST" in col.upper():
+            col_upper = col.upper()
+            if "DESIGNATION" in col_upper or "ROLE" in col_upper or "POST" in col_upper:
                 desig_col = col
-                break
+            if "HEADQUARTER" in col_upper or "HQ" in col_upper or "BLOCK" in col_upper:
+                hq_col = col
 
-        # Display Filters
-        col1, col2 = st.columns(2)
-        with col1:
+        # Display the 3 Filters across the top
+        f_col1, f_col2, f_col3 = st.columns(3)
+        
+        with f_col1:
             search_query = st.text_input("🔍 Search by Name:")
-        with col2:
+            
+        with f_col2:
+            if hq_col:
+                hqs = ["All"] + sorted([str(x) for x in df_staff[hq_col].unique() if str(x).strip() not in ['', 'nan']])
+                selected_hq = st.selectbox("📍 Filter by Headquarter:", hqs)
+            else:
+                selected_hq = "All"
+                
+        with f_col3:
             if desig_col:
                 roles = ["All"] + sorted([str(x) for x in df_staff[desig_col].unique() if str(x).strip() not in ['', 'nan']])
                 selected_role = st.selectbox("⚕️ Filter by Designation:", roles)
             else:
                 selected_role = "All"
 
-        # Apply Filters
+        # Apply Filters to the Data
         filtered_staff = df_staff.copy()
         
         if search_query:
-            # Search across all columns for the typed name
-            mask = filtered_staff.astype(str).apply(lambda x: x.str.contains(search_query, case=False, na=False)).any(axis=1)
+            # Find the Name column to search through
+            name_col = df_staff.columns[0]
+            for col in df_staff.columns:
+                if "NAME" in col.upper():
+                    name_col = col
+                    break
+            mask = filtered_staff[name_col].astype(str).str.contains(search_query, case=False, na=False)
             filtered_staff = filtered_staff[mask]
+
+        if hq_col and selected_hq != "All":
+            filtered_staff = filtered_staff[filtered_staff[hq_col] == selected_hq]
 
         if desig_col and selected_role != "All":
             filtered_staff = filtered_staff[filtered_staff[desig_col] == selected_role]
 
         st.divider()
 
-        # Display the results
+        # Display the results in a concise table
         if not filtered_staff.empty:
-            st.write(f"Showing {len(filtered_staff)} staff member(s):")
+            st.write(f"**Showing {len(filtered_staff)} staff member(s):**")
             
-            for idx, row in filtered_staff.iterrows():
-                with st.container():
-                    st.markdown("---")
-                    
-                    # Try to find the Name column dynamically
-                    name_col = df_staff.columns[0]
-                    for col in df_staff.columns:
-                        if "NAME" in col.upper():
-                            name_col = col
-                            break
-                    
-                    st.subheader(f"👤 {row[name_col]}")
-                    
-                    info_c1, info_c2 = st.columns(2)
-                    
-                    # Display the remaining data for this person
-                    for col in df_staff.columns:
-                        if col != name_col:
-                            val = str(row[col]).strip()
-                            if val not in ['', 'nan', 'None']:
-                                
-                                # CLICK-TO-CALL MAGIC: If it looks like a phone column, make it a clickable link!
-                                if "MOB" in col.upper() or "PHO" in col.upper() or "CONTACT" in col.upper() or "NUM" in col.upper():
-                                    info_c1.markdown(f"**{col}:** [{val}](tel:{val}) 📞")
-                                else:
-                                    info_c2.write(f"**{col}:** {val}")
+            # Clean up 'nan' values so the table looks professional
+            display_df = filtered_staff.replace('nan', '').fillna('')
+            
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
         else:
-            st.warning("No staff members found matching your search.")
+            st.warning("No staff members found matching your filters.")
             
     else:
         st.error("⚠️ Could not load data from the 'master_staff_directory' tab. Please ensure it is spelled exactly right.")
