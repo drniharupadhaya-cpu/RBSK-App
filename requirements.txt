@@ -1,5 +1,6 @@
 streamlit
-gspread
-oauth2client
 pandas
+gspread==5.12.4
+oauth2client
+google-auth
 fpdf
