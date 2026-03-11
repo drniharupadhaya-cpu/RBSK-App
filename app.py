@@ -555,7 +555,7 @@ elif menu == "4. Visual Analysis":
                 
                 # 
 
-[Image of a population pyramid chart]
+
 
                 fig_pyr = px.bar(pyramid_data, y='Category', x='Pyramid_Count', color='Gender', 
                                  orientation='h', title="Children with Nutritional Risks (Boys vs Girls)",
@@ -940,3 +940,4 @@ elif menu == "10. Staff Directory":
             st.warning("No staff members found matching your filters.")
     else:
         st.error("⚠️ Could not load data from the 'master_staff_directory' tab.")
+
