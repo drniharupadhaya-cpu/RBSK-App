@@ -414,14 +414,100 @@ elif menu == "5. HBNC Newborn Visit":
 elif menu == "6. Success Story Builder":
     st.title("🌟 Success Story Generator")
     st.write("Create official PDF reports for children successfully treated under RBSK.")
-    st.info(f"🔍 X-RAY: Total patients found: {len(df_4d)}")
-    st.info(f"🔍 X-RAY: Exact columns found: {list(df_4d.columns)}")
-    st.dataframe(df_4d)
 
     if not df_4d.empty:
         df_4d.columns = df_4d.columns.astype(str).str.strip().str.upper()
         
         if 'NAME' in df_4d.columns and '4D' in df_4d.columns and 'VILLAGE' in df_4d.columns:
             
+            # THIS IS THE LINE THAT WENT MISSING!
             df_4d['Select_Label'] = df_4d['NAME'].astype(str) + " (" + df_4d['4D'].astype(str) + ") - " + df_4d['VILLAGE'].astype(str)
+            selected_label = st.selectbox("Select Treated Child from 4D Registry:", ["-- Select --"] + df_4d['Select_Label'].tolist())
+            
+            if selected_label != "-- Select --":
+                child_data = df_4d[df_4d['Select_Label'] == selected_label].iloc[0]
+                
+                with st.form("success_story_form"):
+                    st.subheader("📝 Treatment Summary")
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        treatment_place = st.text_input("Hospital / Treatment Center", placeholder="e.g., DEIC Junagadh")
+                        surgery_date = st.date_input("Date of Successful Treatment")
+                    with col2:
+                        doctor_notes = st.text_area("Doctor's Narrative", placeholder="Describe the intervention...", height=100)
+                    
+                    st.subheader("📸 Upload Photos (Optional)")
+                    col3, col4 = st.columns(2)
+                    with col3:
+                        img_before = st.file_uploader("Upload 'Before' Photo", type=["jpg", "jpeg", "png"])
+                    with col4:
+                        img_after = st.file_uploader("Upload 'After' Photo", type=["jpg", "jpeg", "png"])
+                    
+                    generate_btn = st.form_submit_button("📄 Prepare Official PDF Report")
+                    
+                if generate_btn:
+                    if treatment_place == "" or doctor_notes == "":
+                        st.error("🚨 Please fill in the Treatment Center and Doctor's Narrative.")
+                    else:
+                        with st.spinner("Generating PDF..."):
+                            pdf = FPDF()
+                            pdf.add_page()
+                            pdf.set_auto_page_break(auto=True, margin=15)
+                            
+                            pdf.set_font("Arial", "B", 16)
+                            pdf.cell(200, 10, txt="RBSK SUCCESS STORY REPORT", ln=True, align='C')
+                            pdf.ln(10)
+                            
+                            pdf.set_font("Arial", "B", 12)
+                            pdf.cell(200, 10, txt="PATIENT DETAILS", ln=True, align='L')
+                            pdf.set_font("Arial", "", 12)
+                            pdf.cell(200, 8, txt=f"Name: {child_data['NAME']}", ln=True)
+                            pdf.cell(200, 8, txt=f"Village: {child_data['VILLAGE']}", ln=True)
+                            pdf.cell(200, 8, txt=f"Identified Defect: {child_data['4D']}", ln=True)
+                            
+                            mob = child_data.get('MOBILE NO', child_data.get('MOBILE', 'N/A'))
+                            pdf.cell(200, 8, txt=f"Mobile Number: {mob}", ln=True)
+                            pdf.ln(5)
+                            
+                            pdf.set_font("Arial", "B", 12)
+                            pdf.cell(200, 10, txt="TREATMENT SUMMARY", ln=True, align='L')
+                            pdf.set_font("Arial", "", 12)
+                            pdf.cell(200, 8, txt=f"Treated At: {treatment_place}", ln=True)
+                            pdf.cell(200, 8, txt=f"Treatment Date: {surgery_date}", ln=True)
+                            pdf.multi_cell(0, 8, txt=f"Doctor's Narrative:\n{doctor_notes}")
+                            pdf.ln(10)
+                            
+                            if img_before or img_after:
+                                pdf.set_font("Arial", "B", 12)
+                                pdf.cell(200, 10, txt="CLINICAL PHOTOGRAPHS", ln=True, align='L')
+                                
+                                if img_before:
+                                    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_b:
+                                        tmp_b.write(img_before.read())
+                                        tmp_b_name = tmp_b.name
+                                    pdf.image(tmp_b_name, x=20, w=70)
+                                    os.remove(tmp_b_name) 
+                                        
+                                if img_after:
+                                    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_a:
+                                        tmp_a.write(img_after.read())
+                                        tmp_a_name = tmp_a.name
+                                    pdf.image(tmp_a_name, x=110, w=70) 
+                                    os.remove(tmp_a_name) 
+                            
+                            pdf_output = pdf.output(dest="S").encode("latin-1")
+                            
+                            st.success("✅ PDF Generated Successfully!")
+                            st.download_button(
+                                label="⬇️ Download PDF Report",
+                                data=pdf_output,
+                                file_name=f"Success_Story_{child_data['NAME']}.pdf",
+                                mime="application/pdf"
+                            )
+        else:
+            st.error("⚠️ The headers in your Google Sheet are still not exactly 'NAME', 'VILLAGE', and '4D'.")
+    else:
+        st.warning("No 4D Defect records found to create a success story.")
+
 
