@@ -6,22 +6,24 @@ from fpdf import FPDF
 import tempfile
 import os
 
-# --- 1. GET THE LIVE DATABASE CONNECTION (DO NOT CACHE THIS!) ---
+# --- 1. GET THE LIVE DATABASE CONNECTION ---
 def get_spreadsheet():
     creds_dict = json.loads(st.secrets["gcp_service_account"])
     client = gspread.service_account_from_dict(creds_dict)
     sheet_url = "https://docs.google.com/spreadsheets/d/1i5wAkI7k98E80qhHRe6xQOhF4Qj9Z0DH8wjPsQ7gRZc/edit?gid=2111634358#gid=2111634358"
     return client.open_by_url(sheet_url)
 
-# --- 2. GET THE PURE DATA (CACHE THIS FOR SPEED) ---
+# --- 2. GET THE PURE DATA (WITH BULLETPROOF COLUMN CLEANING) ---
 @st.cache_data(ttl=600)
 def load_all_data():
     sheet = get_spreadsheet()
     
-    # LOUD helper function to catch the exact error
     def safe_load(tab_name):
         try:
-            return pd.DataFrame(sheet.worksheet(tab_name).get_all_records()).astype(str)
+            df = pd.DataFrame(sheet.worksheet(tab_name).get_all_records()).astype(str)
+            # THIS LINE IS THE MAGIC FIX: It destroys hidden spaces in your headers!
+            df.columns = df.columns.str.strip() 
+            return df
         except Exception as e:
             st.error(f"🚨 FAILED ON TAB '{tab_name}': {e}")
             return pd.DataFrame()
@@ -35,8 +37,6 @@ def load_all_data():
     df_aw_contacts = safe_load("aw_master_directory")
     df_staff = safe_load("master_staff_directory")
     df_aw_master = safe_load("aw new data")
-    
-    # --- NEW: LOAD ALL SCHOOL STUDENTS DATA ---
     df_all_students = safe_load("1240315 ALL STUDENTS NAMES")
 
     return df_4d, df_schools, df_aw, df_anemia, df_students, df_directory, df_aw_contacts, df_staff, df_aw_master, df_all_students
@@ -67,6 +67,7 @@ menu = st.sidebar.radio("Go to:",
     ]
 )
 
+# ... [Modules 1 and 2 remain exactly the same as before] ...
 # ==========================================
 # MODULE 1: DAILY TOUR PLANNER
 # ==========================================
@@ -284,24 +285,27 @@ elif menu == "2. Child Screening":
                             st.error(f"⚠️ Error saving data: {e}")
 
 # ==========================================
-# MODULE 3: 4D DEFECT COMMAND CENTER (UPGRADED!)
+# MODULE 3: 4D DEFECT COMMAND CENTER (BULLETPROOF FIX)
 # ==========================================
 elif menu == "3. 4D Defect Registry":
     st.title("🔍 4D Defect Command Center")
     st.write("Live filtering for high-risk regions, schools, and Anganwadis.")
 
-    # A quick helper to determine if a value actually contains a defect
     def has_defect(val):
         clean_val = str(val).strip().lower()
         return clean_val not in ['', 'nan', 'none', 'no', 'null', 'na', 'false']
 
     if not df_aw_master.empty and not df_all_students.empty:
         
+        # --- DYNAMIC COLUMN HUNTER ---
+        # Instead of hardcoding '4d', this automatically finds the column whether it's '4d', '4D', or '4d '
+        sch_4d_col = next((col for col in df_all_students.columns if col.lower() == '4d'), None)
+        sch_dis_col = next((col for col in df_all_students.columns if col.lower() == 'disabilityname'), None)
+        aw_4d_col = next((col for col in df_aw_master.columns if col.lower() == '4d'), None)
+
         tab_loc, tab_inst = st.tabs(["🌍 Search by Village / Sector", "🏫 Search by Specific Institution"])
         
-        # --- TAB 1: VILLAGE / SECTOR VIEW ---
         with tab_loc:
-            # Gather all unique locations from both sheets
             aw_locs = df_aw_master['Sector Name'].unique().tolist()
             sch_locs = df_all_students['Village'].unique().tolist()
             all_locs = sorted(list(set([str(x).strip() for x in aw_locs + sch_locs if str(x).strip() not in ['nan', '']])))
@@ -309,18 +313,23 @@ elif menu == "3. 4D Defect Registry":
             selected_loc = st.selectbox("Select a Village or Sector:", ["-- Select --"] + all_locs)
             
             if selected_loc != "-- Select --":
-                # 1. Filter the raw data for this location
                 aw_loc_df = df_aw_master[df_aw_master['Sector Name'].astype(str).str.strip() == selected_loc]
                 sch_loc_df = df_all_students[df_all_students['Village'].astype(str).str.strip() == selected_loc]
                 
-                # 2. Find the 4D cases using your exact column names!
-                aw_defects = aw_loc_df[aw_loc_df['4d'].apply(has_defect)]
+                # Check Anganwadi defects safely
+                aw_defects = pd.DataFrame()
+                if aw_4d_col:
+                    aw_defects = aw_loc_df[aw_loc_df[aw_4d_col].apply(has_defect)]
                 
-                # For schools, check both columns
-                sch_mask = sch_loc_df['4d'].apply(has_defect) | sch_loc_df['DisabilityName'].apply(has_defect)
+                # Check School defects safely
+                sch_mask = pd.Series(False, index=sch_loc_df.index)
+                if sch_4d_col:
+                    sch_mask = sch_mask | sch_loc_df[sch_4d_col].apply(has_defect)
+                if sch_dis_col:
+                    sch_mask = sch_mask | sch_loc_df[sch_dis_col].apply(has_defect)
+                    
                 sch_defects = sch_loc_df[sch_mask]
                 
-                # 3. Big Picture Metrics
                 st.markdown(f"### 📊 Health Overview: {selected_loc}")
                 c1, c2, c3, c4 = st.columns(4)
                 c1.metric("👶 Total AWC Kids", len(aw_loc_df))
@@ -331,24 +340,21 @@ elif menu == "3. 4D Defect Registry":
                 st.divider()
                 st.markdown("### 📋 Identified 4D Patients")
                 
-                # 4. Display Anganwadi Cases
                 if not aw_defects.empty:
                     st.write("👶 **Anganwadi Cases**")
-                    aw_display = aw_defects[['AWC Name', 'Beneficiary Name', '4d']].rename(
-                        columns={'AWC Name': 'Institution', 'Beneficiary Name': 'Child Name', '4d': 'Recorded Defect'}
+                    aw_display = aw_defects[['AWC Name', 'Beneficiary Name', aw_4d_col]].rename(
+                        columns={'AWC Name': 'Institution', 'Beneficiary Name': 'Child Name', aw_4d_col: 'Recorded Defect'}
                     )
                     st.dataframe(aw_display, use_container_width=True, hide_index=True)
                 else:
                     st.info("👶 No 4D conditions recorded in the Anganwadis for this location.")
                     
-                # 5. Display School Cases
                 if not sch_defects.empty:
                     st.write("🏫 **School Cases**")
                     
-                    # Merge the two school defect columns cleanly
                     def combine_sch_defects(row):
-                        d1 = str(row.get('4d', '')).strip()
-                        d2 = str(row.get('DisabilityName', '')).strip()
+                        d1 = str(row.get(sch_4d_col, '')).strip() if sch_4d_col else ''
+                        d2 = str(row.get(sch_dis_col, '')).strip() if sch_dis_col else ''
                         if has_defect(d1) and has_defect(d2) and d1 != d2: return f"{d1} | {d2}"
                         if has_defect(d1): return d1
                         if has_defect(d2): return d2
@@ -361,9 +367,7 @@ elif menu == "3. 4D Defect Registry":
                 else:
                     st.info("🏫 No 4D conditions recorded in the Schools for this location.")
 
-        # --- TAB 2: INSTITUTION VIEW ---
         with tab_inst:
-            # Combine AWCs and Schools into one big search list
             aw_insts = df_aw_master['AWC Name'].unique().tolist()
             sch_insts = df_all_students['School'].unique().tolist()
             all_insts = sorted(list(set([str(x).strip() for x in aw_insts + sch_insts if str(x).strip() not in ['nan', '']])))
@@ -371,12 +375,13 @@ elif menu == "3. 4D Defect Registry":
             selected_inst = st.selectbox("Search for a specific School or AWC:", ["-- Select --"] + all_insts)
             
             if selected_inst != "-- Select --":
-                # Figure out if it's an AWC or a School
                 is_aw = selected_inst in aw_insts
                 
                 if is_aw:
                     inst_df = df_aw_master[df_aw_master['AWC Name'].astype(str).str.strip() == selected_inst]
-                    defects_df = inst_df[inst_df['4d'].apply(has_defect)]
+                    defects_df = pd.DataFrame()
+                    if aw_4d_col:
+                        defects_df = inst_df[inst_df[aw_4d_col].apply(has_defect)]
                     
                     st.markdown(f"### 📊 Data for: {selected_inst}")
                     m1, m2 = st.columns(2)
@@ -385,15 +390,21 @@ elif menu == "3. 4D Defect Registry":
                     
                     if not defects_df.empty:
                         st.write("**📋 Patient List**")
-                        display_df = defects_df[['Beneficiary Name', '4d']].rename(columns={'Beneficiary Name': 'Child Name', '4d': 'Recorded Defect'})
+                        display_df = defects_df[['Beneficiary Name', aw_4d_col]].rename(columns={'Beneficiary Name': 'Child Name', aw_4d_col: 'Recorded Defect'})
                         st.dataframe(display_df, use_container_width=True, hide_index=True)
                     else:
                         st.success("✅ No 4D cases recorded in this institution!")
                         
                 else:
                     inst_df = df_all_students[df_all_students['School'].astype(str).str.strip() == selected_inst]
-                    mask = inst_df['4d'].apply(has_defect) | inst_df['DisabilityName'].apply(has_defect)
-                    defects_df = inst_df[mask]
+                    
+                    sch_mask = pd.Series(False, index=inst_df.index)
+                    if sch_4d_col:
+                        sch_mask = sch_mask | inst_df[sch_4d_col].apply(has_defect)
+                    if sch_dis_col:
+                        sch_mask = sch_mask | inst_df[sch_dis_col].apply(has_defect)
+                        
+                    defects_df = inst_df[sch_mask]
                     
                     st.markdown(f"### 📊 Data for: {selected_inst}")
                     m1, m2 = st.columns(2)
@@ -405,7 +416,7 @@ elif menu == "3. 4D Defect Registry":
                         
                         display_df = defects_df[['StudentName']].copy()
                         display_df['Recorded Defect'] = defects_df.apply(
-                            lambda r: f"{r.get('4d','')} | {r.get('DisabilityName','')}".strip(' |'), axis=1
+                            lambda r: f"{r.get(sch_4d_col,'')} | {r.get(sch_dis_col,'')}".strip(' |'), axis=1
                         )
                         display_df = display_df.rename(columns={'StudentName': 'Child Name'})
                         st.dataframe(display_df, use_container_width=True, hide_index=True)
@@ -413,6 +424,8 @@ elif menu == "3. 4D Defect Registry":
                         st.success("✅ No 4D cases recorded in this institution!")
     else:
         st.warning("⚠️ Could not load data from 'aw new data' or '1240315 ALL STUDENTS NAMES'. Please check your sheet names.")
+
+# ... [Modules 4 through 10 remain exactly the same as before] ...
 
 # ==========================================
 # MODULE 4: VISUAL ANALYSIS
@@ -799,5 +812,3 @@ elif menu == "10. Staff Directory":
             st.warning("No staff members found matching your filters.")
     else:
         st.error("⚠️ Could not load data from the 'master_staff_directory' tab.")
-
-
