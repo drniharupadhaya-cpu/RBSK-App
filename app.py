@@ -36,8 +36,8 @@ def load_all_data():
 
 # --- 3. ACTIVATE BOTH ---
 try:
-    spreadsheet = get_spreadsheet()  # Fresh, live connection for saving data
-    df_4d, df_schools, df_aw, df_students, df_anemia = load_all_data() # Frozen data for viewing
+    spreadsheet = get_spreadsheet() 
+    df_4d, df_schools, df_aw, df_students, df_anemia = load_all_data() 
 except Exception as e:
     st.error(f"Could not connect to Google Sheets. Please check your Secret Vault. Error: {e}")
     st.stop()
@@ -420,44 +420,89 @@ elif menu == "6. Success Story Builder":
         st.warning("No 4D Defect records found.")
 
 # ==========================================
-# MODULE 7: ANEMIA TRACKER (NEW!)
+# MODULE 7: ANEMIA TRACKER (LEVEL 2 UPGRADE!)
 # ==========================================
 elif menu == "7. Anemia Tracker":
     st.title("🩸 Anemia Camp & Analytics Dashboard")
-    st.write("Track Hemoglobin levels and let the app automatically categorize severity.")
+    st.write("Track Hemoglobin levels and analyze historical trends.")
 
     tab_dash, tab_entry = st.tabs(["📈 Interactive Dashboard", "➕ Enter New Camp Data"])
 
-    # --- TAB 1: THE DASHBOARD ---
+    # --- TAB 1: THE LEVEL 2 DASHBOARD ---
     with tab_dash:
-        st.subheader("Anemia Analytics Overview")
         if not df_anemia.empty:
+            # Clean the data for mathematical operations
             df_anemia['HB LEVEL'] = pd.to_numeric(df_anemia['HB LEVEL'], errors='coerce')
+            df_anemia['CAMP DATE'] = pd.to_datetime(df_anemia['CAMP DATE'], errors='coerce')
+            
+            # Remove entirely broken rows to keep charts safe
+            clean_df = df_anemia.dropna(subset=['HB LEVEL'])
 
+            # --- THE INTERACTIVE FILTERS ---
+            st.markdown("### 🔍 Filter Your Data")
+            f_col1, f_col2 = st.columns(2)
+            
+            # Build dropdown lists automatically from your Google Sheet!
+            phc_list = ["All"] + sorted([str(x) for x in clean_df['PHC/CHC/UPHC'].unique() if str(x) != 'nan'])
+            village_list = ["All"] + sorted([str(x) for x in clean_df['VILLAGE'].unique() if str(x) != 'nan'])
+
+            with f_col1:
+                selected_phc = st.selectbox("🏥 Filter by PHC/CHC/UPHC:", phc_list)
+            with f_col2:
+                selected_village = st.selectbox("🏘️ Filter by Village:", village_list)
+
+            # Apply the filters to a temporary dataframe
+            filtered_df = clean_df.copy()
+            if selected_phc != "All":
+                filtered_df = filtered_df[filtered_df['PHC/CHC/UPHC'].astype(str) == selected_phc]
+            if selected_village != "All":
+                filtered_df = filtered_df[filtered_df['VILLAGE'].astype(str) == selected_village]
+
+            st.divider()
+
+            # --- DYNAMIC METRICS ---
+            st.markdown(f"### 📊 Key Metrics (Showing: {len(filtered_df)} patients)")
             m1, m2, m3 = st.columns(3)
-            m1.metric("Total Children Screened", len(df_anemia))
+            m1.metric("Total Screened", len(filtered_df))
             
-            severe_cases = len(df_anemia[df_anemia['SEVERITY'].astype(str).str.strip().str.upper() == 'SEVERE'])
-            m2.metric("Total Severe Cases", severe_cases)
+            severe_cases = len(filtered_df[filtered_df['SEVERITY'].astype(str).str.strip().str.upper() == 'SEVERE'])
+            m2.metric("Severe Cases", severe_cases)
             
-            avg_hb = df_anemia['HB LEVEL'].mean()
+            avg_hb = filtered_df['HB LEVEL'].mean()
             m3.metric("Average Hb Level", f"{avg_hb:.1f} g/dL" if pd.notna(avg_hb) else "N/A")
 
             st.divider()
             
+            # --- THE TIME TRAVEL TREND GRAPH ---
+            st.markdown("### 📈 Analytics & Trends")
+            st.write("**Average Hemoglobin Levels Over Time (Camp Dates)**")
+            
+            if not filtered_df.empty and not filtered_df['CAMP DATE'].isnull().all():
+                # Group data by date to find the average Hb for each camp day
+                trend_df = filtered_df.dropna(subset=['CAMP DATE'])
+                trend_df = trend_df.groupby('CAMP DATE')['HB LEVEL'].mean().reset_index()
+                trend_df = trend_df.sort_values('CAMP DATE')
+                trend_df.set_index('CAMP DATE', inplace=True)
+                
+                # Draw the line chart!
+                st.line_chart(trend_df, y='HB LEVEL', color="#1f77b4")
+            else:
+                st.info("Not enough valid date data to show trends.")
+
+            # --- BREAKDOWN CHARTS ---
             col_chart1, col_chart2 = st.columns(2)
             with col_chart1:
                 st.write("**Severity Breakdown**")
-                sev_counts = df_anemia['SEVERITY'].value_counts()
+                sev_counts = filtered_df['SEVERITY'].value_counts()
                 st.bar_chart(sev_counts, color="#FF4B4B")
                 
             with col_chart2:
                 st.write("**Cases by Village/Location**")
-                village_counts = df_anemia['VILLAGE'].value_counts().head(10)
+                village_counts = filtered_df['VILLAGE'].value_counts().head(10)
                 st.bar_chart(village_counts)
 
-            st.write("**Recent Master Registry Entries**")
-            st.dataframe(df_anemia.tail(10), use_container_width=True)
+            st.write("**Recent Filtered Entries**")
+            st.dataframe(filtered_df.tail(10), use_container_width=True)
             
         else:
             st.info("No data available in the ANEMIA sheet yet.")
@@ -499,12 +544,10 @@ elif menu == "7. Anemia Tracker":
 
                     try:
                         anemia_sheet = spreadsheet.worksheet("ANEMIA")
-                        
                         row_data = [
                             facility, str(camp_date), village, child_name, 
                             str(dob), gender, hb_level, calculated_severity
                         ]
-                        
                         anemia_sheet.append_row(row_data)
                         
                         st.toast("✅ Anemia Record Saved!", icon="🩸")
