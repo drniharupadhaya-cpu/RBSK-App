@@ -359,42 +359,42 @@ elif menu == "2. Child Screening":
                         except Exception as e:
                             st.error(f"⚠️ Error saving data: {e}")
 
-# ==========================================
-# MODULE 3: 4D DEFECT REGISTRY & REFER CARD GENERATOR
-# ==========================================
-elif menu == "3. 4D Defect Registry":
-    st.title("🔍 4D Defect Command Center")
-    
-    # --- 1. THE REFER CARD PDF ENGINE (CRASH-PROOF) ---
+# --- FINAL UNIVERSAL REFER CARD ENGINE ---
     def generate_refer_card(data):
-        pdf = FPDF()
+        # We use 'fpdf2' with fixed unit and format
+        pdf = FPDF(orientation="P", unit="mm", format="A4")
         pdf.add_page()
         
-        # Check if font exists
         font_path = "gujarati.ttf"
-        font_exists = os.path.exists(font_path)
         
-        if font_exists:
-            pdf.add_font('Gujarati', '', font_path)
-            pdf.set_font('Gujarati', '', 12)
-            f_gu = 'Gujarati'
-            # Gujarati Labels
-            lbl_title = "રાષ્ટ્રીય બાળ સ્વાસ્થ્ય કાર્યક્રમ (સંદર્ભ કાર્ડ)"
-            lbl_name = "બાળકનું પૂરુ નામ (Name)"
-            lbl_gender = "જાતિ (Gender)"
-            lbl_dob = "જન્મ તારીખ (DOB)"
-            lbl_age = "ઉંમર (Age)"
-            lbl_father = "પિતાનું નામ (Father)"
-            lbl_mother = "માતાનું નામ (Mother)"
-            lbl_address = "સરનામું (Address)"
-            lbl_village = "ગામ (Village)"
-            lbl_taluka = "તાલુકો (Taluka)"
-            lbl_condition = "બીમારીની વિગત"
+        # Check if it's a valid font file (not a ZIP)
+        if os.path.exists(font_path) and font_path.endswith(".ttf"):
+            try:
+                pdf.add_font('Gujarati', '', font_path)
+                pdf.set_font('Gujarati', '', 12)
+                f_gu = 'Gujarati'
+                # GUJARATI LABELS
+                lbl_title = "રાષ્ટ્રીય બાળ સ્વાસ્થ્ય કાર્યક્રમ (સંદર્ભ કાર્ડ)"
+                lbl_name = "બાળકનું પૂરુ નામ (Name)"
+                lbl_gender = "જાતિ (Gender)"
+                lbl_dob = "જન્મ તારીખ (DOB)"
+                lbl_age = "ઉંમર (Age)"
+                lbl_father = "પિતાનું નામ (Father)"
+                lbl_mother = "માતાનું નામ (Mother)"
+                lbl_address = "સરનામું (Address)"
+                lbl_village = "ગામ (Village)"
+                lbl_taluka = "તાલુકો (Taluka)"
+                lbl_condition = "બીમારીની વિગત (Condition)"
+            except Exception as e:
+                st.error(f"Font Error: {e}")
+                font_exists = False
         else:
-            # English Fallback Labels (Prevents Crash)
+            font_exists = False
+
+        if not font_exists:
             pdf.set_font('Arial', '', 12)
             f_gu = 'Arial'
-            lbl_title = "RBSK Refer Card (Font Missing)"
+            lbl_title = "RBSK Refer Card"
             lbl_name = "Name"
             lbl_gender = "Gender"
             lbl_dob = "DOB"
@@ -404,9 +404,9 @@ elif menu == "3. 4D Defect Registry":
             lbl_address = "Address"
             lbl_village = "Village"
             lbl_taluka = "Taluka"
-            lbl_condition = "Suspected Condition"
+            lbl_condition = "Condition"
 
-        # Draw the Border
+        # Draw Border
         pdf.rect(5, 5, 200, 287)
         
         # Header
@@ -416,121 +416,37 @@ elif menu == "3. 4D Defect Registry":
         pdf.cell(190, 8, lbl_title, ln=True, align='C')
         pdf.ln(5)
 
-        # Personal Details Section
+        # Details
         pdf.set_font(f_gu, '', 11)
         pdf.cell(190, 8, f"{lbl_name}: {data.get('Name', '')}", border='B', ln=True)
         
-        col1_w = 95
-        pdf.cell(col1_w, 8, f"{lbl_gender}: {data.get('Gender', '')}", border='R')
-        pdf.cell(col1_w, 8, f"{lbl_dob}: {data.get('DOB', '')}", ln=True)
-        
-        pdf.cell(col1_w, 8, f"{lbl_age}: {data.get('Age', '')}", border='R')
-        pdf.cell(col1_w, 8, f"Techo ID: {data.get('Techo', 'N/A')}", ln=True)
+        c_w = 95
+        pdf.cell(c_w, 8, f"{lbl_gender}: {data.get('Gender', '')}", border='R')
+        pdf.cell(c_w, 8, f"{lbl_dob}: {data.get('DOB', '')}", ln=True)
+        pdf.cell(c_w, 8, f"{lbl_age}: {data.get('Age', '')}", border='R')
+        pdf.cell(c_w, 8, f"Techo ID: {data.get('Techo', 'N/A')}", ln=True)
         
         pdf.ln(2)
         pdf.cell(190, 8, f"{lbl_father}: {data.get('Father', '')}", ln=True)
         pdf.cell(190, 8, f"{lbl_mother}: {data.get('Mother', '')}", ln=True)
         pdf.cell(190, 8, f"{lbl_address}: {data.get('Address', '')}", ln=True)
-        pdf.cell(col1_w, 8, f"{lbl_village}: {data.get('Village', '')}", border='R')
-        pdf.cell(col1_w, 8, f"{lbl_taluka}: {data.get('Taluka', 'Visavadar')}", ln=True)
+        pdf.cell(c_w, 8, f"{lbl_village}: {data.get('Village', '')}", border='R')
+        pdf.cell(c_w, 8, f"{lbl_taluka}: Visavadar", ln=True)
 
-        pdf.ln(5)
-        pdf.set_font('Arial', 'B', 12)
-        pdf.cell(190, 8, "4D CATEGORY", ln=True)
-        
-        categories = ["Birth Defect", "Deficiency", "Disease", "Development Delay"]
-        selected_cat = data.get('Category', 'Other')
-        for cat in categories:
-            mark = "[X]" if cat in selected_cat else "[ ]"
-            pdf.cell(45, 8, f"{mark} {cat}")
         pdf.ln(10)
-
         pdf.set_fill_color(240, 240, 240)
         pdf.set_font('Arial', 'B', 11)
         pdf.cell(190, 10, lbl_condition.upper(), border=1, ln=True, fill=True)
         pdf.set_font(f_gu, '', 12)
-        # Handle the clinical findings carefully
-        condition_text = data.get('Condition', 'None')
-        pdf.multi_cell(190, 10, f"\n {condition_text} \n", border=1)
+        pdf.multi_cell(190, 10, f"\n {data.get('Condition', 'None')} \n", border=1)
         
         pdf.ln(10)
         pdf.set_font('Arial', 'B', 10)
-        pdf.cell(95, 8, f"MHT Team No: 1240315")
-        pdf.cell(95, 8, f"Screening Date: {data.get('Date', '')}", ln=True)
-        
-        pdf.ln(20)
-        pdf.cell(95, 8, "_______________________")
-        pdf.cell(95, 8, "_______________________", ln=True)
-        pdf.cell(95, 8, "Medical Officer Signature")
-        pdf.cell(95, 8, "Institute/AWC Stamp", ln=True)
+        pdf.cell(95, 8, "MHT Team: 1240315")
+        pdf.cell(95, 8, f"Date: {data.get('Date', '')}", ln=True)
 
+        # Output as bytes
         return pdf.output()
-
-    # --- 2. THE REGISTRY & HUNTER ---
-    def has_defect(val):
-        clean_val = str(val).strip().lower()
-        return clean_val not in ['', 'nan', 'none', 'no', 'null', 'na', 'false']
-
-    tab_search, tab_card = st.tabs(["🌍 Browse Registry", "🪪 Generate Refer Card"])
-
-    # FIND COLUMNS DYNAMICALLY TO PREVENT KEYERROR
-    sch_4d_col = next((col for col in df_all_students.columns if col.lower() == '4d'), None)
-    sch_dis_col = next((col for col in df_all_students.columns if col.lower() == 'disabilityname'), None)
-    aw_4d_col = next((col for col in df_aw_master.columns if col.lower() == '4d'), None)
-
-    with tab_search:
-        # (This is your existing registry view)
-        st.write("Live 4D Patient Tracker")
-        if not df_all_students.empty:
-            mask = pd.Series(False, index=df_all_students.index)
-            if sch_4d_col: mask |= df_all_students[sch_4d_col].apply(has_defect)
-            if sch_dis_col: mask |= df_all_students[sch_dis_col].apply(has_defect)
-            st.dataframe(df_all_students[mask], use_container_width=True)
-
-    with tab_card:
-        st.subheader("📋 Create Official Refer Card")
-        
-        all_patients = []
-        if not df_all_students.empty:
-            # SAFE FILTERING: Uses the Dynamic Column Hunter
-            mask = pd.Series(False, index=df_all_students.index)
-            if sch_4d_col: mask |= df_all_students[sch_4d_col].apply(has_defect)
-            if sch_dis_col: mask |= df_all_students[sch_dis_col].apply(has_defect)
-            
-            sch_patients = df_all_students[mask]
-            for _, row in sch_patients.iterrows():
-                # Map columns to a standard format for the card
-                all_patients.append({
-                    "Name": row.get('StudentName', row.get('Beneficiary Name', 'Unknown')),
-                    "Gender": row.get('Gender', 'N/A'),
-                    "DOB": row.get('DOB', row.get('DoB', 'N/A')),
-                    "Age": row.get('Age', 'N/A'),
-                    "Father": row.get('FatherName', row.get('Father Name', 'N/A')),
-                    "Village": row.get('Village', 'N/A'),
-                    "Condition": f"{row.get(sch_4d_col, '') if sch_4d_col else ''} {row.get(sch_dis_col, '') if sch_dis_col else ''}".strip(),
-                    "Category": "Defect/Disease",
-                    "Techo": row.get('CONTACT NUMBER', 'N/A')
-                })
-        
-        if all_patients:
-            patient_names = [p['Name'] for p in all_patients]
-            selected_name = st.selectbox("Select Child for Referral Card:", ["-- Select --"] + patient_names)
-            
-            if selected_name != "-- Select --":
-                p_data = next(item for item in all_patients if item["Name"] == selected_name)
-                
-                with st.form("refer_card_form"):
-                    col_f1, col_f2 = st.columns(2)
-                    p_data['Mother'] = col_f1.text_input("Mother's Name")
-                    p_data['Address'] = col_f2.text_input("Full Address", value=p_data['Village'])
-                    p_data['Date'] = st.date_input("Referral Date")
-                    
-                    if st.form_submit_button("🖨️ Generate Official Refer Card (PDF)"):
-                        pdf_bytes = generate_refer_card(p_data)
-                        st.download_button(label="⬇️ Download Refer Card", data=pdf_bytes, file_name=f"Refer_Card_{selected_name}.pdf", mime="application/pdf")
-        else:
-            st.info("No children with 4D defects found in the registry.")
-
 
 # ==========================================
 # MODULE 4: THE LIVING DASHBOARD (NEW!)
@@ -1369,6 +1285,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
