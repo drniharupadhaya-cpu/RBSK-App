@@ -420,4 +420,4 @@ elif menu == "6. Success Story Builder":
         
         if 'NAME' in df_4d.columns and '4D' in df_4d.columns and 'VILLAGE' in df_4d.columns:
             
-            df_4d['Select_Label'] = df_4d['NAME'].astype(str) + " (" +
+            df_4d['Select_Label'] = df_4d['NAME'].astype(str) + " (" + df_4d['4D'].astype(str) + ") - " + df_4d['VILLAGE'].astype(str)
