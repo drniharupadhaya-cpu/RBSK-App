@@ -372,11 +372,11 @@ elif menu == "3. 4D Defect Registry":
         
         # Load Gujarati Font if available
         try:
-            # Note: You must upload 'gujarati.ttf' to your GitHub for this to work
             pdf.add_font('Gujarati', '', 'gujarati.ttf', uni=True)
             pdf.set_font('Gujarati', '', 12)
             f_gu = 'Gujarati'
         except:
+            st.warning("⚠️ 'gujarati.ttf' not found. Using Arial. Gujarati text may not appear correctly.")
             pdf.set_font('Arial', '', 12)
             f_gu = 'Arial'
 
@@ -409,20 +409,17 @@ elif menu == "3. 4D Defect Registry":
         pdf.cell(col1_w, 8, f"તાલુકો (Taluka): {data.get('Taluka', 'Visavadar')}", ln=True)
 
         pdf.ln(5)
-        # 4D Category Checkboxes (Mimicking the PDF)
         pdf.set_font('Arial', 'B', 12)
         pdf.cell(190, 8, "4D CATEGORY / તપાસણીની વિગત", ln=True)
         pdf.set_font(f_gu, '', 10)
         
         categories = ["Birth Defect", "Deficiency", "Disease", "Development Delay"]
         selected_cat = data.get('Category', 'Other')
-        
         for cat in categories:
             mark = "[X]" if cat in selected_cat else "[ ]"
             pdf.cell(45, 8, f"{mark} {cat}")
         pdf.ln(10)
 
-        # Medical Findings
         pdf.set_fill_color(240, 240, 240)
         pdf.set_font('Arial', 'B', 11)
         pdf.cell(190, 10, "SUSPECTED CONDITION / બીમારીની વિગત", border=1, ln=True, fill=True)
@@ -430,9 +427,8 @@ elif menu == "3. 4D Defect Registry":
         pdf.multi_cell(190, 15, f"\n {data.get('Condition', 'None')} \n", border=1)
         
         pdf.ln(10)
-        # Screening Team Details
         pdf.set_font('Arial', 'B', 10)
-        pdf.cell(95, 8, f"MHT Team No: {data.get('Team', '1240315')}")
+        pdf.cell(95, 8, f"MHT Team No: 1240315")
         pdf.cell(95, 8, f"Screening Date: {data.get('Date', '')}", ln=True)
         
         pdf.ln(20)
@@ -443,48 +439,59 @@ elif menu == "3. 4D Defect Registry":
 
         return pdf.output(dest="S").encode("latin-1")
 
-    # --- 2. THE REGISTRY UI ---
+    # --- 2. THE REGISTRY & HUNTER ---
     def has_defect(val):
         clean_val = str(val).strip().lower()
         return clean_val not in ['', 'nan', 'none', 'no', 'null', 'na', 'false']
 
     tab_search, tab_card = st.tabs(["🌍 Browse Registry", "🪪 Generate Refer Card"])
 
+    # FIND COLUMNS DYNAMICALLY TO PREVENT KEYERROR
+    sch_4d_col = next((col for col in df_all_students.columns if col.lower() == '4d'), None)
+    sch_dis_col = next((col for col in df_all_students.columns if col.lower() == 'disabilityname'), None)
+    aw_4d_col = next((col for col in df_aw_master.columns if col.lower() == '4d'), None)
+
     with tab_search:
-        st.write("Live filtering for identified 4D cases.")
-        # ... (Include your previous Registry filtering code here) ...
-        # (For brevity, assuming the filtering logic exists as before)
+        # (This is your existing registry view)
+        st.write("Live 4D Patient Tracker")
+        if not df_all_students.empty:
+            mask = pd.Series(False, index=df_all_students.index)
+            if sch_4d_col: mask |= df_all_students[sch_4d_col].apply(has_defect)
+            if sch_dis_col: mask |= df_all_students[sch_dis_col].apply(has_defect)
+            st.dataframe(df_all_students[mask], use_container_width=True)
 
     with tab_card:
         st.subheader("📋 Create Official Refer Card")
-        st.write("Select a child identified with a 4D defect to auto-generate their referral document.")
         
-        # Combine school and aw data to find children with defects
         all_patients = []
         if not df_all_students.empty:
-            # Filter children who have something in '4D' or 'DisabilityName'
-            sch_4d = df_all_students[df_all_students['4d'].apply(has_defect) | df_all_students['DisabilityName'].apply(has_defect)]
-            for _, row in sch_4d.iterrows():
+            # SAFE FILTERING: Uses the Dynamic Column Hunter
+            mask = pd.Series(False, index=df_all_students.index)
+            if sch_4d_col: mask |= df_all_students[sch_4d_col].apply(has_defect)
+            if sch_dis_col: mask |= df_all_students[sch_dis_col].apply(has_defect)
+            
+            sch_patients = df_all_students[mask]
+            for _, row in sch_patients.iterrows():
+                # Map columns to a standard format for the card
                 all_patients.append({
-                    "Name": row.get('StudentName', 'Unknown'),
+                    "Name": row.get('StudentName', row.get('Beneficiary Name', 'Unknown')),
                     "Gender": row.get('Gender', 'N/A'),
-                    "DOB": row.get('DOB', 'N/A'),
+                    "DOB": row.get('DOB', row.get('DoB', 'N/A')),
                     "Age": row.get('Age', 'N/A'),
-                    "Father": row.get('FatherName', 'N/A'),
+                    "Father": row.get('FatherName', row.get('Father Name', 'N/A')),
                     "Village": row.get('Village', 'N/A'),
-                    "Condition": f"{row.get('4d', '')} {row.get('DisabilityName', '')}",
-                    "Category": "Birth Defect / Disease",
+                    "Condition": f"{row.get(sch_4d_col, '') if sch_4d_col else ''} {row.get(sch_dis_col, '') if sch_dis_col else ''}".strip(),
+                    "Category": "Defect/Disease",
                     "Techo": row.get('CONTACT NUMBER', 'N/A')
                 })
         
         if all_patients:
             patient_names = [p['Name'] for p in all_patients]
-            selected_name = st.selectbox("Select Child for Referral:", ["-- Select --"] + patient_names)
+            selected_name = st.selectbox("Select Child for Referral Card:", ["-- Select --"] + patient_names)
             
             if selected_name != "-- Select --":
                 p_data = next(item for item in all_patients if item["Name"] == selected_name)
                 
-                # Form to allow manual editing of card details before printing
                 with st.form("refer_card_form"):
                     col_f1, col_f2 = st.columns(2)
                     p_data['Mother'] = col_f1.text_input("Mother's Name")
@@ -493,15 +500,9 @@ elif menu == "3. 4D Defect Registry":
                     
                     if st.form_submit_button("🖨️ Generate Official Refer Card (PDF)"):
                         pdf_bytes = generate_refer_card(p_data)
-                        st.success(f"✅ Card Ready for {selected_name}!")
-                        st.download_button(
-                            label="⬇️ Download Refer Card",
-                            data=pdf_bytes,
-                            file_name=f"Refer_Card_{selected_name}.pdf",
-                            mime="application/pdf"
-                        )
+                        st.download_button(label="⬇️ Download Refer Card", data=pdf_bytes, file_name=f"Refer_Card_{selected_name}.pdf", mime="application/pdf")
         else:
-            st.info("No children with 4D defects found in the current registry.")
+            st.info("No children with 4D defects found in the registry.")
 
 
 # ==========================================
@@ -1341,6 +1342,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
