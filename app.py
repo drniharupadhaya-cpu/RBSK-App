@@ -15,24 +15,27 @@ st.set_page_config(page_title="RBSK Manager", page_icon="🩺", layout="wide")
 @st.cache_data(ttl=60)
 def load_all_data():
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+    
+    # 1. Securely load the credentials from Streamlit's Vault
     creds_dict = json.loads(st.secrets["gcp_service_account"])
-creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+    
+    # 2. Authorize the connection
     client = gspread.authorize(creds)
     
-    # !!! PASTE YOUR GOOGLE SHEET LINK HERE !!!
-    sheet_url = "https://docs.google.com/spreadsheets/d/1i5wAkI7k98E80qhHRe6xQOhF4Qj9Z0DH8wjPsQ7gRZc/edit?gid=2111634358#gid=2111634358" 
+    # 3. Open the Google Sheet (Make sure to paste your real link here!)
+    sheet_url = "https://docs.google.com/spreadsheets/d/1i5wAkI7k98E80qhHRe6xQOhF4Qj9Z0DH8wjPsQ7gRZc/edit?gid=1684288682#gid=1684288682" 
     spreadsheet = client.open_by_url(sheet_url)
     
-    # Download all tabs
+    # 4. Download and clean the data
     df_4d = pd.DataFrame(spreadsheet.worksheet("4d_list").get_all_records()).astype(str)
     df_schools = pd.DataFrame(spreadsheet.worksheet("school_details").get_all_records()).astype(str)
     df_aw = pd.DataFrame(spreadsheet.worksheet("aw_data").get_all_records()).astype(str)
     
-    # Add the Students Tab!
     try:
         df_students = pd.DataFrame(spreadsheet.worksheet("students_data").get_all_records()).astype(str)
     except:
-        df_students = pd.DataFrame() # Fallback if tab is missing
+        df_students = pd.DataFrame() 
         
     return df_4d, df_schools, df_aw, df_students, spreadsheet
 
