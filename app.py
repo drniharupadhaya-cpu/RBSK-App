@@ -32,18 +32,23 @@ def load_all_data():
     except:
         df_students = pd.DataFrame() 
 
-    # --- NEW: LOAD SCHOOL DIRECTORY DATA ---
     try:
         df_directory = pd.DataFrame(sheet.worksheet("ALL SCHOOL DETAILS").get_all_records()).astype(str)
     except:
         df_directory = pd.DataFrame()
+
+    # --- NEW: LOAD ONLY THE ANGANWADI CONTACT DIRECTORY ---
+    try:
+        df_aw_contacts = pd.DataFrame(sheet.worksheet("aw_master_directory").get_all_records()).astype(str)
+    except:
+        df_aw_contacts = pd.DataFrame()
         
-    return df_4d, df_schools, df_aw, df_students, df_anemia, df_directory
+    return df_4d, df_schools, df_aw, df_students, df_anemia, df_directory, df_aw_contacts
 
 # --- 3. ACTIVATE BOTH ---
 try:
     spreadsheet = get_spreadsheet() 
-    df_4d, df_schools, df_aw, df_students, df_anemia, df_directory = load_all_data() 
+    df_4d, df_schools, df_aw, df_students, df_anemia, df_directory, df_aw_contacts = load_all_data() 
 except Exception as e:
     st.error(f"Could not connect to Google Sheets. Please check your Secret Vault. Error: {e}")
     st.stop()
@@ -60,7 +65,8 @@ menu = st.sidebar.radio("Go to:",
         "5. HBNC Newborn Visit", 
         "6. Success Story Builder",
         "7. Anemia Tracker",
-        "8. School Directory"  # <-- NEW MENU ITEM!
+        "8. School Directory",
+        "9. Anganwadi Directory"  # <-- NEW MENU ITEM!
     ]
 )
 
@@ -435,7 +441,6 @@ elif menu == "7. Anemia Tracker":
 
     tab_dash, tab_entry = st.tabs(["📈 Interactive Dashboard", "➕ Enter New Camp Data"])
 
-    # --- TAB 1: THE LEVEL 2 DASHBOARD ---
     with tab_dash:
         if not df_anemia.empty:
             df_anemia['HB LEVEL'] = pd.to_numeric(df_anemia['HB LEVEL'], errors='coerce')
@@ -492,7 +497,6 @@ elif menu == "7. Anemia Tracker":
         else:
             st.info("No data available in the ANEMIA sheet yet.")
 
-    # --- TAB 2: THE ENTRY PORTAL ---
     with tab_entry:
         st.subheader("Log New Anemia Screening")
         with st.form("anemia_form"):
@@ -541,55 +545,42 @@ elif menu == "7. Anemia Tracker":
                         st.error(f"⚠️ Error: Could not find the 'ANEMIA' tab. Detail: {e}")
 
 # ==========================================
-# MODULE 8: SCHOOL DIRECTORY (NEW!)
+# MODULE 8: SCHOOL DIRECTORY
 # ==========================================
 elif menu == "8. School Directory":
     st.title("🏫 Digital School Directory")
     st.write("Instantly look up school demographics, principals, and class sizes.")
 
     if not df_directory.empty:
-        # 1. Build the dropdown menu
         school_options = sorted([str(x) for x in df_directory['School'].unique() if str(x) != 'nan' and str(x).strip() != ''])
         selected_school = st.selectbox("Select a School to view its ID Card:", ["-- Select a School --"] + school_options)
         
         if selected_school != "-- Select a School --":
-            # Find the specific school's row
             s_data = df_directory[df_directory['School'] == selected_school].iloc[0]
-            
             st.divider()
             
-            # 2. Top Information Cards
             st.subheader(f"📍 {selected_school}")
             c1, c2, c3 = st.columns(3)
             c1.info(f"**Type:** {s_data.get('PRIMARY/HIGH SCHOOL', 'N/A')}")
             c2.info(f"**Category:** {s_data.get('GOVT/PRIVATE', 'N/A')}")
             c3.info(f"**PHC:** {s_data.get('PHC', 'N/A')}")
             
-            # 3. Contact Info
             st.markdown("### 👨‍🏫 Administrative Contact")
             st.success(f"**Principal:** {s_data.get('PRINCIPAL NAME', 'N/A')} | 📞 **Phone:** {s_data.get('PRINCIPAL CONTACT NUMBER', 'N/A')}")
             
-            # 4. Overall Strength
             st.markdown("### 📊 Overall Student Strength")
             m1, m2, m3 = st.columns(3)
             m1.metric("👦 Total Boys", s_data.get('TOTAL BOYS', '0'))
             m2.metric("👧 Total Girls", s_data.get('TOTAL GIRLS', '0'))
             m3.metric("🏫 Grand Total", s_data.get('TOTAL', '0'))
             
-            # 5. The Class Breakdown Table
             st.markdown("### 📋 Class-by-Class Breakdown")
-            
-            # We map your exact Google Sheet prefixes to human-readable names
             class_prefixes = ['BV', 'CLS1', 'CLS2', 'CLS3', 'CLS4', 'CLS5', 'CLS6', 'CLS7', 'CLS8', 'CLS9', 'CLS10', 'CLS11', 'CLS12']
             class_names = ['Bal Vatika', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10', 'Class 11', 'Class 12']
-            
             breakdown_list = []
             
-            # Loop through every class prefix and pull the Boys, Girls, Transgender, and Total
             for prefix, readable_name in zip(class_prefixes, class_names):
                 total_val = str(s_data.get(f'Total_{prefix}', '0')).strip()
-                
-                # MAGIC: Only add this class to the table if the Total is greater than 0!
                 if total_val not in ['0', '0.0', 'nan', '', 'None']:
                     breakdown_list.append({
                         "Standard": readable_name,
@@ -604,6 +595,41 @@ elif menu == "8. School Directory":
                 st.dataframe(df_breakdown, use_container_width=True, hide_index=True)
             else:
                 st.warning("No student demographic data is currently available for this school.")
-                
     else:
-        st.error("⚠️ Could not load data from the 'ALL SCHOOL DETAILS' tab. Please ensure the tab is spelled exactly right in your Google Sheet.")
+        st.error("⚠️ Could not load data from the 'ALL SCHOOL DETAILS' tab.")
+
+# ==========================================
+# MODULE 9: ANGANWADI DIRECTORY (SIMPLE PHONEBOOK)
+# ==========================================
+elif menu == "9. Anganwadi Directory":
+    st.title("👶 Anganwadi Contact Directory")
+    st.write("Instantly look up Anganwadi Workers and their contact numbers.")
+
+    if not df_aw_contacts.empty:
+        # We find the column that looks like the AWC Name by searching for "Name" or "AWC"
+        awc_col = df_aw_contacts.columns[0] # Default to the first column
+        for col in df_aw_contacts.columns:
+            if 'AWC' in col.upper() or 'NAME' in col.upper():
+                awc_col = col
+                break
+                
+        # Build the dropdown list
+        awc_options = sorted([str(x) for x in df_aw_contacts[awc_col].unique() if str(x) != 'nan' and str(x).strip() != ''])
+        selected_awc = st.selectbox("Select an Anganwadi Center:", ["-- Select Center --"] + awc_options)
+        
+        if selected_awc != "-- Select Center --":
+            # Pull the data row for that specific AWC
+            contact_info = df_aw_contacts[df_aw_contacts[awc_col] == selected_awc].iloc[0]
+            
+            st.divider()
+            st.subheader(f"🏠 {selected_awc}")
+            
+            # Dynamically display EVERY column you have in that row (Worker Name, Phone, Sector, etc.)
+            for col in df_aw_contacts.columns:
+                if col != awc_col:  # Skip showing the name twice
+                    val = str(contact_info[col]).strip()
+                    if val not in ['', 'nan', 'None']:
+                        st.success(f"**{col}:** {val}")
+                        
+    else:
+        st.error("⚠️ Could not load data from the 'aw_master_directory' tab. Please ensure the tab is spelled exactly right in your Google Sheet.")
