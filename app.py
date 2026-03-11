@@ -365,13 +365,13 @@ elif menu == "2. Child Screening":
 elif menu == "3. 4D Defect Registry":
     st.title("🔍 4D Defect Command Center")
 
-    # --- 1. THE REFER CARD PDF ENGINE ---
+    # --- 1. THE REFER CARD PDF ENGINE (CRASH-PROOF) ---
     def generate_refer_card(data):
         pdf = FPDF(orientation="P", unit="mm", format="A4")
         pdf.add_page()
         font_path = "gujarati.ttf"
         
-        # Check if the real .ttf file exists
+        # Check if the real .ttf file exists (Not the ZIP!)
         if os.path.exists(font_path) and font_path.endswith(".ttf"):
             try:
                 pdf.add_font('Gujarati', '', font_path)
@@ -402,13 +402,14 @@ elif menu == "3. 4D Defect Registry":
             lbl_address = "Address"; lbl_village = "Village"; lbl_taluka = "Taluka"
             lbl_condition = "Condition"
 
-        pdf.rect(5, 5, 200, 287)
+        pdf.rect(5, 5, 200, 287) # Border
         pdf.set_font('Arial', 'B', 16)
         pdf.cell(190, 10, "RBSK - REFER CARD", ln=True, align='C')
         pdf.set_font(f_gu, '', 14)
         pdf.cell(190, 8, lbl_title, ln=True, align='C')
         pdf.ln(5)
 
+        # Personal Details
         pdf.set_font(f_gu, '', 11)
         pdf.cell(190, 8, f"{lbl_name}: {data.get('Name', '')}", border='B', ln=True)
         pdf.cell(95, 8, f"{lbl_gender}: {data.get('Gender', '')}", border='R')
@@ -422,6 +423,7 @@ elif menu == "3. 4D Defect Registry":
         pdf.cell(95, 8, f"{lbl_village}: {data.get('Village', '')}", border='R')
         pdf.cell(95, 8, f"{lbl_taluka}: Visavadar", ln=True)
         
+        # Clinical Findings
         pdf.ln(10)
         pdf.set_fill_color(240, 240, 240)
         pdf.set_font('Arial', 'B', 11)
@@ -433,6 +435,7 @@ elif menu == "3. 4D Defect Registry":
         pdf.set_font('Arial', 'B', 10)
         pdf.cell(95, 8, "MHT Team: 1240315")
         pdf.cell(95, 8, f"Date: {data.get('Date', '')}", ln=True)
+        
         return pdf.output()
 
     # --- 2. LIVE REGISTRY LOADER ---
@@ -452,7 +455,7 @@ elif menu == "3. 4D Defect Registry":
         clean = str(val).strip().lower()
         return clean not in ['', 'nan', 'none', 'no', 'null', 'na', 'false', 'normal']
 
-    # Process AW and School Logs for defects
+    # Filter AW Logs
     if not aw_logs.empty:
         for _, row in aw_logs.iterrows():
             if is_defect(row.get('Status')) or is_defect(row.get('Disease')):
@@ -465,6 +468,7 @@ elif menu == "3. 4D Defect Registry":
                     "Date": row.get('Date', '')
                 })
     
+    # Filter School Logs
     if not sch_logs.empty:
         for _, row in sch_logs.iterrows():
             if is_defect(row.get('Disease')):
@@ -483,25 +487,36 @@ elif menu == "3. 4D Defect Registry":
         if all_defects:
             st.dataframe(pd.DataFrame(all_defects)[['Date', 'Name', 'Institution', 'Condition']], use_container_width=True, hide_index=True)
         else:
-            st.info("No defects logged yet.")
+            st.info("No defects logged today. Screen a child in Module 2 to see them here!")
 
     with tab_card:
         if all_defects:
             names = [d['Name'] for d in all_defects]
             sel = st.selectbox("Select Child for Refer Card:", ["-- Select --"] + names)
+            
             if sel != "-- Select --":
                 p_data = next(item for item in all_defects if item["Name"] == sel)
-                with st.form("card_form"):
+                
+                # --- START FORM ---
+                with st.form("card_details_form"):
                     p_data['Mother'] = st.text_input("Mother's Name")
                     p_data['Address'] = st.text_input("Address", value=p_data['Institution'])
                     p_data['Date'] = st.date_input("Referral Date")
-                    submitted = st.form_submit_button("Prepare PDF")
+                    # This only triggers the 'logic gate'
+                    is_ready = st.form_submit_button("Prepare PDF for Printing")
                 
-                if submitted:
+                # --- OUTSIDE FORM ---
+                if is_ready:
                     pdf_bytes = generate_refer_card(p_data)
-                    st.download_button("⬇️ Download Refer Card", pdf_bytes, f"Refer_{sel}.pdf", "application/pdf")
+                    st.success(f"PDF Generated for {sel}!")
+                    st.download_button(
+                        label="⬇️ Download Official Refer Card", 
+                        data=pdf_bytes, 
+                        file_name=f"Refer_{sel}.pdf", 
+                        mime="application/pdf"
+                    )
         else:
-            st.warning("No defects in registry.")
+            st.warning("No children found in the live registry.")
 
 # ==========================================
 # MODULE 4: THE LIVING DASHBOARD (NEW!)
@@ -1340,6 +1355,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
