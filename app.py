@@ -61,6 +61,7 @@ menu = st.sidebar.radio("Go to:",
         "6. Success Story Builder",
         "7. Anemia Tracker",
         "8. School Directory"  # <-- NEW MENU ITEM!
+        "9. Anganwadi Directory"
     ]
 )
 
@@ -607,3 +608,58 @@ elif menu == "8. School Directory":
                 
     else:
         st.error("⚠️ Could not load data from the 'ALL SCHOOL DETAILS' tab. Please ensure the tab is spelled exactly right in your Google Sheet.")
+        # ==========================================
+# MODULE 9: ANGANWADI DIRECTORY (CONTACTS + DEMOGRAPHICS)
+# ==========================================
+if menu == "9. Anganwadi Directory":
+    st.title("👶 Digital Anganwadi Directory")
+    st.write("Look up AWC Worker contacts and student demographics.")
+
+    if not df_aw_contacts.empty:
+        # Use AWC Name column from your directory sheet
+        awc_options = sorted([str(x) for x in df_aw_contacts['AWC Name'].unique() if str(x) != 'nan' and str(x).strip() != ''])
+        selected_awc = st.selectbox("Select an Anganwadi Center:", ["-- Select Center --"] + awc_options)
+        
+        if selected_awc != "-- Select Center --":
+            # 1. Pull Contact Info from aw_master_directory
+            contact_info = df_aw_contacts[df_aw_contacts['AWC Name'] == selected_awc].iloc[0]
+            
+            st.divider()
+            st.subheader(f"🏠 {selected_awc}")
+            
+            c1, c2 = st.columns(2)
+            with c1:
+                st.success(f"👩‍🏫 **Worker:** {contact_info.get('Worker Name', 'N/A')}")
+            with c2:
+                st.success(f"📞 **Contact:** {contact_info.get('Worker Contact', 'N/A')}")
+            
+            # 2. Pull Demographics from aw new data
+            if not df_aw_master.empty:
+                aw_filtered = df_aw_master[df_aw_master['AWC Name'] == selected_awc]
+                
+                if not aw_filtered.empty:
+                    st.markdown("### 📊 Demographics")
+                    m1, m2, m3 = st.columns(3)
+                    total_kids = len(aw_filtered)
+                    boys = len(aw_filtered[aw_filtered['Gender'].str.upper().str.startswith('M')])
+                    girls = len(aw_filtered[aw_filtered['Gender'].str.upper().str.startswith('F')])
+                    
+                    m1.metric("👶 Total Children", total_kids)
+                    m2.metric("👦 Boys", boys)
+                    m3.metric("👧 Girls", girls)
+                    
+                    st.markdown("### 📋 Beneficiary List")
+                    display_cols = ['Beneficiary Name', 'Mother Name', 'DoB', 'Gender']
+                    st.dataframe(aw_filtered[display_cols], use_container_width=True, hide_index=True)
+                else:
+                    st.info("No beneficiary data found for this center in 'aw new data'.")
+            
+            # 3. Quick Info from Directory
+            with st.expander("📍 Center Details"):
+                st.write(f"**Sector:** {contact_info.get('Sector', 'N/A')}")
+                st.write(f"**AWC Code:** {contact_info.get('AWC Code', 'N/A')}")
+                st.write(f"**Building Type:** {contact_info.get('Building', 'N/A')}")
+
+    else:
+        st.error("⚠️ Could not load 'aw_master_directory'. Check your sheet tab name!")
+
