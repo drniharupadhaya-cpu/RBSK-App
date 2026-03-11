@@ -18,11 +18,12 @@ def get_spreadsheet():
 def load_all_data():
     sheet = get_spreadsheet()
     
-    # Clean, fast helper function to load sheets without crashing
+    # LOUD helper function to catch the exact error
     def safe_load(tab_name):
         try:
             return pd.DataFrame(sheet.worksheet(tab_name).get_all_records()).astype(str)
-        except:
+        except Exception as e:
+            st.error(f"🚨 FAILED ON TAB '{tab_name}': {e}")
             return pd.DataFrame()
 
     df_4d = safe_load("4d_list")
@@ -798,4 +799,5 @@ elif menu == "10. Staff Directory":
             st.warning("No staff members found matching your filters.")
     else:
         st.error("⚠️ Could not load data from the 'master_staff_directory' tab.")
+
 
