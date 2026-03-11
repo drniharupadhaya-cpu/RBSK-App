@@ -50,7 +50,8 @@ if menu == "1. Daily Tour Plan":
     scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
     creds_dict = json.loads(st.secrets["gcp_service_account"])
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-    client = gspread.authorize(creds)
+client=gspread.authorize(creds)
+    
     
     # !!! PASTE YOUR GOOGLE SHEET LINK HERE !!!
     sheet_url = "https://docs.google.com/spreadsheets/d/1i5wAkI7k98E80qhHRe6xQOhF4Qj9Z0DH8wjPsQ7gRZc/edit?gid=2111634358#gid=2111634358" 
@@ -552,6 +553,7 @@ elif menu == "6. Success Story Builder":
     else:
 
         st.warning("No 4D Defect records found to create a success story.")
+
 
 
 
