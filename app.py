@@ -71,7 +71,8 @@ menu = st.sidebar.radio("Go to:",
         "8. School Directory",
         "9. Anganwadi Directory",
         "10. Staff Directory",
-        "11. Annual FY Planner"  # <-- ADD THIS NEW LINE!
+        "11. Annual FY Planner",
+        "12. Automated State Report" # <-- ADD THIS NEW LINE!
     ]
 )
 
@@ -1133,6 +1134,156 @@ elif menu == "11. Annual FY Planner":
         with st.expander("🌼 March 2027 (Mop-Up & Reporting)"):
             st.write("- **Field Work:** Mop-up rounds for absent children only.")
             st.write("- **Admin:** Success story generation, data entry, and final state-level reporting.")
+# ==========================================
+# MODULE 12: AUTOMATED STATE REPORTING (FORM III)
+# ==========================================
+elif menu == "12. Automated State Report":
+    st.title("📄 Automated MPR Generator (Form III)")
+    st.write("Instantly aggregates daily screenings into the official Govt Age & Gender buckets.")
+
+    # --- DYNAMIC DATA LOADER FOR DAILY SCREENINGS ---
+    @st.cache_data(ttl=60)
+    def load_daily_screenings():
+        try:
+            aw = pd.DataFrame(spreadsheet.worksheet("daily_screenings_aw").get_all_records())
+            sch = pd.DataFrame(spreadsheet.worksheet("daily_screenings_schools").get_all_records())
+            return aw, sch
+        except Exception as e:
+            st.error(f"Could not load daily screenings. Ensure tabs 'daily_screenings_aw' and 'daily_screenings_schools' exist. {e}")
+            return pd.DataFrame(), pd.DataFrame()
+
+    df_aw_daily, df_sch_daily = load_daily_screenings()
+
+    if not df_aw_daily.empty or not df_sch_daily.empty:
+        # --- 1. COMBINE AND CLEAN THE DATA ---
+        # Standardize columns to merge Anganwadi and School sheets safely
+        if not df_aw_daily.empty: df_aw_daily['Source'] = 'Anganwadi'
+        if not df_sch_daily.empty: df_sch_daily['Source'] = 'School'
+        
+        # Combine them
+        df_combined = pd.concat([df_aw_daily, df_sch_daily], ignore_index=True)
+        
+        # We need flexible column finders because column names might vary slightly
+        def find_col(df, keywords):
+            for col in df.columns:
+                if any(k.lower() in col.lower() for k in keywords): return col
+            return None
+
+        date_col = find_col(df_combined, ['date of screening', 'screening date', 'date'])
+        dob_col = find_col(df_combined, ['dob', 'date of birth'])
+        gender_col = find_col(df_combined, ['gender', 'sex'])
+        disease_col = find_col(df_combined, ['disease', '4d', 'defect'])
+        status_col = find_col(df_combined, ['status', 'sam', 'mam']) # From our new Autopilot!
+
+        if date_col and dob_col:
+            # Convert to actual dates for mathematical calculation
+            df_combined[date_col] = pd.to_datetime(df_combined[date_col], errors='coerce')
+            df_combined[dob_col] = pd.to_datetime(df_combined[dob_col], errors='coerce')
+            
+            # Drop rows where we don't have a screening date
+            df_combined = df_combined.dropna(subset=[date_col])
+            
+            # Create a Month-Year column for the dropdown filter (e.g., "February 2026")
+            df_combined['Month_Year'] = df_combined[date_col].dt.strftime('%B %Y')
+            
+            # --- 2. REPORT FILTERING ---
+            available_months = df_combined['Month_Year'].dropna().unique().tolist()
+            if not available_months:
+                st.warning("No valid dates found in the screening logs.")
+            else:
+                c1, c2 = st.columns(2)
+                selected_month = c1.selectbox("📅 Select Reporting Month:", available_months)
+                
+                # Filter data to ONLY the selected month
+                report_df = df_combined[df_combined['Month_Year'] == selected_month].copy()
+                
+                # --- 3. THE MAGIC MATH (AGE BUCKETING) ---
+                # Calculate exact age in years at the time of screening
+                report_df['Age_Years'] = (report_df[date_col] - report_df[dob_col]).dt.days / 365.25
+                
+                def bucket_age(age):
+                    if pd.isna(age): return "Unknown"
+                    if age <= 3.0: return "0-3 Years"
+                    elif age <= 6.0: return "3-6 Years"
+                    else: return "6-18 Years"
+                
+                report_df['Govt_Age_Bucket'] = report_df['Age_Years'].apply(bucket_age)
+                
+                # Clean up Gender to just M/F
+                if gender_col:
+                    report_df['Clean_Gender'] = report_df[gender_col].astype(str).str.upper().str[0]
+                else:
+                    report_df['Clean_Gender'] = "U"
+
+                # --- 4. BUILD THE DASHBOARD ---
+                st.divider()
+                st.markdown(f"### 📊 Official Form III Output: **{selected_month}**")
+                st.write(f"Total Children Screened this month: **{len(report_df)}**")
+
+                # The 3 Main Columns for Age Buckets
+                col_0_3, col_3_6, col_6_18 = st.columns(3)
+                
+                def render_bucket_stats(bucket_name, column_ui):
+                    bucket_data = report_df[report_df['Govt_Age_Bucket'] == bucket_name]
+                    boys = len(bucket_data[bucket_data['Clean_Gender'] == 'M'])
+                    girls = len(bucket_data[bucket_data['Clean_Gender'] == 'F'])
+                    
+                    with column_ui:
+                        st.info(f"**{bucket_name}**")
+                        st.metric("Total", len(bucket_data))
+                        st.write(f"👦 Boys: **{boys}**")
+                        st.write(f"👧 Girls: **{girls}**")
+                
+                render_bucket_stats("0-3 Years", col_0_3)
+                render_bucket_stats("3-6 Years", col_3_6)
+                render_bucket_stats("6-18 Years", col_6_18)
+
+                st.divider()
+                
+                # --- 5. AUTOMATED 4D & MALNUTRITION TALLY ---
+                st.markdown("### 🚨 Disease & Malnutrition Referrals (Current Month)")
+                
+                m1, m2 = st.columns(2)
+                with m1:
+                    st.write("**Nutritional Triage (From Anganwadis)**")
+                    if status_col:
+                        sam_count = len(report_df[report_df[status_col].astype(str).str.upper() == 'SAM'])
+                        mam_count = len(report_df[report_df[status_col].astype(str).str.upper() == 'MAM'])
+                        st.error(f"🔴 SAM Cases Identified: **{sam_count}**")
+                        st.warning(f"🟡 MAM Cases Identified: **{mam_count}**")
+                    else:
+                        st.write("No nutrition status column found.")
+                        
+                with m2:
+                    st.write("**Other 4D Conditions Found**")
+                    if disease_col:
+                        # Filter out 'None', 'NA', blank strings
+                        def is_real_disease(val):
+                            clean = str(val).strip().lower()
+                            return clean not in ['', 'nan', 'none', 'no', 'null', 'na', 'false']
+                            
+                        diseases = report_df[report_df[disease_col].apply(is_real_disease)]
+                        if not diseases.empty:
+                            disease_counts = diseases[disease_col].value_counts().reset_index()
+                            disease_counts.columns = ['Condition', 'Count']
+                            st.dataframe(disease_counts, use_container_width=True, hide_index=True)
+                        else:
+                            st.success("No 4D diseases logged this month!")
+                            
+                # --- EXPORT TO CSV BUTTON ---
+                st.divider()
+                csv = report_df.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="⬇️ Download Raw Monthly Data (CSV)",
+                    data=csv,
+                    file_name=f"RBSK_MPR_{selected_month}.csv",
+                    mime="text/csv",
+                )
+        else:
+            st.warning("Could not find 'Date of Screening' or 'DOB' columns in your daily screening sheets to calculate ages.")
+    else:
+        st.info("No daily screening data found yet. Start screening children in Module 2!")
+
 
 
 
