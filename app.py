@@ -13,20 +13,29 @@ def get_spreadsheet():
     sheet_url = "https://docs.google.com/spreadsheets/d/1i5wAkI7k98E80qhHRe6xQOhF4Qj9Z0DH8wjPsQ7gRZc/edit?gid=2111634358#gid=2111634358"
     return client.open_by_url(sheet_url)
 
-# --- 2. GET THE PURE DATA (WITH BULLETPROOF COLUMN CLEANING) ---
+import time # <-- Make sure this is at the very top of your file with the other imports!
+
+# --- 2. GET THE PURE DATA (WITH SMART AUTO-RETRY) ---
 @st.cache_data(ttl=600)
 def load_all_data():
     sheet = get_spreadsheet()
     
-    def safe_load(tab_name):
-        try:
-            df = pd.DataFrame(sheet.worksheet(tab_name).get_all_records()).astype(str)
-            # THIS LINE IS THE MAGIC FIX: It destroys hidden spaces in your headers!
-            df.columns = df.columns.str.strip() 
-            return df
-        except Exception as e:
-            st.error(f"🚨 FAILED ON TAB '{tab_name}': {e}")
-            return pd.DataFrame()
+    # SMART LOADER: If Google yells "Slow down!" (Error 429), it waits and tries again!
+    def safe_load(tab_name, retries=3):
+        for attempt in range(retries):
+            try:
+                df = pd.DataFrame(sheet.worksheet(tab_name).get_all_records()).astype(str)
+                df.columns = df.columns.str.strip() # Destroys hidden spaces
+                return df
+            except Exception as e:
+                error_msg = str(e)
+                if '429' in error_msg or 'RESOURCE_EXHAUSTED' in error_msg:
+                    if attempt < retries - 1:
+                        # Wait 10 seconds and try again
+                        time.sleep(10)
+                        continue 
+                st.error(f"🚨 FAILED ON TAB '{tab_name}': {e}")
+                return pd.DataFrame()
 
     df_4d = safe_load("4d_list")
     df_schools = safe_load("school_details")
@@ -812,3 +821,4 @@ elif menu == "10. Staff Directory":
             st.warning("No staff members found matching your filters.")
     else:
         st.error("⚠️ Could not load data from the 'master_staff_directory' tab.")
+
