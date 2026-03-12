@@ -73,89 +73,98 @@ def render_header(title, subtitle, icon, bg_color):
 # ==========================================
 # GLOBAL PDF ENGINE (Place this at the Top)
 # ==========================================
-import os
-import urllib.request
-from fpdf import FPDF
-
+import streamlit as st
+import pandas as pd
 from io import BytesIO
+import os  # <-- NEW: Needed to check for the signature image file
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 
 # ==========================================
-# GLOBAL PDF ENGINE: OFFICIAL RBSK FORMAT
+# GLOBAL PDF ENGINE: OFFICIAL RBSK FORMAT (UPGRADED)
 # ==========================================
 def generate_refer_card(data):
     buffer = BytesIO()
-    # Create canvas with A4 size
     c = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
     
-    # --- HELPER: Draw Text ---
-    def draw_text(x, y, text, size=12, bold=False):
+    # --- HELPER FUNCTIONS ---
+    def draw_text(x, y, text, size=11, bold=False, color=colors.black):
+        c.setFillColor(color)
         c.setFont("Helvetica-Bold" if bold else "Helvetica", size)
         c.drawString(x, y, str(text))
-        
-    def draw_line(x1, y1, x2, y2):
-        c.setStrokeColor(colors.black)
-        c.line(x1, y1, x2, y2)
 
-    # --- 1. HEADER ---
+    # --- 1. THE OUTER PAGE FRAME ---
+    c.setStrokeColor(colors.HexColor("#1e3a8a")) # Deep Royal Blue
+    c.setLineWidth(3)
+    c.roundRect(20, 20, width - 40, height - 40, 10, stroke=1, fill=0)
+    c.setLineWidth(1) # Reset line width for inner items
+
+    # --- 2. THE HEADER (Solid Green Block) ---
     c.setFillColor(colors.HexColor("#10b981"))
-    c.rect(50, height - 80, width - 100, 40, fill=1, stroke=0)
+    # Draw rounded rect for the top, then a normal rect to flatten the bottom of the header
+    c.roundRect(20, height - 80, width - 40, 60, 10, stroke=0, fill=1)
+    c.rect(20, height - 80, width - 40, 30, stroke=0, fill=1) 
+    
     c.setFillColor(colors.white)
-    draw_text(60, height - 65, "RBSK - REFERRAL CARD (NATIONAL CHILD HEALTH PROGRAM)", 14, bold=True)
-    c.setFillColor(colors.black)
+    c.setFont("Helvetica-Bold", 16)
+    c.drawCentredString(width / 2.0, height - 45, "RBSK - REFERRAL CARD (NATIONAL CHILD HEALTH PROGRAM)")
+    c.setFont("Helvetica", 11)
+    c.drawCentredString(width / 2.0, height - 65, "District Panchayat, Junagadh - Health Branch")
 
-    # --- 2. DEMOGRAPHICS ---
-    start_y = height - 120
-    draw_text(50, start_y, f"Child's Full Name: {data.get('Name', '')}", 12, bold=True)
-    draw_text(400, start_y, f"Gender: {data.get('Gender', '')}")
+    # --- 3. PATIENT DEMOGRAPHICS (Shaded Box) ---
+    start_y = height - 100
+    c.setFillColor(colors.HexColor("#f8fafc")) # Very light gray/blue
+    c.setStrokeColor(colors.HexColor("#cbd5e1"))
+    c.roundRect(30, start_y - 105, width - 60, 95, 6, stroke=1, fill=1)
     
-    draw_text(50, start_y - 25, f"Date of Birth: {data.get('DOB', '')}")
-    draw_text(400, start_y - 25, f"Category: General / SC / ST / OBC") # Placeholder for checkbox UI
-    
-    draw_text(50, start_y - 50, f"Father's Name: {data.get('Parent_Name', '')}")
-    draw_text(50, start_y - 75, f"Mother's Name: {data.get('Mother', '')}")
-    draw_text(400, start_y - 75, f"Contact: {data.get('Contact_Num', '')}")
-    
-    # --- 3. LOCATION & INSTITUTION ---
-    draw_text(50, start_y - 110, "--- Address & Institution Details ---", 10, bold=True)
-    draw_text(50, start_y - 130, f"Village / City: {data.get('Village', '')}")
-    draw_text(300, start_y - 130, "Taluka: VISAVADAR")
-    draw_text(450, start_y - 130, "District: JUNAGADH")
-    
-    draw_text(50, start_y - 155, f"Institution Name: {data.get('Institution', '')}")
-    draw_text(400, start_y - 155, f"Status: {data.get('School_Status', '')}")
+    draw_text(40, start_y - 20, "📋 PATIENT DEMOGRAPHICS", 12, bold=True, color=colors.HexColor("#1e3a8a"))
+    draw_text(40, start_y - 45, f"Child's Name: {data.get('Name', '')}", 12, bold=True)
+    draw_text(350, start_y - 45, f"Gender: {data.get('Gender', '')}")
+    draw_text(40, start_y - 70, f"Date of Birth: {data.get('DOB', '')}")
+    draw_text(350, start_y - 70, f"Contact: {data.get('Contact_Num', '')}")
+    draw_text(40, start_y - 95, f"Father's Name: {data.get('Parent_Name', '')}")
+    draw_text(350, start_y - 95, f"Mother's Name: {data.get('Mother', '')}")
 
-    # --- 4. CLINICAL FINDINGS (4D) ---
-    c.setFillColor(colors.HexColor("#f87171"))
-    c.rect(50, start_y - 195, width - 100, 25, fill=1, stroke=0)
-    c.setFillColor(colors.white)
-    draw_text(60, start_y - 188, "PRIMARY SCREENING DETAILS", 12, bold=True)
-    c.setFillColor(colors.black)
-
-    draw_text(50, start_y - 225, f"Screening Date: {data.get('Date', '')}")
-    draw_text(50, start_y - 250, "Medical Condition Identified (4D):", 11, bold=True)
-    draw_text(250, start_y - 250, f"{data.get('Clinical_Findings', '')}", 12)
+    # --- 4. LOCATION DETAILS (Shaded Box) ---
+    loc_y = start_y - 120
+    c.setFillColor(colors.HexColor("#f8fafc"))
+    c.roundRect(30, loc_y - 75, width - 60, 65, 6, stroke=1, fill=1)
     
-    draw_text(50, start_y - 275, "Primary Treatment Given:", 11, bold=True)
-    draw_text(250, start_y - 275, f"{data.get('Treatment_Given', '')}")
-    
-    draw_text(50, start_y - 300, "Referred To (Hospital):", 11, bold=True)
-    draw_text(250, start_y - 300, f"{data.get('Referred_To', '')}", 12, bold=True)
+    draw_text(40, loc_y - 20, "🏫 LOCATION & INSTITUTION", 12, bold=True, color=colors.HexColor("#1e3a8a"))
+    draw_text(40, loc_y - 45, f"Village / City: {data.get('Village', '')}")
+    draw_text(350, loc_y - 45, "Taluka: VISAVADAR")
+    draw_text(40, loc_y - 65, f"Institution: {data.get('Institution', '')}")
+    draw_text(350, loc_y - 65, f"Status: {data.get('School_Status', '')}")
 
-    # --- 5. THE CUSTOM DOCTOR STAMP & SIGNATURE ---
-    stamp_y = start_y - 450
+    # --- 5. CLINICAL FINDINGS (Red Tinted Box) ---
+    clin_y = loc_y - 90
+    c.setFillColor(colors.HexColor("#fef2f2")) # Very light red
+    c.setStrokeColor(colors.HexColor("#fca5a5"))
+    c.roundRect(30, clin_y - 125, width - 60, 115, 6, stroke=1, fill=1)
+    
+    draw_text(40, clin_y - 20, "🩺 CLINICAL SCREENING & REFERRAL", 12, bold=True, color=colors.HexColor("#b91c1c"))
+    draw_text(40, clin_y - 45, f"Screening Date: {data.get('Date', '')}")
+    draw_text(40, clin_y - 70, "Medical Condition Identified (4D):", 11, bold=True)
+    draw_text(240, clin_y - 70, f"{data.get('Clinical_Findings', '')}", 12, color=colors.HexColor("#b91c1c"))
+    
+    draw_text(40, clin_y - 95, "Primary Treatment Given:")
+    draw_text(240, clin_y - 95, f"{data.get('Treatment_Given', '')}")
+    
+    draw_text(40, clin_y - 115, "Referred To (Hospital):", 11, bold=True)
+    draw_text(240, clin_y - 115, f"{data.get('Referred_To', '')}", 12, bold=True)
+
+    # --- 6. THE OFFICIAL STAMP & SIGNATURE ---
+    stamp_y = clin_y - 220
     stamp_x = 120
     
-    # Draw the circular stamp
-    c.setStrokeColor(colors.HexColor("#1e3a8a")) # Deep Blue Stamp Color
+    # 6A. Draw the circular blue stamp
+    c.setStrokeColor(colors.HexColor("#1e3a8a"))
     c.setLineWidth(2)
     c.circle(stamp_x, stamp_y, 45, stroke=1, fill=0)
-    c.circle(stamp_x, stamp_y, 40, stroke=1, fill=0) # Inner circle
+    c.circle(stamp_x, stamp_y, 40, stroke=1, fill=0)
     
-    # Stamp Text (Centered inside circle)
     c.setFillColor(colors.HexColor("#1e3a8a"))
     c.setFont("Helvetica-Bold", 10)
     c.drawCentredString(stamp_x, stamp_y + 10, "RBSK MO")
@@ -163,11 +172,23 @@ def generate_refer_card(data):
     c.setFont("Helvetica", 8)
     c.drawCentredString(stamp_x, stamp_y - 20, "Official Seal")
     
-    # Doctor Signature Line
+    # 6B. THE DOCTOR'S SIGNATURE (Right side)
+    sign_path = "sign.jpg"
+    if os.path.exists(sign_path):
+        # If the image exists in GitHub, draw it!
+        # Adjust width and height to make it look proportionate
+        c.drawImage(sign_path, 360, stamp_y - 10, width=90, height=60, preserveAspectRatio=True, mask='auto')
+    else:
+        # Fallback just in case the image isn't uploaded yet
+        draw_text(370, stamp_y + 10, "(Signature Image Missing)", 9, color=colors.red)
+
     c.setFillColor(colors.black)
-    draw_text(350, stamp_y - 20, "___________________________")
-    draw_text(360, stamp_y - 35, f"Medical Officer: {data.get('MO_Name', '')}")
-    draw_text(360, stamp_y - 50, "RBSK Mobile Health Team")
+    c.setStrokeColor(colors.black)
+    c.setLineWidth(1)
+    c.line(340, stamp_y - 15, 520, stamp_y - 15) # Signature Line
+    
+    draw_text(340, stamp_y - 30, f"Medical Officer: {data.get('MO_Name', '')}", 11, bold=True)
+    draw_text(340, stamp_y - 45, "Mobile Health Team (MHT-1)")
 
     # Finalize PDF
     c.save()
@@ -1561,6 +1582,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
