@@ -540,29 +540,42 @@ elif menu == "3. 4D Defect Registry":
         # It's a defect if it's NOT empty, NOT normal, and NOT "none"
         return v not in ['', 'nan', 'none', 'no', 'null', 'na', 'false', 'normal', '-']
 
-    # Process logs (Full Scan)
+    # Process logs (Universal Scanner)
     for df_type, df in [("Anganwadi", aw_logs), ("School", sch_logs)]:
         if not df.empty:
+            # Clean up the column names just in case they have hidden spaces
+            df.columns = [str(c).strip() for c in df.columns]
+            
             for _, row in df.iterrows():
-                # Extract potential defects
+                # 1. SMART DISEASE DETECTION
                 d_val = str(row.get('Disease', row.get('Diseases', row.get('4d', '')))).strip()
                 s_val = str(row.get('Status', '')).strip()
                 
-                # REVEAL ALL: If status isn't "Normal" OR disease isn't "None"
                 if is_real_defect(s_val) or is_real_defect(d_val):
                     condition_parts = []
                     if is_real_defect(s_val): condition_parts.append(s_val)
                     if is_real_defect(d_val): condition_parts.append(d_val)
                     
+                    # 2. UNIVERSAL COLUMN PICKER (Looks for Name/Inst anywhere in the first few columns)
+                    def get_val(search_terms, fallback="Unknown"):
+                        for col in df.columns:
+                            if any(term in col.lower() for term in search_terms):
+                                return str(row[col])
+                        return fallback
+
+                    name = get_val(['name', 'beneficiary', 'student'])
+                    inst = get_val(['inst', 'school', 'awc'])
+                    date = get_val(['date', 'screening'])
+                    
                     all_defects.append({
-                        "Date": str(row.get('Date', '')),
-                        "Name": str(row.get('Name', 'Unknown')),
-                        "Institution": str(row.get('Institution', 'Unknown')),
+                        "Date": date,
+                        "Name": name,
+                        "Institution": inst,
                         "Condition": " + ".join(condition_parts),
-                        "Gender": str(row.get('Gender', 'N/A')),
-                        "DOB": str(row.get('DOB', 'N/A')),
-                        "Father": str(row.get('Father', 'N/A')),
-                        "Techo": str(row.get('TechoID', 'N/A')),
+                        "Gender": get_val(['gender', 'sex'], "N/A"),
+                        "DOB": get_val(['dob', 'birth'], "N/A"),
+                        "Father": get_val(['father', 'parent', 'mother'], "N/A"),
+                        "Techo": get_val(['techo', 'id', 'contact'], "N/A"),
                         "Type": df_type
                     })
     tab_reg, tab_card = st.tabs(["🌍 Live Defect Registry", "🪪 Refer Card Generator"])
@@ -1444,6 +1457,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
