@@ -8,6 +8,29 @@ import os
 import time
 import plotly.express as px  # <-- NEW: THE GRAPHICS ENGINE!
 # ==========================================
+# SECURITY: ACCESS CONTROL
+# ==========================================
+def check_password():
+    """Returns True if the user had the correct password."""
+    if "password_correct" not in st.session_state:
+        # First time visiting: Show login screen
+        st.markdown("<br><br>", unsafe_allow_html=True)
+        render_header("RBSK Secure Access", "Please enter credentials to continue", "🔒", "#1e293b")
+        
+        password = st.text_input("Enter Password", type="password")
+        if st.button("Login"):
+            if password == st.secrets["password"]:
+                st.session_state["password_correct"] = True
+                st.rerun()
+            else:
+                st.error("🚫 Incorrect Password. Access Denied.")
+        return False
+    return True
+
+# If password isn't correct, stop the app here
+if not check_password():
+    st.stop()
+# ==========================================
 # UI DESIGN STUDIO: COLORFUL MODULE BANNERS
 # ==========================================
 def render_header(title, subtitle, icon, bg_color):
@@ -1463,6 +1486,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
