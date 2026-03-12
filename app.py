@@ -615,7 +615,7 @@ elif menu == "2. Child Screening":
 # ==========================================
 elif menu == "3. 4D Defect Registry":
     render_header("4D Defect Command Center", "Track referrals and generate official print cards", "📋", "#8b5cf6")
-    def get_age(dob_str):
+def get_age(dob_str):
     try:
         # Converts string like "16/8/2025" or "2025-08-16" to a date
         birth = pd.to_datetime(dob_str, dayfirst=True)
@@ -1609,6 +1609,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
