@@ -748,9 +748,11 @@ def get_age(dob_str):
                         mime="application/pdf"
                     )
         else:
+            else:
             st.warning("No children found in registry to generate a card.")
+
 # ==========================================
-# MODULE 4: THE LIVING DASHBOARD (NEW!)
+# MODULE 4: VISUAL ANALYSIS
 # ==========================================
 elif menu == "4. Visual Analysis":
     render_header("Visual Analytics", "Geographical mapping and health trends", "🗺️", "#f97316")
@@ -1586,6 +1588,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
