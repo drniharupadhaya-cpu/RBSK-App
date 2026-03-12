@@ -25,6 +25,19 @@ def get_age(dob_str):
         return f"{age_years} Years"
     except:
         return "N/A"
+# --- FETCH DASHBOARD DATA (Must be at the top!) ---
+@st.cache_data(ttl=600)
+def fetch_dashboard_data():
+    try:
+        aw = pd.DataFrame(spreadsheet.worksheet("daily_screenings_aw").get_all_records())
+        sch = pd.DataFrame(spreadsheet.worksheet("daily_screenings_schools").get_all_records())
+        
+        if not aw.empty: aw['Location_Type'] = 'Anganwadi'
+        if not sch.empty: sch['Location_Type'] = 'School'
+        
+        return pd.concat([aw, sch], ignore_index=True)
+    except:
+        return pd.DataFrame()
 
 # 1. DEFINE THE HEADER TOOL FIRST
 def render_header(title, subtitle, icon, bg_color):
@@ -458,21 +471,8 @@ elif menu == "1. Dashboard":
         else:
             st.info("No visits available to edit.")
         
-    # --- TAB 2: THE NEW BOSS DASHBOARD ---
+    # --- TAB 2: THE BOSS DASHBOARD ---
     with tab_charts:
-        @st.cache_data(ttl=600)
-        def fetch_dashboard_data():
-            try:
-                aw = pd.DataFrame(spreadsheet.worksheet("daily_screenings_aw").get_all_records())
-                sch = pd.DataFrame(spreadsheet.worksheet("daily_screenings_schools").get_all_records())
-                
-                if not aw.empty: aw['Location_Type'] = 'Anganwadi'
-                if not sch.empty: sch['Location_Type'] = 'School'
-                
-                return pd.concat([aw, sch], ignore_index=True)
-            except:
-                return pd.DataFrame()
-
         df = fetch_dashboard_data()
 
         if df.empty:
@@ -1689,6 +1689,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
