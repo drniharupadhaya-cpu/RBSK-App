@@ -7,7 +7,82 @@ import tempfile
 import os
 import time
 import plotly.express as px  # <-- NEW: THE GRAPHICS ENGINE!
+# ==========================================
+# GLOBAL PDF ENGINE (Place this at the Top)
+# ==========================================
+import os
+from fpdf import FPDF
 
+def generate_refer_card(data):
+    pdf = FPDF(orientation="P", unit="mm", format="A4")
+    pdf.add_page()
+    font_path = "gujarati.ttf"
+    
+    # Check for the font file
+    font_exists = os.path.exists(font_path) and font_path.endswith(".ttf")
+    
+    if font_exists:
+        try:
+            pdf.add_font('Gujarati', '', font_path)
+            pdf.set_font('Gujarati', '', 12)
+            f_gu = 'Gujarati'
+            lbl_title = "રાષ્ટ્રીય બાળ સ્વાસ્થ્ય કાર્યક્રમ (સંદર્ભ કાર્ડ)"
+            lbl_name = "બાળકનું પૂરુ નામ (Name)"
+            lbl_gender = "જાતિ (Gender)"
+            lbl_dob = "જન્મ તારીખ (DOB)"
+            lbl_age = "ઉંમર (Age)"
+            lbl_father = "પિતાનું નામ (Father)"
+            lbl_mother = "માતાનું નામ (Mother)"
+            lbl_address = "સરનામું (Address)"
+            lbl_village = "ગામ (Village)"
+            lbl_taluka = "તાલુકો (Taluka)"
+            lbl_condition = "બીમારીની વિગત (Condition)"
+        except:
+            font_exists = False
+
+    if not font_exists:
+        pdf.set_font('Arial', '', 12)
+        f_gu = 'Arial'
+        lbl_title = "RBSK Refer Card"
+        lbl_name = "Name"; lbl_gender = "Gender"; lbl_dob = "DOB"
+        lbl_age = "Age"; lbl_father = "Father"; lbl_mother = "Mother"
+        lbl_address = "Address"; lbl_village = "Village"; lbl_taluka = "Taluka"
+        lbl_condition = "Condition"
+
+    # Draw Border & Content
+    pdf.rect(5, 5, 200, 287)
+    pdf.set_font('Arial', 'B', 16)
+    pdf.cell(190, 10, "RBSK - REFER CARD", ln=True, align='C')
+    pdf.set_font(f_gu, '', 14)
+    pdf.cell(190, 8, lbl_title, ln=True, align='C')
+    pdf.ln(5)
+    
+    pdf.set_font(f_gu, '', 11)
+    pdf.cell(190, 8, f"{lbl_name}: {data.get('Name', '')}", border='B', ln=True)
+    pdf.cell(95, 8, f"{lbl_gender}: {data.get('Gender', '')}", border='R')
+    pdf.cell(95, 8, f"{lbl_dob}: {data.get('DOB', '')}", ln=True)
+    pdf.cell(95, 8, f"{lbl_age}: {data.get('Age', '')}", border='R')
+    pdf.cell(95, 8, f"Techo ID: {data.get('Techo', 'N/A')}", ln=True)
+    pdf.ln(2)
+    pdf.cell(190, 8, f"{lbl_father}: {data.get('Father', '')}", ln=True)
+    pdf.cell(190, 8, f"{lbl_mother}: {data.get('Mother', '')}", ln=True)
+    pdf.cell(190, 8, f"{lbl_address}: {data.get('Address', '')}", ln=True)
+    pdf.cell(95, 8, f"{lbl_village}: {data.get('Village', '')}", border='R')
+    pdf.cell(95, 8, f"{lbl_taluka}: Visavadar", ln=True)
+    
+    pdf.ln(10)
+    pdf.set_fill_color(240, 240, 240)
+    pdf.set_font('Arial', 'B', 11)
+    pdf.cell(190, 10, lbl_condition.upper(), border=1, ln=True, fill=True)
+    pdf.set_font(f_gu, '', 12)
+    pdf.multi_cell(190, 10, f"\n {data.get('Condition', 'None')} \n", border=1)
+    
+    pdf.ln(10)
+    pdf.set_font('Arial', 'B', 10)
+    pdf.cell(95, 8, "MHT Team: 1240315")
+    pdf.cell(95, 8, f"Date: {data.get('Date', '')}", ln=True)
+    
+    return pdf.output()
 # --- 1. GET THE LIVE DATABASE CONNECTION ---
 def get_spreadsheet():
     creds_dict = json.loads(st.secrets["gcp_service_account"])
@@ -361,7 +436,7 @@ elif menu == "2. Child Screening":
         # --- END OF THE REPLACE BLOCK ---
 
 # ==========================================
-# MODULE 3: 4D DEFECT REGISTRY & REFER CARD (THE COMPLETE VERSION)
+# MODULE 3: 4D DEFECT REGISTRY & REFER CARD
 # ==========================================
 elif menu == "3. 4D Defect Registry":
     st.title("🔍 4D Defect Command Center")
@@ -382,30 +457,24 @@ elif menu == "3. 4D Defect Registry":
         clean = str(val).strip().lower()
         return clean not in ['', 'nan', 'none', 'no', 'null', 'na', 'false', 'normal']
 
-    # --- FUZZY COLUMN FINDER ---
-    def find_data(row, keywords):
-        for col in row.index:
-            if any(k.lower() in str(col).lower() for k in keywords):
-                return row[col]
-        return ""
-
-    # Process logs
+    # Process logs (Standardized Search)
     for df_type, df in [("Anganwadi", aw_logs), ("School", sch_logs)]:
         if not df.empty:
             for _, row in df.iterrows():
-                disease_val = find_data(row, ['disease', '4d', 'condition', 'defect'])
-                status_val = find_data(row, ['status', 'sam', 'mam', 'wasting'])
+                # Fuzzy finding columns
+                d_val = next((row[c] for c in df.columns if 'disease' in c.lower() or '4d' in c.lower()), "")
+                s_val = next((row[c] for c in df.columns if 'status' in c.lower()), "")
                 
-                if is_real_defect(disease_val) or is_real_defect(status_val):
+                if is_real_defect(d_val) or is_real_defect(s_val):
                     all_defects.append({
-                        "Date": find_data(row, ['date']),
-                        "Name": find_data(row, ['name', 'beneficiary', 'student']),
-                        "Institution": find_data(row, ['inst', 'school', 'awc']),
-                        "Condition": f"{status_val} {disease_val}".strip(),
-                        "Gender": find_data(row, ['gender', 'sex']),
-                        "DOB": find_data(row, ['dob', 'birth']),
-                        "Father": find_data(row, ['father', 'mother', 'parent']),
-                        "Techo": find_data(row, ['techo', 'id', 'contact']),
+                        "Date": next((row[c] for c in df.columns if 'date' in c.lower()), ""),
+                        "Name": next((row[c] for c in df.columns if 'name' in c.lower()), "Unknown"),
+                        "Institution": next((row[c] for c in df.columns if 'inst' in c.lower() or 'awc' in c.lower() or 'school' in c.lower()), "Unknown"),
+                        "Condition": f"{s_val} {d_val}".strip(),
+                        "Gender": next((row[c] for c in df.columns if 'gender' in c.lower()), "N/A"),
+                        "DOB": next((row[c] for c in df.columns if 'dob' in c.lower()), "N/A"),
+                        "Father": next((row[c] for c in df.columns if 'father' in c.lower() or 'mother' in c.lower()), "N/A"),
+                        "Techo": next((row[c] for c in df.columns if 'techo' in c.lower() or 'id' in c.lower() or 'contact' in c.lower()), "N/A"),
                         "Type": df_type
                     })
 
@@ -413,152 +482,10 @@ elif menu == "3. 4D Defect Registry":
 
     with tab_reg:
         if all_defects:
-            df_display = pd.DataFrame(all_defects)
-            st.success(f"Found {len(df_display)} children with defects.")
-            st.dataframe(df_display[['Date', 'Name', 'Institution', 'Condition']], use_container_width=True, hide_index=True)
-        else:
-            st.info("Registry empty. Note: The registry only shows children where a 'Disease' or 'SAM/MAM Status' was recorded.")
-
-    with tab_card:
-        if all_defects:
-            names = [d['Name'] for d in all_defects]
-            sel = st.selectbox("Select Child:", ["-- Select --"] + names)
-            if sel != "-- Select --":
-                p_data = next(item for item in all_defects if item["Name"] == sel)
-                with st.form("refer_card_print"):
-                    p_data['Mother'] = st.text_input("Mother's Name")
-                    p_data['Address'] = st.text_input("Address", value=p_data['Institution'])
-                    p_data['Date'] = st.date_input("Referral Date")
-                    gen = st.form_submit_button("Prepare PDF")
-                if gen:
-                    pdf_bytes = generate_refer_card(p_data)
-                    st.download_button("⬇️ Download Refer Card", pdf_bytes, f"Refer_{sel}.pdf", "application/pdf")
-        else:
-            st.warning("No children available for referral cards.")
-
-    # --- 1. THE REFER CARD PDF ENGINE (CRASH-PROOF) ---
-    def generate_refer_card(data):
-        pdf = FPDF(orientation="P", unit="mm", format="A4")
-        pdf.add_page()
-        font_path = "gujarati.ttf"
-        
-        # Check if the real .ttf file exists (Not the ZIP!)
-        if os.path.exists(font_path) and font_path.endswith(".ttf"):
-            try:
-                pdf.add_font('Gujarati', '', font_path)
-                pdf.set_font('Gujarati', '', 12)
-                f_gu = 'Gujarati'
-                lbl_title = "રાષ્ટ્રીય બાળ સ્વાસ્થ્ય કાર્યક્રમ (સંદર્ભ કાર્ડ)"
-                lbl_name = "બાળકનું પૂરુ નામ (Name)"
-                lbl_gender = "જાતિ (Gender)"
-                lbl_dob = "જન્મ તારીખ (DOB)"
-                lbl_age = "ઉંમર (Age)"
-                lbl_father = "પિતાનું નામ (Father)"
-                lbl_mother = "માતાનું નામ (Mother)"
-                lbl_address = "સરનામું (Address)"
-                lbl_village = "ગામ (Village)"
-                lbl_taluka = "તાલુકો (Taluka)"
-                lbl_condition = "બીમારીની વિગત (Condition)"
-            except:
-                font_exists = False
-        else:
-            font_exists = False
-
-        if not font_exists:
-            pdf.set_font('Arial', '', 12)
-            f_gu = 'Arial'
-            lbl_title = "RBSK Refer Card"
-            lbl_name = "Name"; lbl_gender = "Gender"; lbl_dob = "DOB"
-            lbl_age = "Age"; lbl_father = "Father"; lbl_mother = "Mother"
-            lbl_address = "Address"; lbl_village = "Village"; lbl_taluka = "Taluka"
-            lbl_condition = "Condition"
-
-        pdf.rect(5, 5, 200, 287) # Border
-        pdf.set_font('Arial', 'B', 16)
-        pdf.cell(190, 10, "RBSK - REFER CARD", ln=True, align='C')
-        pdf.set_font(f_gu, '', 14)
-        pdf.cell(190, 8, lbl_title, ln=True, align='C')
-        pdf.ln(5)
-
-        # Personal Details
-        pdf.set_font(f_gu, '', 11)
-        pdf.cell(190, 8, f"{lbl_name}: {data.get('Name', '')}", border='B', ln=True)
-        pdf.cell(95, 8, f"{lbl_gender}: {data.get('Gender', '')}", border='R')
-        pdf.cell(95, 8, f"{lbl_dob}: {data.get('DOB', '')}", ln=True)
-        pdf.cell(95, 8, f"{lbl_age}: {data.get('Age', '')}", border='R')
-        pdf.cell(95, 8, f"Techo ID: {data.get('Techo', 'N/A')}", ln=True)
-        pdf.ln(2)
-        pdf.cell(190, 8, f"{lbl_father}: {data.get('Father', '')}", ln=True)
-        pdf.cell(190, 8, f"{lbl_mother}: {data.get('Mother', '')}", ln=True)
-        pdf.cell(190, 8, f"{lbl_address}: {data.get('Address', '')}", ln=True)
-        pdf.cell(95, 8, f"{lbl_village}: {data.get('Village', '')}", border='R')
-        pdf.cell(95, 8, f"{lbl_taluka}: Visavadar", ln=True)
-        
-        # Clinical Findings
-        pdf.ln(10)
-        pdf.set_fill_color(240, 240, 240)
-        pdf.set_font('Arial', 'B', 11)
-        pdf.cell(190, 10, lbl_condition.upper(), border=1, ln=True, fill=True)
-        pdf.set_font(f_gu, '', 12)
-        pdf.multi_cell(190, 10, f"\n {data.get('Condition', 'None')} \n", border=1)
-        
-        pdf.ln(10)
-        pdf.set_font('Arial', 'B', 10)
-        pdf.cell(95, 8, "MHT Team: 1240315")
-        pdf.cell(95, 8, f"Date: {data.get('Date', '')}", ln=True)
-        
-        return pdf.output()
-
-    # --- 2. LIVE REGISTRY LOADER ---
-    @st.cache_data(ttl=10)
-    def get_live_defects():
-        try:
-            aw_logs = pd.DataFrame(spreadsheet.worksheet("daily_screenings_aw").get_all_records())
-            sch_logs = pd.DataFrame(spreadsheet.worksheet("daily_screenings_schools").get_all_records())
-            return aw_logs, sch_logs
-        except:
-            return pd.DataFrame(), pd.DataFrame()
-
-    aw_logs, sch_logs = get_live_defects()
-    all_defects = []
-
-    def is_defect(val):
-        clean = str(val).strip().lower()
-        return clean not in ['', 'nan', 'none', 'no', 'null', 'na', 'false', 'normal']
-
-    # Filter AW Logs
-    if not aw_logs.empty:
-        for _, row in aw_logs.iterrows():
-            if is_defect(row.get('Status')) or is_defect(row.get('Disease')):
-                all_defects.append({
-                    "Name": row.get('Beneficiary Name', 'Unknown'),
-                    "Institution": row.get('AWC Name', 'AWC'),
-                    "Condition": f"{row.get('Status', '')} {row.get('Disease', '')}".strip(),
-                    "Gender": row.get('Gender', 'N/A'), "DOB": row.get('DoB', 'N/A'),
-                    "Father": row.get('Mother Name', 'N/A'), "Techo": row.get('Techo ID', 'N/A'),
-                    "Date": row.get('Date', '')
-                })
-    
-    # Filter School Logs
-    if not sch_logs.empty:
-        for _, row in sch_logs.iterrows():
-            if is_defect(row.get('Disease')):
-                all_defects.append({
-                    "Name": row.get('Student Name', 'Unknown'),
-                    "Institution": row.get('School Name', 'School'),
-                    "Condition": row.get('Disease', ''),
-                    "Gender": row.get('Gender', 'N/A'), "DOB": row.get('DOB', 'N/A'),
-                    "Father": row.get('Father Name', 'N/A'), "Techo": row.get('Contact', 'N/A'),
-                    "Date": row.get('Date', '')
-                })
-
-    tab_reg, tab_card = st.tabs(["🌍 Live Defect Registry", "🪪 Refer Card Generator"])
-
-    with tab_reg:
-        if all_defects:
+            st.success(f"Found {len(all_defects)} children requiring follow-up.")
             st.dataframe(pd.DataFrame(all_defects)[['Date', 'Name', 'Institution', 'Condition']], use_container_width=True, hide_index=True)
         else:
-            st.info("No defects logged today. Screen a child in Module 2 to see them here!")
+            st.info("Registry empty. Start screening in Module 2!")
 
     with tab_card:
         if all_defects:
@@ -568,18 +495,16 @@ elif menu == "3. 4D Defect Registry":
             if sel != "-- Select --":
                 p_data = next(item for item in all_defects if item["Name"] == sel)
                 
-                # --- START FORM ---
-                with st.form("card_details_form"):
+                with st.form("refer_card_print_form"):
                     p_data['Mother'] = st.text_input("Mother's Name")
                     p_data['Address'] = st.text_input("Address", value=p_data['Institution'])
                     p_data['Date'] = st.date_input("Referral Date")
-                    # This only triggers the 'logic gate'
-                    is_ready = st.form_submit_button("Prepare PDF for Printing")
+                    prepare_pdf = st.form_submit_button("Prepare PDF for Printing")
                 
-                # --- OUTSIDE FORM ---
-                if is_ready:
+                if prepare_pdf:
+                    # NOW THE APP CAN FIND THE FUNCTION!
                     pdf_bytes = generate_refer_card(p_data)
-                    st.success(f"PDF Generated for {sel}!")
+                    st.success(f"✅ PDF Prepared for {sel}!")
                     st.download_button(
                         label="⬇️ Download Official Refer Card", 
                         data=pdf_bytes, 
@@ -587,7 +512,7 @@ elif menu == "3. 4D Defect Registry":
                         mime="application/pdf"
                     )
         else:
-            st.warning("No children found in the live registry.")
+            st.warning("No children found in registry to generate a card.")
 
 # ==========================================
 # MODULE 4: THE LIVING DASHBOARD (NEW!)
@@ -1426,6 +1351,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
