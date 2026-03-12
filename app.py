@@ -242,6 +242,14 @@ except Exception as e:
     st.stop()
 
 # --- SIDEBAR NAVIGATION ---
+# ==========================================
+# SIDEBAR NAVIGATION & BRANDING
+# ==========================================
+
+# 1. PASTE THE BRANDING HERE (At the very top of the sidebar)
+st.sidebar.markdown("### 🏛️ RBSK Team Portal")
+st.sidebar.write("Team: Visavadar MHT-1240315")
+st.sidebar.divider()
 st.sidebar.title("🩺 RBSK Menu")
 st.sidebar.write("Dr. Workspace")
 menu = st.sidebar.radio("Go to:", 
@@ -260,6 +268,14 @@ menu = st.sidebar.radio("Go to:",
         "12. Automated State Report" # <-- ADD THIS NEW LINE!
     ]
 )
+# --- SIDEBAR LOGOUT OPTION ---
+st.sidebar.markdown("---") # Adds a nice separator line
+if st.sidebar.button("🔓 Logout"):
+    # Clear the session state
+    for key in st.session_state.keys():
+        del st.session_state[key]
+    # Rerun the app to trigger the login screen
+    st.rerun()
 
 # ... [Modules 1, 2, and 3 remain exactly the same as before] ...
 
@@ -1507,6 +1523,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
