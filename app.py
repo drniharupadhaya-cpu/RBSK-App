@@ -349,7 +349,11 @@ elif menu == "2. Child Screening":
 
     if category == "👶 Anganwadi":
         if not df_aw.empty:
-            institute_list = df_aw['AWC Name'].dropna().unique().tolist()
+            # 1. Get raw list
+            raw_list = df_aw['AWC Name'].dropna().unique().tolist()
+            # 2. Scrub empty spaces and sort alphabetically
+            institute_list = sorted([str(i).strip() for i in raw_list if str(i).strip() != ''])
+            
             selected_inst = st.selectbox("Select Anganwadi Center:", ["-- Select --"] + institute_list)
             if selected_inst != "-- Select --":
                 filtered_children = df_aw[df_aw['AWC Name'] == selected_inst]
@@ -360,7 +364,11 @@ elif menu == "2. Child Screening":
             
     else: 
         if not df_students.empty:
-            institute_list = df_students['School'].dropna().unique().tolist()
+            # 1. Get raw list
+            raw_list = df_students['School'].dropna().unique().tolist()
+            # 2. Scrub empty spaces and sort alphabetically
+            institute_list = sorted([str(i).strip() for i in raw_list if str(i).strip() != ''])
+            
             selected_inst = st.selectbox("Select School:", ["-- Select --"] + institute_list)
             if selected_inst != "-- Select --":
                 filtered_children = df_students[df_students['School'] == selected_inst]
@@ -1421,6 +1429,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
