@@ -7,29 +7,50 @@ import tempfile
 import os
 import time
 import plotly.express as px  # <-- NEW: THE GRAPHICS ENGINE!
-# ==========================================
-# SECURITY: ACCESS CONTROL
-# ==========================================
+import streamlit as st
+import pandas as pd
+# ... (any other imports you have)
+
+# 1. DEFINE THE HEADER TOOL FIRST
+def render_header(title, subtitle, icon, bg_color):
+    st.markdown(f"""
+    <div style="background: linear-gradient(135deg, {bg_color} 0%, {bg_color}CC 100%); 
+                padding: 20px; 
+                border-radius: 12px; 
+                box-shadow: 0 4px 10px rgba(0,0,0,0.1); 
+                margin-bottom: 25px;
+                display: flex;
+                align-items: center;">
+        <div style="font-size: 45px; margin-right: 20px;">{icon}</div>
+        <div>
+            <h1 style="color: white; margin: 0; font-size: 28px; text-shadow: 1px 1px 2px rgba(0,0,0,0.2);">{title}</h1>
+            <p style="color: #f1f5f9; font-size: 16px; margin: 5px 0 0 0;">{subtitle}</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# 2. DEFINE THE SECURITY TOOL SECOND
 def check_password():
-    """Returns True if the user had the correct password."""
     if "password_correct" not in st.session_state:
-        # First time visiting: Show login screen
         st.markdown("<br><br>", unsafe_allow_html=True)
+        # Now Python knows what render_header is!
         render_header("RBSK Secure Access", "Please enter credentials to continue", "🔒", "#1e293b")
         
-        password = st.text_input("Enter Password", type="password")
+        pwd = st.text_input("Enter Password", type="password")
         if st.button("Login"):
-            if password == st.secrets["password"]:
+            if pwd == st.secrets["password"]:
                 st.session_state["password_correct"] = True
                 st.rerun()
             else:
-                st.error("🚫 Incorrect Password. Access Denied.")
+                st.error("🚫 Incorrect Password.")
         return False
     return True
 
-# If password isn't correct, stop the app here
+# 3. RUN THE GATEKEEPER THIRD
 if not check_password():
     st.stop()
+
+# --- REST OF YOUR APP (Google Sheets connection, etc.) STARTS HERE ---
 # ==========================================
 # UI DESIGN STUDIO: COLORFUL MODULE BANNERS
 # ==========================================
@@ -1486,6 +1507,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
