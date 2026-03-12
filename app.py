@@ -349,38 +349,58 @@ elif menu == "2. Child Screening":
 
     if category == "👶 Anganwadi":
         if not df_aw.empty:
-            # 1. Get raw list
+            # 1. Scrub and sort the actual names
             raw_list = df_aw['AWC Name'].dropna().unique().tolist()
-            # 2. Scrub empty spaces and sort alphabetically
-            institute_list = sorted([str(i).strip() for i in raw_list if str(i).strip() != ''])
+            actual_institutes = sorted([str(i).strip() for i in raw_list if str(i).strip() != ''])
             
-            selected_inst = st.selectbox("Select Anganwadi Center:", ["-- Select --"] + institute_list)
+            # 2. Create the Numbered "Mask" for Institutes
+            inst_display = {name: f"{idx+1}. {name}" for idx, name in enumerate(actual_institutes)}
+            
+            # 3. The Dropdown (Shows numbers, but outputs the real name)
+            selected_inst = st.selectbox(
+                "Select Anganwadi Center:", 
+                options=["-- Select --"] + actual_institutes,
+                format_func=lambda x: inst_display.get(x, x)
+            )
+            
             if selected_inst != "-- Select --":
                 filtered_children = df_aw[df_aw['AWC Name'] == selected_inst]
-                child_names = filtered_children['Beneficiary Name'].tolist()
+                actual_children = [str(c).strip() for c in filtered_children['Beneficiary Name'].tolist() if str(c).strip() != '']
         else:
             st.error("No Anganwadi data found.")
             selected_inst = "-- Select --"
             
     else: 
         if not df_students.empty:
-            # 1. Get raw list
+            # 1. Scrub and sort the actual names
             raw_list = df_students['School'].dropna().unique().tolist()
-            # 2. Scrub empty spaces and sort alphabetically
-            institute_list = sorted([str(i).strip() for i in raw_list if str(i).strip() != ''])
+            actual_institutes = sorted([str(i).strip() for i in raw_list if str(i).strip() != ''])
             
-            selected_inst = st.selectbox("Select School:", ["-- Select --"] + institute_list)
+            # 2. Create the Numbered "Mask" for Institutes
+            inst_display = {name: f"{idx+1}. {name}" for idx, name in enumerate(actual_institutes)}
+            
+            selected_inst = st.selectbox(
+                "Select School:", 
+                options=["-- Select --"] + actual_institutes,
+                format_func=lambda x: inst_display.get(x, x)
+            )
+            
             if selected_inst != "-- Select --":
                 filtered_children = df_students[df_students['School'] == selected_inst]
-                child_names = filtered_children['StudentName'].tolist()
+                actual_children = [str(c).strip() for c in filtered_children['StudentName'].tolist() if str(c).strip() != '']
         else:
             st.error("No School Student data found.")
             selected_inst = "-- Select --"
 
+    # --- NUMBERED CHILDREN LIST ---
     if selected_inst != "-- Select --":
+        # Create the Numbered "Mask" for Children
+        child_display = {name: f"{idx+1}. {name}" for idx, name in enumerate(actual_children)}
+        
         selected_child = st.selectbox(
             f"Select Child enrolled in {selected_inst}:", 
-            ["-- Select Child --", "➕ Register New Child"] + child_names
+            options=["-- Select Child --", "➕ Register New Child"] + actual_children,
+            format_func=lambda x: child_display.get(x, x)
         )
         
         if selected_child != "-- Select Child --":
@@ -1429,6 +1449,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
