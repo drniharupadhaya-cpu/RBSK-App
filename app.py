@@ -353,9 +353,11 @@ elif menu == "1. Dashboard":
         
         # ⚠️ PASTE YOUR ORIGINAL DAILY TOUR PLAN CODE RIGHT HERE! ⚠️
         # (Make sure the code you paste lines up vertically with this comment)
-        if menu == "1. Daily Tour Plan":
-     render_header("Executive Dashboard", "Live team overview and daily screening stats", "📊", "#3b82f6")
-    st.write("Plan, edit, and track your medical team's field visits.")
+elif menu == "1. Dashboard":
+    render_header("Executive Dashboard", "Live team overview and daily screening stats", "📊", "#3b82f6")
+
+    # --- CREATE THE TABS ---
+    tab_tour, tab_charts = st.tabs(["📅 Daily Tour Plan", "📈 Executive Analytics"])
 
     try:
         planner_sheet = spreadsheet.worksheet("tour_plan")
@@ -1668,6 +1670,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
