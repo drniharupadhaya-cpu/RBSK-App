@@ -123,9 +123,13 @@ def generate_refer_card(data):
     draw_text(40, start_y - 45, f"Child's Name: {data.get('Name', '')}", 12, bold=True)
     draw_text(350, start_y - 45, f"Gender: {data.get('Gender', '')}")
     draw_text(40, start_y - 70, f"Date of Birth: {data.get('DOB', '')}")
+    # Inside generate_refer_card function:
+    draw_text(40, start_y - 70, f"Date of Birth: {data.get('DOB', '')}")
+    draw_text(180, start_y - 70, f"Age: {data.get('Age', 'N/A')}") # Add this line!
     draw_text(350, start_y - 70, f"Contact: {data.get('Contact_Num', '')}")
     draw_text(40, start_y - 95, f"Father's Name: {data.get('Parent_Name', '')}")
     draw_text(350, start_y - 95, f"Mother's Name: {data.get('Mother', '')}")
+    
 
     # --- 4. LOCATION DETAILS (Shaded Box) ---
     loc_y = start_y - 120
@@ -611,6 +615,20 @@ elif menu == "2. Child Screening":
 # ==========================================
 elif menu == "3. 4D Defect Registry":
     render_header("4D Defect Command Center", "Track referrals and generate official print cards", "📋", "#8b5cf6")
+    def get_age(dob_str):
+    try:
+        # Converts string like "16/8/2025" or "2025-08-16" to a date
+        birth = pd.to_datetime(dob_str, dayfirst=True)
+        today = datetime.date.today()
+        age_years = today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
+        
+        if age_years < 1:
+            # If less than a year, show months
+            months = (today.year - birth.year) * 12 + today.month - birth.month
+            return f"{months} Months"
+        return f"{age_years} Years"
+    except:
+        return "N/A"
 
     # --- 1. THE DATA LOADER WITH FORCE REFRESH ---
     @st.cache_data(ttl=600)
@@ -700,6 +718,15 @@ elif menu == "3. 4D Defect Registry":
             if sel != "-- Select --":
                 # Find the specific data for the selected child
                 p_data = next(item for item in all_defects if item["Name"] == sel)
+                p_data['Age'] = get_age(p_data.get('DOB', ''))
+                # ------------------------------------
+
+                st.markdown(f"### 🪪 Preparing Card for: **{actual_name}**")
+                
+                # Show the age next to the condition so the doctor sees it
+                st.info(f"**Child Age:** {p_data['Age']} | **Condition:** {p_data.get('Condition', 'Unknown')}")
+                
+                with st.form("refer_card_print_form"):
                 
                 with st.form("refer_card_print_form"):
                     st.write("### 📝 Doctor's Clinical Referral Details")
@@ -1582,6 +1609,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
