@@ -510,12 +510,13 @@ elif menu == "2. Child Screening":
                     except Exception as e:
                         st.error(f"Failed to connect to Google Sheets: {e}")
 # ==========================================
-# MODULE 3: 4D DEFECT REGISTRY & REFER CARD
+# MODULE 3: 4D DEFECT REGISTRY
 # ==========================================
 elif menu == "3. 4D Defect Registry":
     render_header("4D Defect Command Center", "Track referrals and generate official print cards", "📋", "#8b5cf6")
 
-    @st.cache_data(ttl=10)
+    # --- 1. THE DATA LOADER WITH FORCE REFRESH ---
+    @st.cache_data(ttl=600) # Cache for 10 mins by default
     def get_live_defects():
         try:
             aw_logs = pd.DataFrame(spreadsheet.worksheet("daily_screenings_aw").get_all_records())
@@ -523,6 +524,12 @@ elif menu == "3. 4D Defect Registry":
             return aw_logs, sch_logs
         except:
             return pd.DataFrame(), pd.DataFrame()
+
+    # Manual Sync Button
+    if st.button("🔄 Sync with Google Sheets"):
+        st.cache_data.clear()
+        st.success("Data refreshed! Fetching latest entries...")
+        st.rerun()
 
     aw_logs, sch_logs = get_live_defects()
     all_defects = []
@@ -1431,6 +1438,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
