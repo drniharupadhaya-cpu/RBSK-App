@@ -347,12 +347,31 @@ elif menu == "1. Dashboard":
     tab_tour, tab_charts = st.tabs(["📅 Daily Tour Plan", "📈 Executive Analytics"])
 
     # --- TAB 1: YOUR ORIGINAL TOUR PLAN ---
+    # --- TAB 1: DAILY TOUR PLAN ---
     with tab_tour:
         st.markdown("#### 🗺️ Today's Field Schedule")
-        st.info("📍 **Location:** Visavadar Taluka")
+        st.info("📍 **Block:** Visavadar | **Team:** MHT-1 | **MO:** Dr. Nihar Upadhyay")
         
-        # ⚠️ PASTE YOUR ORIGINAL DAILY TOUR PLAN CODE RIGHT HERE! ⚠️
-        # (Make sure the code you paste lines up vertically with this comment)
+        # A beautiful side-by-side layout for Morning/Afternoon
+        c_morn, c_aft = st.columns(2)
+        
+        with c_morn:
+            st.success("🏫 **Morning Session (9:00 AM - 12:30 PM)**")
+            st.write("**Village:** Rajapara")
+            st.write("**Location:** Primary School Main")
+            st.write("**Target:** 1st to 8th Standard")
+        
+        with c_aft:
+            st.warning("🏡 **Afternoon Session (1:30 PM - 4:00 PM)**")
+            st.write("**Village:** Rajapara")
+            st.write("**Location:** Anganwadi Center 1 & 2")
+            st.write("**Target:** 0-6 Years & Dropouts")
+            
+        st.divider()
+        st.markdown("##### 📌 Daily Check-list for Team")
+        st.checkbox("Check weighing scale calibration")
+        st.checkbox("Ensure blank referral cards are printed (Backup)")
+        st.checkbox("Sync app data before leaving network area")
 elif menu == "1. Dashboard":
     render_header("Executive Dashboard", "Live team overview and daily screening stats", "📊", "#3b82f6")
 
@@ -1670,6 +1689,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
