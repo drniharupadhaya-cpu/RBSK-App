@@ -748,7 +748,7 @@ def get_age(dob_str):
                         mime="application/pdf"
                     )
         
-            else:
+        else:
             st.warning("No children found in registry to generate a card.")
 
 # ==========================================
@@ -1588,6 +1588,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
