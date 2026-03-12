@@ -1107,7 +1107,7 @@ elif menu == "10. Staff Directory":
 # MODULE 11: ANNUAL FY PLANNER (2026-2027)
 # ==========================================
 elif menu == "11. Annual FY Planner":
-    st.title("📅 FY 2026-2027 Strategic Planner")
+    render_header("Roadmap of whole year in advance!", "Plan your work together!", "🏥", "#e11d48")
     st.write("Annual roadmap, campaign timelines, and real-time workload calculations.")
 
     tab_timeline, tab_calculator, tab_monthly = st.tabs([
@@ -1421,6 +1421,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
