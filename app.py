@@ -326,7 +326,6 @@ elif menu == "2. Child Screening":
         elif weight_kg < mam_cutoff: return "MAM"
         else: return "Normal"
 
-
     category = st.radio("Select Visit Type:", ["🏫 Schools", "👶 Anganwadi"], horizontal=True)
     st.divider()
 
@@ -433,55 +432,54 @@ elif menu == "2. Child Screening":
                 disease = st.text_input("🦠 Disease Identified (4D)", placeholder="Type 'None' or describe...")
                 save_btn = st.form_submit_button("💾 Save Screening Data")
 
-                # --- START OF THE REPLACE BLOCK ---
-        if save_btn:
-            # 1. THE AUTOMATIC SAM/MAM CALCULATOR (Autopilot)
-            final_status = "Normal"
-            if category == "👶 Anganwadi":
-                try:
-                    h_m = float(height) / 100
-                    w_kg = float(weight)
-                    bmi = w_kg / (h_m * h_m)
-                    muac_val = float(muac)
-                    
-                    if muac_val < 11.5 or bmi < 13.0:
-                        final_status = "SAM"
-                    elif 11.5 <= muac_val < 12.5 or 13.0 <= bmi < 14.5:
-                        final_status = "MAM"
-                except:
-                    final_status = "Error in Calculation"
-
-            # 2. SAVE TO GOOGLE SHEETS
-            try:
+            # --- ACTION BLOCK PROPERLY INDENTED OUTSIDE THE FORM ---
+            if save_btn:
+                # 1. THE AUTOMATIC SAM/MAM CALCULATOR (Autopilot)
+                final_status = "Normal"
                 if category == "👶 Anganwadi":
-                    ws = spreadsheet.worksheet("daily_screenings_aw")
-                    # Data Order: Date, Inst, Name, DOB, Gender, H, W, MUAC, Hb, Disease, Contact, Techo, Status
-                    new_row = [
-                        str(screening_date), selected_inst, final_child_name, str(dob), 
-                        str(gender), height, weight, muac, hb, disease, 
-                        updated_contact, techo_id, final_status
-                    ]
-                    ws.append_row(new_row)
-                    st.success(f"✅ Saved to AWC Log! Status: {final_status}")
-                    if final_status == "SAM":
-                        st.error("🚨 CRITICAL: Child identified as SAM. Refer to CMTC immediately.")
-                
-                else:
-                    ws = spreadsheet.worksheet("daily_screenings_schools")
-                    # Data Order: Date, Inst, Name, DOB, Gender, H, W, Hb, Disease, Contact
-                    new_row = [
-                        str(screening_date), selected_inst, final_child_name, str(dob), 
-                        str(gender), height, weight, hb, disease, updated_contact
-                    ]
-                    ws.append_row(new_row)
-                    st.success(f"✅ Saved to School Log!")
+                    try:
+                        h_m = float(height) / 100
+                        w_kg = float(weight)
+                        bmi = w_kg / (h_m * h_m) if h_m > 0 else 0
+                        muac_val = float(muac)
+                        
+                        if (muac_val > 0 and muac_val < 11.5) or (bmi > 0 and bmi < 13.0):
+                            final_status = "SAM"
+                        elif (muac_val >= 11.5 and muac_val < 12.5) or (bmi >= 13.0 and bmi < 14.5):
+                            final_status = "MAM"
+                    except:
+                        final_status = "Error in Calculation"
 
-                # 3. CLEAR CACHE (So Module 3 updates instantly)
-                st.cache_data.clear()
+                # 2. SAVE TO GOOGLE SHEETS
+                try:
+                    if category == "👶 Anganwadi":
+                        ws = spreadsheet.worksheet("daily_screenings_aw")
+                        # Data Order: Date, Inst, Name, DOB, Gender, H, W, MUAC, Hb, Disease, Contact, Techo, Status
+                        new_row = [
+                            str(screening_date), selected_inst, final_child_name, str(dob), 
+                            str(gender), height, weight, muac, hb, disease, 
+                            updated_contact, techo_id, final_status
+                        ]
+                        ws.append_row(new_row)
+                        st.success(f"✅ Saved to AWC Log! Status: {final_status}")
+                        if final_status == "SAM":
+                            st.error("🚨 CRITICAL: Child identified as SAM. Refer to CMTC immediately.")
+                    
+                    else:
+                        ws = spreadsheet.worksheet("daily_screenings_schools")
+                        # Data Order: Date, Inst, Name, DOB, Gender, H, W, Hb, Disease, Contact
+                        new_row = [
+                            str(screening_date), selected_inst, final_child_name, str(dob), 
+                            str(gender), height, weight, hb, disease, updated_contact
+                        ]
+                        ws.append_row(new_row)
+                        st.success(f"✅ Saved to School Log!")
 
-            except Exception as e:
-                st.error(f"Failed to connect to Google Sheets: {e}")
-        # --- END OF THE REPLACE BLOCK ---
+                    # 3. CLEAR CACHE (So Module 3 updates instantly)
+                    st.cache_data.clear()
+
+                except Exception as e:
+                    st.error(f"Failed to connect to Google Sheets: {e}")
 
 # ==========================================
 # MODULE 3: 4D DEFECT REGISTRY & REFER CARD
@@ -1405,6 +1403,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
