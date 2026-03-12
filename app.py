@@ -311,12 +311,9 @@ if menu == "1. Daily Tour Plan":
 # ==========================================
 elif menu == "2. Child Screening":
     render_header("Child Screening & EMR", "Record vitals and auto-calculate SAM/MAM", "🩺", "#10b981")
-    st.write("View historical data, enter new vitals, and auto-triage malnutrition.")
 
     # --- CLINICAL MATH ENGINE: WHO WEIGHT-FOR-HEIGHT REFERENCE ---
     def get_whz_status(gender, height_cm, weight_kg):
-        # Simplified WHO Weight-for-Height table (Height: [Boy-3SD, Boy-2SD, Girl-3SD, Girl-2SD])
-        # Covers standard Anganwadi age heights (65cm to 120cm)
         who_table = {
             65: [5.9, 6.4, 5.5, 6.0], 70: [6.8, 7.4, 6.4, 7.0],
             75: [7.6, 8.3, 7.3, 8.0], 80: [8.5, 9.2, 8.2, 9.0],
@@ -325,21 +322,14 @@ elif menu == "2. Child Screening":
             105: [13.3, 14.5, 13.0, 14.3], 110: [14.4, 15.8, 14.1, 15.6],
             115: [15.5, 17.1, 15.3, 17.0], 120: [16.6, 18.4, 16.5, 18.4]
         }
-        
-        # Snap to the closest height in the reference table
         if height_cm < 65 or height_cm > 120:
-            return "Out of bounds" # Fallback to MUAC if outside standard range
-            
+            return "Out of bounds"
         closest_h = min(who_table.keys(), key=lambda k: abs(k - height_cm))
         refs = who_table[closest_h]
-        
-        # Check Gender (M or F) to apply correct thresholds
         if str(gender).upper().startswith('M'):
             sam_cutoff, mam_cutoff = refs[0], refs[1]
         else:
             sam_cutoff, mam_cutoff = refs[2], refs[3]
-            
-        # Classify
         if weight_kg < sam_cutoff: return "SAM"
         elif weight_kg < mam_cutoff: return "MAM"
         else: return "Normal"
@@ -349,20 +339,15 @@ elif menu == "2. Child Screening":
 
     if category == "👶 Anganwadi":
         if not df_aw.empty:
-            # 1. Scrub and sort the actual names
             raw_list = df_aw['AWC Name'].dropna().unique().tolist()
             actual_institutes = sorted([str(i).strip() for i in raw_list if str(i).strip() != ''])
-            
-            # 2. Create the Numbered "Mask" for Institutes
             inst_display = {name: f"{idx+1}. {name}" for idx, name in enumerate(actual_institutes)}
             
-            # 3. The Dropdown (Shows numbers, but outputs the real name)
             selected_inst = st.selectbox(
                 "Select Anganwadi Center:", 
                 options=["-- Select --"] + actual_institutes,
                 format_func=lambda x: inst_display.get(x, x)
             )
-            
             if selected_inst != "-- Select --":
                 filtered_children = df_aw[df_aw['AWC Name'] == selected_inst]
                 actual_children = [str(c).strip() for c in filtered_children['Beneficiary Name'].tolist() if str(c).strip() != '']
@@ -372,11 +357,8 @@ elif menu == "2. Child Screening":
             
     else: 
         if not df_students.empty:
-            # 1. Scrub and sort the actual names
             raw_list = df_students['School'].dropna().unique().tolist()
             actual_institutes = sorted([str(i).strip() for i in raw_list if str(i).strip() != ''])
-            
-            # 2. Create the Numbered "Mask" for Institutes
             inst_display = {name: f"{idx+1}. {name}" for idx, name in enumerate(actual_institutes)}
             
             selected_inst = st.selectbox(
@@ -384,7 +366,6 @@ elif menu == "2. Child Screening":
                 options=["-- Select --"] + actual_institutes,
                 format_func=lambda x: inst_display.get(x, x)
             )
-            
             if selected_inst != "-- Select --":
                 filtered_children = df_students[df_students['School'] == selected_inst]
                 actual_children = [str(c).strip() for c in filtered_children['StudentName'].tolist() if str(c).strip() != '']
@@ -392,9 +373,7 @@ elif menu == "2. Child Screening":
             st.error("No School Student data found.")
             selected_inst = "-- Select --"
 
-    # --- NUMBERED CHILDREN LIST ---
     if selected_inst != "-- Select --":
-        # Create the Numbered "Mask" for Children
         child_display = {name: f"{idx+1}. {name}" for idx, name in enumerate(actual_children)}
         
         selected_child = st.selectbox(
@@ -413,7 +392,6 @@ elif menu == "2. Child Screening":
                 with col_n3: parent = st.text_input("Parent's Name")
                 existing_contact = ""
                 final_child_name = new_child_name
-                
             else:
                 st.subheader("👤 Child Profile & History")
                 final_child_name = selected_child
@@ -461,77 +439,76 @@ elif menu == "2. Child Screening":
             with st.form("vitals_form"):
                 screening_date = st.date_input("Date of Screening")
                 c_col1, c_col2 = st.columns(2)
+                
+                # QoL UPGRADE: 10 Digits Max
                 with c_col1: updated_contact = st.text_input("📞 Contact Number", value=existing_contact, max_chars=10, placeholder="10-digit mobile number")
                 with c_col2: techo_id = st.text_input("🆔 Techo ID") if category == "👶 Anganwadi" else "N/A"
 
                 v_col1, v_col2, v_col3, v_col4 = st.columns(4)
-                with v_col1: height = st.number_input("Height (cm)", min_value=0.0, step=0.5)
-                with v_col2: weight = st.number_input("Weight (kg)", min_value=0.0, step=0.1)
+                
+                # QoL UPGRADE: Clean text boxes without "0.00"
+                with v_col1: height_str = st.text_input("Height (cm)", placeholder="e.g. 95.5")
+                with v_col2: weight_str = st.text_input("Weight (kg)", placeholder="e.g. 14.2")
                 with v_col3:
                     if category == "👶 Anganwadi":
-                        muac = st.number_input("MUAC (cm)", min_value=0.0, step=0.1)
+                        muac_str = st.text_input("MUAC (cm)", placeholder="e.g. 12.5")
                     else:
-                        muac = 0.0
+                        muac_str = "0"
                         st.text_input("MUAC (cm)", value="Not required", disabled=True)
-                with v_col4: hb = st.number_input("Hb %", min_value=0.0, step=0.1)
+                with v_col4: hb_str = st.text_input("Hb %", placeholder="e.g. 11.0")
 
                 disease = st.text_input("🦠 Disease Identified (4D)", placeholder="Type 'None' or describe...")
                 save_btn = st.form_submit_button("💾 Save Screening Data")
 
-            # --- ACTION BLOCK PROPERLY INDENTED OUTSIDE THE FORM ---
+            # --- ACTION BLOCK PROPERLY ALIGNED ---
             if save_btn:
-                # NEW: Strict 10-digit check!
+                # QoL UPGRADE: Strict 10-Digit Check
                 if updated_contact and len(updated_contact.strip()) != 10:
-                    st.error("⚠️ Please enter a valid 10-digit contact number.")
+                    st.error("⚠️ Please enter a valid 10-digit contact number before saving.")
                 else:
-            if save_btn:
-                # 1. THE AUTOMATIC SAM/MAM CALCULATOR (Autopilot)
-                final_status = "Normal"
-                if category == "👶 Anganwadi":
-                    try:
-                        h_m = float(height) / 100
-                        w_kg = float(weight)
-                        bmi = w_kg / (h_m * h_m) if h_m > 0 else 0
-                        muac_val = float(muac)
-                        
-                        if (muac_val > 0 and muac_val < 11.5) or (bmi > 0 and bmi < 13.0):
-                            final_status = "SAM"
-                        elif (muac_val >= 11.5 and muac_val < 12.5) or (bmi >= 13.0 and bmi < 14.5):
-                            final_status = "MAM"
-                    except:
-                        final_status = "Error in Calculation"
+                    # Math Translator
+                    def safe_float(val):
+                        try: return float(val)
+                        except: return 0.0
 
-                # 2. SAVE TO GOOGLE SHEETS
-                try:
+                    height_val = safe_float(height_str)
+                    weight_val = safe_float(weight_str)
+                    muac_val = safe_float(muac_str)
+                    hb_val = safe_float(hb_str)
+
+                    # 1. THE AUTOMATIC SAM/MAM CALCULATOR
+                    final_status = "Normal"
                     if category == "👶 Anganwadi":
-                        ws = spreadsheet.worksheet("daily_screenings_aw")
-                        # Data Order: Date, Inst, Name, DOB, Gender, H, W, MUAC, Hb, Disease, Contact, Techo, Status
-                        new_row = [
-                            str(screening_date), selected_inst, final_child_name, str(dob), 
-                            str(gender), height, weight, muac, hb, disease, 
-                            updated_contact, techo_id, final_status
-                        ]
-                        ws.append_row(new_row)
-                        st.success(f"✅ Saved to AWC Log! Status: {final_status}")
-                        if final_status == "SAM":
-                            st.error("🚨 CRITICAL: Child identified as SAM. Refer to CMTC immediately.")
-                    
-                    else:
-                        ws = spreadsheet.worksheet("daily_screenings_schools")
-                        # Data Order: Date, Inst, Name, DOB, Gender, H, W, Hb, Disease, Contact
-                        new_row = [
-                            str(screening_date), selected_inst, final_child_name, str(dob), 
-                            str(gender), height, weight, hb, disease, updated_contact
-                        ]
-                        ws.append_row(new_row)
-                        st.success(f"✅ Saved to School Log!")
+                        try:
+                            h_m = height_val / 100
+                            bmi = weight_val / (h_m * h_m) if h_m > 0 else 0
+                            
+                            if (muac_val > 0 and muac_val < 11.5) or (bmi > 0 and bmi < 13.0):
+                                final_status = "SAM"
+                            elif (muac_val >= 11.5 and muac_val < 12.5) or (bmi >= 13.0 and bmi < 14.5):
+                                final_status = "MAM"
+                        except:
+                            final_status = "Error in Calculation"
 
-                    # 3. CLEAR CACHE (So Module 3 updates instantly)
-                    st.cache_data.clear()
+                    # 2. SAVE TO GOOGLE SHEETS
+                    try:
+                        if category == "👶 Anganwadi":
+                            ws = spreadsheet.worksheet("daily_screenings_aw")
+                            new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, muac_val, hb_val, disease, updated_contact, techo_id, final_status]
+                            ws.append_row(new_row)
+                            st.success(f"✅ Saved to AWC Log! Status: {final_status}")
+                            if final_status == "SAM":
+                                st.error("🚨 CRITICAL: Child identified as SAM. Refer to CMTC immediately.")
+                        else:
+                            ws = spreadsheet.worksheet("daily_screenings_schools")
+                            new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, hb_val, disease, updated_contact]
+                            ws.append_row(new_row)
+                            st.success(f"✅ Saved to School Log!")
 
-                except Exception as e:
-                    st.error(f"Failed to connect to Google Sheets: {e}")
+                        st.cache_data.clear()
 
+                    except Exception as e:
+                        st.error(f"Failed to connect to Google Sheets: {e}")
 # ==========================================
 # MODULE 3: 4D DEFECT REGISTRY & REFER CARD
 # ==========================================
@@ -1454,6 +1431,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
