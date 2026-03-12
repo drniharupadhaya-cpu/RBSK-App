@@ -510,13 +510,13 @@ elif menu == "2. Child Screening":
                     except Exception as e:
                         st.error(f"Failed to connect to Google Sheets: {e}")
 # ==========================================
-# MODULE 3: 4D DEFECT REGISTRY
+# MODULE 3: 4D DEFECT REGISTRY & FOLLOW-UP
 # ==========================================
 elif menu == "3. 4D Defect Registry":
     render_header("4D Defect Command Center", "Track referrals and generate official print cards", "📋", "#8b5cf6")
 
     # --- 1. THE DATA LOADER WITH FORCE REFRESH ---
-    @st.cache_data(ttl=600) # Cache for 10 mins by default
+    @st.cache_data(ttl=600)
     def get_live_defects():
         try:
             aw_logs = pd.DataFrame(spreadsheet.worksheet("daily_screenings_aw").get_all_records())
@@ -525,29 +525,27 @@ elif menu == "3. 4D Defect Registry":
         except:
             return pd.DataFrame(), pd.DataFrame()
 
-    # Manual Sync Button
-    if st.button("🔄 Sync with Google Sheets"):
+    # Manual Sync Button for the team
+    if st.button("🔄 Sync & Refresh Data"):
         st.cache_data.clear()
-        st.success("Data refreshed! Fetching latest entries...")
+        st.success("Database refreshed! Fetching latest entries...")
         st.rerun()
 
     aw_logs, sch_logs = get_live_defects()
     all_defects = []
 
     def is_real_defect(val):
-        """Returns True if the value looks like a defect or malnutrition."""
+        """Filters out 'Normal' or 'None' results."""
         v = str(val).strip().lower()
-        # It's a defect if it's NOT empty, NOT normal, and NOT "none"
         return v not in ['', 'nan', 'none', 'no', 'null', 'na', 'false', 'normal', '-']
 
-    # Process logs (Universal Scanner)
+    # --- 2. UNIVERSAL SCANNER (Finds data even if columns shift) ---
     for df_type, df in [("Anganwadi", aw_logs), ("School", sch_logs)]:
         if not df.empty:
-            # Clean up the column names just in case they have hidden spaces
             df.columns = [str(c).strip() for c in df.columns]
             
             for _, row in df.iterrows():
-                # 1. SMART DISEASE DETECTION
+                # Disease/Status detection
                 d_val = str(row.get('Disease', row.get('Diseases', row.get('4d', '')))).strip()
                 s_val = str(row.get('Status', '')).strip()
                 
@@ -556,63 +554,71 @@ elif menu == "3. 4D Defect Registry":
                     if is_real_defect(s_val): condition_parts.append(s_val)
                     if is_real_defect(d_val): condition_parts.append(d_val)
                     
-                    # 2. UNIVERSAL COLUMN PICKER (Looks for Name/Inst anywhere in the first few columns)
+                    # Universal Column Picker
                     def get_val(search_terms, fallback="Unknown"):
                         for col in df.columns:
                             if any(term in col.lower() for term in search_terms):
                                 return str(row[col])
                         return fallback
 
-                    name = get_val(['name', 'beneficiary', 'student'])
-                    inst = get_val(['inst', 'school', 'awc'])
-                    date = get_val(['date', 'screening'])
-                    
                     all_defects.append({
-                        "Date": date,
-                        "Name": name,
-                        "Institution": inst,
+                        "Date": get_val(['date', 'screening']),
+                        "Name": get_val(['name', 'beneficiary', 'student']),
+                        "Institution": get_val(['inst', 'school', 'awc']),
                         "Condition": " + ".join(condition_parts),
+                        "Contact": get_val(['contact', 'mobile', 'phone', 'techo']),
                         "Gender": get_val(['gender', 'sex'], "N/A"),
                         "DOB": get_val(['dob', 'birth'], "N/A"),
                         "Father": get_val(['father', 'parent', 'mother'], "N/A"),
-                        "Techo": get_val(['techo', 'id', 'contact'], "N/A"),
                         "Type": df_type
                     })
+
+    # --- 3. THE INTERFACE (Tabs) ---
     tab_reg, tab_card = st.tabs(["🌍 Live Defect Registry", "🪪 Refer Card Generator"])
 
     with tab_reg:
         if all_defects:
-            st.success(f"Found {len(all_defects)} children requiring follow-up.")
-            st.dataframe(pd.DataFrame(all_defects)[['Date', 'Name', 'Institution', 'Condition']], use_container_width=True, hide_index=True)
+            df_display = pd.DataFrame(all_defects)
+            
+            # Quick Stats Summary
+            c1, c2 = st.columns(2)
+            c1.metric("Total Referrals", len(all_defects))
+            c2.info("💡 Pro-tip: You can call parents using the 'Contact' column on mobile.")
+
+            # The Registry Table
+            st.dataframe(
+                df_display[['Date', 'Name', 'Institution', 'Condition', 'Contact']], 
+                use_container_width=True, 
+                hide_index=True
+            )
         else:
             st.info("Registry empty. Start screening in Module 2!")
 
     with tab_card:
         if all_defects:
+            # Create list of names for selection
             names = [d['Name'] for d in all_defects]
             sel = st.selectbox("Select Child for Refer Card:", ["-- Select --"] + names)
             
             if sel != "-- Select --":
+                # Find the specific data for the selected child
                 p_data = next(item for item in all_defects if item["Name"] == sel)
                 
                 with st.form("refer_card_print_form"):
+                    st.write(f"### Referral for {sel}")
                     p_data['Mother'] = st.text_input("Mother's Name")
                     p_data['Address'] = st.text_input("Address", value=p_data['Institution'])
                     p_data['Date'] = st.date_input("Referral Date")
                     prepare_pdf = st.form_submit_button("Prepare PDF for Printing")
                 
                 if prepare_pdf:
-                    # 1. Generate the PDF
+                    # Generate and wrap in bytes for download
                     pdf_output = generate_refer_card(p_data)
-                    
-                    # 2. Convert to raw bytes specifically for Streamlit
                     pdf_bytes = bytes(pdf_output)
                     
                     st.success(f"✅ PDF Prepared for {sel}!")
-                    
-                    # 3. The Button
                     st.download_button(
-                        label="⬇️ Download Official Refer Card", 
+                        label=f"⬇️ Download Refer Card for {sel}", 
                         data=pdf_bytes, 
                         file_name=f"Refer_{sel}.pdf", 
                         mime="application/pdf"
@@ -1457,6 +1463,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
