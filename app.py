@@ -311,8 +311,19 @@ elif menu == "2. Child Screening":
                 save_btn = st.form_submit_button("💾 Save Screening Data")
 
                 if save_btn:
-                    if final_child_name == "" or height == 0 or weight == 0:
-                        st.error("🚨 Please fill out Name, Height, and Weight.")
+    # ... (keep your SAM/MAM math logic here) ...
+    
+    # Standardized Row for AW
+    if category == "👶 Anganwadi":
+        target_sheet = spreadsheet.worksheet("daily_screenings_aw")
+        # Headers: Date, Institution, Name, DOB, Gender, H, W, MUAC, Hb, Disease, Contact, TechoID, Status
+        target_sheet.append_row([str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height, weight, muac, hb, disease, updated_contact, techo_id, final_status])
+    
+    # Standardized Row for Schools
+    else:
+        target_sheet = spreadsheet.worksheet("daily_screenings_schools")
+        # Headers: Date, Institution, Name, DOB, Gender, H, W, Hb, Disease, Contact
+        target_sheet.append_row([str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height, weight, hb, disease, updated_contact])
                     else:
                         # --- AUTOPILOT SAM/MAM CALCULATION (WHZ + MUAC) ---
                         final_status = "Normal"
@@ -364,6 +375,76 @@ elif menu == "2. Child Screening":
 # ==========================================
 elif menu == "3. 4D Defect Registry":
     st.title("🔍 4D Defect Command Center")
+
+    @st.cache_data(ttl=10)
+    def get_live_defects():
+        try:
+            aw_logs = pd.DataFrame(spreadsheet.worksheet("daily_screenings_aw").get_all_records())
+            sch_logs = pd.DataFrame(spreadsheet.worksheet("daily_screenings_schools").get_all_records())
+            return aw_logs, sch_logs
+        except:
+            return pd.DataFrame(), pd.DataFrame()
+
+    aw_logs, sch_logs = get_live_defects()
+    all_defects = []
+
+    def is_real_defect(val):
+        clean = str(val).strip().lower()
+        return clean not in ['', 'nan', 'none', 'no', 'null', 'na', 'false', 'normal']
+
+    # --- FUZZY COLUMN FINDER ---
+    def find_data(row, keywords):
+        for col in row.index:
+            if any(k.lower() in str(col).lower() for k in keywords):
+                return row[col]
+        return ""
+
+    # Process logs
+    for df_type, df in [("Anganwadi", aw_logs), ("School", sch_logs)]:
+        if not df.empty:
+            for _, row in df.iterrows():
+                disease_val = find_data(row, ['disease', '4d', 'condition', 'defect'])
+                status_val = find_data(row, ['status', 'sam', 'mam', 'wasting'])
+                
+                if is_real_defect(disease_val) or is_real_defect(status_val):
+                    all_defects.append({
+                        "Date": find_data(row, ['date']),
+                        "Name": find_data(row, ['name', 'beneficiary', 'student']),
+                        "Institution": find_data(row, ['inst', 'school', 'awc']),
+                        "Condition": f"{status_val} {disease_val}".strip(),
+                        "Gender": find_data(row, ['gender', 'sex']),
+                        "DOB": find_data(row, ['dob', 'birth']),
+                        "Father": find_data(row, ['father', 'mother', 'parent']),
+                        "Techo": find_data(row, ['techo', 'id', 'contact']),
+                        "Type": df_type
+                    })
+
+    tab_reg, tab_card = st.tabs(["🌍 Live Defect Registry", "🪪 Refer Card Generator"])
+
+    with tab_reg:
+        if all_defects:
+            df_display = pd.DataFrame(all_defects)
+            st.success(f"Found {len(df_display)} children with defects.")
+            st.dataframe(df_display[['Date', 'Name', 'Institution', 'Condition']], use_container_width=True, hide_index=True)
+        else:
+            st.info("Registry empty. Note: The registry only shows children where a 'Disease' or 'SAM/MAM Status' was recorded.")
+
+    with tab_card:
+        if all_defects:
+            names = [d['Name'] for d in all_defects]
+            sel = st.selectbox("Select Child:", ["-- Select --"] + names)
+            if sel != "-- Select --":
+                p_data = next(item for item in all_defects if item["Name"] == sel)
+                with st.form("refer_card_print"):
+                    p_data['Mother'] = st.text_input("Mother's Name")
+                    p_data['Address'] = st.text_input("Address", value=p_data['Institution'])
+                    p_data['Date'] = st.date_input("Referral Date")
+                    gen = st.form_submit_button("Prepare PDF")
+                if gen:
+                    pdf_bytes = generate_refer_card(p_data)
+                    st.download_button("⬇️ Download Refer Card", pdf_bytes, f"Refer_{sel}.pdf", "application/pdf")
+        else:
+            st.warning("No children available for referral cards.")
 
     # --- 1. THE REFER CARD PDF ENGINE (CRASH-PROOF) ---
     def generate_refer_card(data):
@@ -1355,6 +1436,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
