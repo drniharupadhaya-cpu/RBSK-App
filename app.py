@@ -776,7 +776,7 @@ elif menu == "5. HBNC Newborn Visit":
 # MODULE 6: SUCCESS STORY BUILDER
 # ==========================================
 elif menu == "6. Success Story Builder":
-    render_header("SAM & CMTC Tracker", "Follow-up monitoring for severe acute malnutrition", "🏥", "#e11d48")
+    render_header("Success Story Builder", "Create success stories instantly", "🏥", "#e11d48")
     if not df_4d.empty:
         df_4d.columns = df_4d.columns.astype(str).str.strip().str.upper()
         if 'NAME' in df_4d.columns and '4D' in df_4d.columns and 'VILLAGE' in df_4d.columns:
@@ -1421,6 +1421,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
