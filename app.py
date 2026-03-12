@@ -11,6 +11,20 @@ import streamlit as st
 import pandas as pd
 import datetime
 # ... (any other imports you have)
+def get_age(dob_str):
+    try:
+        # Converts string like "16/8/2025" or "2025-08-16" to a date
+        birth = pd.to_datetime(dob_str, dayfirst=True)
+        today = datetime.date.today()
+        age_years = today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
+        
+        if age_years < 1:
+            # If less than a year, show months
+            months = (today.year - birth.year) * 12 + today.month - birth.month
+            return f"{months} Months"
+        return f"{age_years} Years"
+    except:
+        return "N/A"
 
 # 1. DEFINE THE HEADER TOOL FIRST
 def render_header(title, subtitle, icon, bg_color):
@@ -615,20 +629,7 @@ elif menu == "2. Child Screening":
 # ==========================================
 elif menu == "3. 4D Defect Registry":
     render_header("4D Defect Command Center", "Track referrals and generate official print cards", "📋", "#8b5cf6")
-def get_age(dob_str):
-    try:
-        # Converts string like "16/8/2025" or "2025-08-16" to a date
-        birth = pd.to_datetime(dob_str, dayfirst=True)
-        today = datetime.date.today()
-        age_years = today.year - birth.year - ((today.month, today.day) < (birth.month, birth.day))
-        
-        if age_years < 1:
-            # If less than a year, show months
-            months = (today.year - birth.year) * 12 + today.month - birth.month
-            return f"{months} Months"
-        return f"{age_years} Years"
-    except:
-        return "N/A"
+
 
     # --- 1. THE DATA LOADER ---
     @st.cache_data(ttl=600)
@@ -1588,6 +1589,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
