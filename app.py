@@ -223,7 +223,7 @@ menu = st.sidebar.radio("Go to:",
 # MODULE 1: DAILY TOUR PLANNER
 # ==========================================
 if menu == "1. Daily Tour Plan":
-    render_header("Executive Dashboard", "Live district overview and daily screening stats", "📊", "#3b82f6")
+    render_header("Executive Dashboard", "Live team overview and daily screening stats", "📊", "#3b82f6")
     st.write("Plan, edit, and track your medical team's field visits.")
 
     try:
@@ -738,7 +738,7 @@ elif menu == "4. Visual Analysis":
 # MODULE 5: HBNC NEWBORN VISIT
 # ==========================================
 elif menu == "5. HBNC Newborn Visit":
-    render_header("State Reporting Portal", "Automated generation of government formats", "📝", "#14b8a6")
+    render_header("Record HBNC visits", "Record HBNC and Delivery point visits easily", "📝", "#14b8a6")
     with st.form("hbnc_form"):
         st.markdown("#### 👶 Details")
         c1, c2, c3 = st.columns(3)
@@ -855,7 +855,7 @@ elif menu == "6. Success Story Builder":
 # MODULE 7: ANEMIA TRACKER
 # ==========================================
 elif menu == "7. Anemia Tracker":
-    render_header("Annual FY Planner", "Schedule school and Anganwadi visits for the year", "📅", "#f59e0b")
+    render_header("T3 camps and taluka Anemia statistics", "easily enter T3 camp data and analyze", "📅", "#f59e0b")
     st.write("Track Hemoglobin levels and analyze historical trends.")
 
     tab_dash, tab_entry = st.tabs(["📈 Interactive Dashboard", "➕ Enter New Camp Data"])
@@ -967,7 +967,7 @@ elif menu == "7. Anemia Tracker":
 # MODULE 8: SCHOOL DIRECTORY
 # ==========================================
 elif menu == "8. School Directory":
-    render_header("Master Data Management", "Update student and beneficiary databases", "🗄️", "#4f46e5")
+    render_header("Master School Data Management", "Get all info about schools", "🗄️", "#4f46e5")
     st.write("Instantly look up school demographics, principals, and class sizes.")
 
     if not df_directory.empty:
@@ -1021,7 +1021,7 @@ elif menu == "8. School Directory":
 # MODULE 9: ANGANWADI DIRECTORY 
 # ==========================================
 elif menu == "9. Anganwadi Directory":
-    render_header("Team Configuration", "Manage team details and application settings", "⚙️", "#64748b")
+    render_header("Anganvadi Information", "All Anganvadi details at your fingertips", "⚙️", "#64748b")
     st.write("Instantly look up Anganwadi Workers and their contact numbers.")
 
     if not df_aw_contacts.empty:
@@ -1053,7 +1053,7 @@ elif menu == "9. Anganwadi Directory":
 # MODULE 10: STAFF DIRECTORY
 # ==========================================
 elif menu == "10. Staff Directory":
-    render_header("Help & Documentation", "Guidelines, tooltips, and system support", "🆘", "#ec4899")
+    render_header("All staff data", "Reach out to anyone and Communicate", "🆘", "#ec4899")
     st.write("Filter by Headquarter or Designation to find your team members instantly.")
 
     if not df_staff.empty:
@@ -1234,7 +1234,7 @@ elif menu == "11. Annual FY Planner":
 # MODULE 12: AUTOMATED STATE REPORTING & SCOREBOARD
 # ==========================================
 elif menu == "12. Automated State Report":
-    st.title("📄 Reporting & Team Scoreboard")
+    render_header("Automatic Report Generator", "Get real-time reports", "📅", "#f59e0b")
     st.write("Generate official Form III exports and track your team's annual targets.")
 
     tab_form3, tab_scoreboard = st.tabs(["📄 Form III (Govt Export)", "🎯 Live Scoreboard (Target vs. Achievement)"])
@@ -1421,6 +1421,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
