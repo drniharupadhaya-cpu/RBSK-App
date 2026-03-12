@@ -9,6 +9,7 @@ import time
 import plotly.express as px  # <-- NEW: THE GRAPHICS ENGINE!
 import streamlit as st
 import pandas as pd
+import datetime
 # ... (any other imports you have)
 
 # 1. DEFINE THE HEADER TOOL FIRST
@@ -240,6 +241,29 @@ try:
 except Exception as e:
     st.error(f"Could not connect to Google Sheets. Please check your Secret Vault. Error: {e}")
     st.stop()
+# ==========================================
+# SIDEBAR METRICS: TODAY'S LIVE COUNT
+# ==========================================
+@st.cache_data(ttl=600) # Checks Google Sheets every 10 mins
+def get_today_stats():
+    try:
+        # Get today's date in the exact format your app saves it (YYYY-MM-DD)
+        today_str = str(datetime.date.today())
+        
+        aw_df = pd.DataFrame(spreadsheet.worksheet("daily_screenings_aw").get_all_records())
+        sch_df = pd.DataFrame(spreadsheet.worksheet("daily_screenings_schools").get_all_records())
+        
+        def count_today(df):
+            if df.empty: return 0
+            # Smartly find whichever column has 'date' in the name
+            date_col = next((c for c in df.columns if 'date' in str(c).lower()), None)
+            if not date_col: return 0
+            # Count how many rows match today's date
+            return len(df[df[date_col].astype(str).str.contains(today_str)])
+            
+        return count_today(aw_df) + count_today(sch_df)
+    except:
+        return 0 # If connection fails, show 0 safely instead of crashing
 
 # --- SIDEBAR NAVIGATION ---
 # ==========================================
@@ -252,6 +276,19 @@ st.sidebar.write("Team: Visavadar MHT-1240315")
 st.sidebar.divider()
 st.sidebar.title("🩺 RBSK Menu")
 st.sidebar.write("Dr. Workspace")
+# --- 2. PASTE THE NEW SUMMARY CARD HERE ---
+today_total = get_today_stats()
+
+st.sidebar.markdown(f"""
+<div style="background-color: #1e293b; padding: 15px; border-radius: 10px; border-left: 5px solid #10b981; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+    <p style="margin: 0; color: #94a3b8; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">📅 Screened Today</p>
+    <h2 style="margin: 5px 0 0 0; color: #ffffff; font-size: 28px;">
+        {today_total} <span style="font-size: 14px; color: #10b981; font-weight: normal;">Children</span>
+    </h2>
+</div>
+""", unsafe_allow_html=True)
+# --- 3. YOUR MENU CONTINUES BELOW ---
+menu = st.sidebar.selectbox("Navigation Menu", [...])
 menu = st.sidebar.radio("Go to:", 
     [
         "1. Daily Tour Plan", 
@@ -1523,6 +1560,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
