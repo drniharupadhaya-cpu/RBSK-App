@@ -728,7 +728,7 @@ def get_age(dob_str):
                 
                 with st.form("refer_card_print_form"):
                 
-                with st.form("refer_card_print_form"):
+                
                     st.write("### 📝 Doctor's Clinical Referral Details")
                     
                     # Row 1: Demographics Auto-fill (Editable just in case)
@@ -1609,6 +1609,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
