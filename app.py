@@ -77,123 +77,102 @@ import os
 import urllib.request
 from fpdf import FPDF
 
+from io import BytesIO
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+
+# ==========================================
+# GLOBAL PDF ENGINE: OFFICIAL RBSK FORMAT
+# ==========================================
 def generate_refer_card(data):
-    pdf = FPDF(orientation="P", unit="mm", format="A4")
-    pdf.add_page()
+    buffer = BytesIO()
+    # Create canvas with A4 size
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
     
-    # 🌟 MAGIC FONT DOWNLOADER 🌟
-    # If the font isn't there, the app downloads it automatically!
-    font_path = "gujarati.ttf"
-    if not os.path.exists(font_path):
-        try:
-            url = "https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSansGujarati/NotoSansGujarati-Regular.ttf"
-            urllib.request.urlretrieve(url, font_path)
-        except Exception as e:
-            pass # Fallback to English if internet fails
+    # --- HELPER: Draw Text ---
+    def draw_text(x, y, text, size=12, bold=False):
+        c.setFont("Helvetica-Bold" if bold else "Helvetica", size)
+        c.drawString(x, y, str(text))
+        
+    def draw_line(x1, y1, x2, y2):
+        c.setStrokeColor(colors.black)
+        c.line(x1, y1, x2, y2)
 
-    # Check if font successfully downloaded
-    font_exists = os.path.exists(font_path)
-    
-    if font_exists:
-        try:
-            pdf.add_font('Gujarati', '', font_path)
-            pdf.set_font('Gujarati', '', 12)
-            f_gu = 'Gujarati'
-            
-            # EXACT LABELS FROM YOUR PHYSICAL CARD
-            lbl_title1 = "RBSK સંદર્ભ કાર્ડ"
-            lbl_title2 = "શાળા આરોગ્ય - રાષ્ટ્રીય બાળ સ્વાસ્થ્ય કાર્યક્રમ"
-            lbl_name = "બાળકનું પૂરુ નામ:"
-            lbl_gender = "સ્ત્રી / પુરુષ:"
-            lbl_dob = "બાળકની જન્મ તારીખ:"
-            lbl_age = "ઉંમર:"
-            lbl_father = "બાળકના પિતાનું પૂરુ નામ:"
-            lbl_mother = "માતાનું નામ:"
-            lbl_address = "પૂરુ સરનામું:"
-            lbl_village = "ગામ / શહેર:"
-            lbl_taluka = "તાલુકો: Visavadar"
-            lbl_dist = "જિલ્લો: JUNAGADH"
-            lbl_inst = "શાળા / આંગણવાડીનું નામ:"
-            lbl_4d = "4D Category:"
-            lbl_condition = "પ્રાથમિક તપાસણીની વિગત:"
-            lbl_team = "મોબાઈલ હેલ્થ ટીમ નંબર:"
-            lbl_date = "પ્રાથમિક તપાસણી કર્યા તારીખ:"
-        except:
-            font_exists = False
+    # --- 1. HEADER ---
+    c.setFillColor(colors.HexColor("#10b981"))
+    c.rect(50, height - 80, width - 100, 40, fill=1, stroke=0)
+    c.setFillColor(colors.white)
+    draw_text(60, height - 65, "RBSK - REFERRAL CARD (NATIONAL CHILD HEALTH PROGRAM)", 14, bold=True)
+    c.setFillColor(colors.black)
 
-    if not font_exists:
-        pdf.set_font('Arial', '', 12)
-        f_gu = 'Arial'
-        lbl_title1 = "RBSK Refer Card"
-        lbl_title2 = "School Health - National Child Health Program"
-        lbl_name = "Name:"; lbl_gender = "Gender:"; lbl_dob = "DOB:"
-        lbl_age = "Age:"; lbl_father = "Father's Name:"; lbl_mother = "Mother's Name:"
-        lbl_address = "Address:"; lbl_village = "Village/City:"
-        lbl_taluka = "Taluka: Visavadar"; lbl_dist = "District: JUNAGADH"
-        lbl_inst = "School / AWC Name:"; lbl_4d = "4D Category:"
-        lbl_condition = "Suspected Condition / Findings:"
-        lbl_team = "MHT Team No:"; lbl_date = "Screening Date:"
+    # --- 2. DEMOGRAPHICS ---
+    start_y = height - 120
+    draw_text(50, start_y, f"Child's Full Name: {data.get('Name', '')}", 12, bold=True)
+    draw_text(400, start_y, f"Gender: {data.get('Gender', '')}")
+    
+    draw_text(50, start_y - 25, f"Date of Birth: {data.get('DOB', '')}")
+    draw_text(400, start_y - 25, f"Category: General / SC / ST / OBC") # Placeholder for checkbox UI
+    
+    draw_text(50, start_y - 50, f"Father's Name: {data.get('Parent_Name', '')}")
+    draw_text(50, start_y - 75, f"Mother's Name: {data.get('Mother', '')}")
+    draw_text(400, start_y - 75, f"Contact: {data.get('Contact_Num', '')}")
+    
+    # --- 3. LOCATION & INSTITUTION ---
+    draw_text(50, start_y - 110, "--- Address & Institution Details ---", 10, bold=True)
+    draw_text(50, start_y - 130, f"Village / City: {data.get('Village', '')}")
+    draw_text(300, start_y - 130, "Taluka: VISAVADAR")
+    draw_text(450, start_y - 130, "District: JUNAGADH")
+    
+    draw_text(50, start_y - 155, f"Institution Name: {data.get('Institution', '')}")
+    draw_text(400, start_y - 155, f"Status: {data.get('School_Status', '')}")
 
-    # --- DRAW THE EXACT CARD FORMAT ---
-    pdf.rect(5, 5, 200, 287) # Outer Border
+    # --- 4. CLINICAL FINDINGS (4D) ---
+    c.setFillColor(colors.HexColor("#f87171"))
+    c.rect(50, start_y - 195, width - 100, 25, fill=1, stroke=0)
+    c.setFillColor(colors.white)
+    draw_text(60, start_y - 188, "PRIMARY SCREENING DETAILS", 12, bold=True)
+    c.setFillColor(colors.black)
+
+    draw_text(50, start_y - 225, f"Screening Date: {data.get('Date', '')}")
+    draw_text(50, start_y - 250, "Medical Condition Identified (4D):", 11, bold=True)
+    draw_text(250, start_y - 250, f"{data.get('Clinical_Findings', '')}", 12)
     
-    # Header
-    pdf.set_font(f_gu, '', 16)
-    pdf.cell(190, 8, lbl_title1, ln=True, align='C')
-    pdf.set_font(f_gu, '', 14)
-    pdf.cell(190, 8, lbl_title2, ln=True, align='C')
-    pdf.ln(5)
+    draw_text(50, start_y - 275, "Primary Treatment Given:", 11, bold=True)
+    draw_text(250, start_y - 275, f"{data.get('Treatment_Given', '')}")
     
-    # Child & Parent Details
-    pdf.set_font(f_gu, '', 11)
-    pdf.cell(190, 8, f"{lbl_name} {data.get('Name', '')}", border='B', ln=True)
+    draw_text(50, start_y - 300, "Referred To (Hospital):", 11, bold=True)
+    draw_text(250, start_y - 300, f"{data.get('Referred_To', '')}", 12, bold=True)
+
+    # --- 5. THE CUSTOM DOCTOR STAMP & SIGNATURE ---
+    stamp_y = start_y - 450
+    stamp_x = 120
     
-    c_w = 95
-    pdf.cell(c_w, 8, f"{lbl_gender} {data.get('Gender', '')}")
-    pdf.cell(c_w, 8, f"{lbl_dob} {data.get('DOB', '')}", ln=True)
+    # Draw the circular stamp
+    c.setStrokeColor(colors.HexColor("#1e3a8a")) # Deep Blue Stamp Color
+    c.setLineWidth(2)
+    c.circle(stamp_x, stamp_y, 45, stroke=1, fill=0)
+    c.circle(stamp_x, stamp_y, 40, stroke=1, fill=0) # Inner circle
     
-    pdf.cell(c_w, 8, f"{lbl_age} {data.get('Age', '')}")
-    pdf.cell(c_w, 8, f"TECHO ID: {data.get('Techo', 'N/A')}", ln=True)
+    # Stamp Text (Centered inside circle)
+    c.setFillColor(colors.HexColor("#1e3a8a"))
+    c.setFont("Helvetica-Bold", 10)
+    c.drawCentredString(stamp_x, stamp_y + 10, "RBSK MO")
+    c.drawCentredString(stamp_x, stamp_y - 5, "VISAVADAR")
+    c.setFont("Helvetica", 8)
+    c.drawCentredString(stamp_x, stamp_y - 20, "Official Seal")
     
-    pdf.ln(2)
-    pdf.cell(190, 8, f"{lbl_father} {data.get('Father', '')}", ln=True)
-    pdf.cell(190, 8, f"{lbl_mother} {data.get('Mother', '')}", ln=True)
-    pdf.cell(190, 8, f"{lbl_address} {data.get('Address', '')}", ln=True)
-    
-    pdf.cell(c_w, 8, f"{lbl_village} {data.get('Village', '')}")
-    pdf.cell(c_w, 8, lbl_taluka, ln=True)
-    
-    pdf.cell(c_w, 8, lbl_dist)
-    pdf.cell(c_w, 8, f"{lbl_inst} {data.get('Institution', '')}", ln=True)
-    
-    # 4D Categories & Condition
-    pdf.ln(5)
-    pdf.set_font(f_gu, '', 12)
-    pdf.cell(190, 8, lbl_4d, ln=True)
-    pdf.set_font('Arial', '', 10)
-    pdf.cell(190, 8, "[ ] Birth Defect   [ ] Deficiency   [ ] Disease   [ ] Development Delay", ln=True)
-    
-    pdf.ln(3)
-    pdf.set_fill_color(240, 240, 240)
-    pdf.set_font(f_gu, '', 12)
-    pdf.cell(190, 10, lbl_condition, border=1, ln=True, fill=True)
-    pdf.set_font('Arial', '', 11) # Keep medical condition in English
-    pdf.multi_cell(190, 10, f"\n {data.get('Condition', 'None')} \n", border=1)
-    
-    # Signatures & Dates
-    pdf.ln(10)
-    pdf.set_font(f_gu, '', 11)
-    pdf.cell(c_w, 8, f"{lbl_team} 1240315")
-    pdf.cell(c_w, 8, f"{lbl_date} {data.get('Date', '')}", ln=True)
-    
-    pdf.ln(20)
-    pdf.set_font('Arial', '', 10)
-    pdf.cell(c_w, 8, "_______________________")
-    pdf.cell(c_w, 8, "_______________________", ln=True)
-    pdf.cell(c_w, 8, "Medical Officer Signature")
-    pdf.cell(c_w, 8, "Institute/AWC Stamp", ln=True)
-    
-    return bytes(pdf.output())
+    # Doctor Signature Line
+    c.setFillColor(colors.black)
+    draw_text(350, stamp_y - 20, "___________________________")
+    draw_text(360, stamp_y - 35, f"Medical Officer: {data.get('MO_Name', '')}")
+    draw_text(360, stamp_y - 50, "RBSK Mobile Health Team")
+
+    # Finalize PDF
+    c.save()
+    buffer.seek(0)
+    return buffer.getvalue()
 # --- 1. GET THE LIVE DATABASE CONNECTION ---
 def get_spreadsheet():
     creds_dict = json.loads(st.secrets["gcp_service_account"])
@@ -702,11 +681,33 @@ elif menu == "3. 4D Defect Registry":
                 p_data = next(item for item in all_defects if item["Name"] == sel)
                 
                 with st.form("refer_card_print_form"):
-                    st.write(f"### Referral for {sel}")
-                    p_data['Mother'] = st.text_input("Mother's Name")
-                    p_data['Address'] = st.text_input("Address", value=p_data['Institution'])
-                    p_data['Date'] = st.date_input("Referral Date")
-                    prepare_pdf = st.form_submit_button("Prepare PDF for Printing")
+                    st.write("### 📝 Doctor's Clinical Referral Details")
+                    
+                    # Row 1: Demographics Auto-fill (Editable just in case)
+                    c1, c2, c3 = st.columns(3)
+                    with c1: p_data['Parent_Name'] = st.text_input("Father's Name", value=p_data.get('Father', ''))
+                    with c2: p_data['Mother'] = st.text_input("Mother's Name", placeholder="Enter Mother's Name")
+                    with c3: p_data['Contact_Num'] = st.text_input("Contact Number", value=p_data.get('Contact', ''), max_chars=10)
+                    
+                    # Row 2: Location & Status
+                    c4, c5 = st.columns(2)
+                    with c4: p_data['Village'] = st.text_input("Village / City", value=p_data.get('Institution', ''))
+                    with c5: p_data['School_Status'] = st.selectbox("Child Status", ["School Going", "Not School Going", "Anganwadi"])
+                    
+                    st.divider()
+                    
+                    # Row 3: Medical & Referral Details
+                    p_data['Clinical_Findings'] = st.text_area("Medical Condition / 4D", value=p_data.get('Condition', ''))
+                    
+                    c6, c7 = st.columns(2)
+                    with c6: p_data['Treatment_Given'] = st.text_input("Primary Treatment Given", value="Counselling and Referral")
+                    with c7: p_data['Referred_To'] = st.text_input("Referred To (Hospital)", value="CIVIL HOSPITAL JUNAGADH")
+                    
+                    c8, c9 = st.columns(2)
+                    with c8: p_data['MO_Name'] = st.text_input("Medical Officer Name", value="Dr. NIHAR UPADHYAY")
+                    with c9: p_data['Date'] = st.date_input("Official Referral Date")
+                        
+                    prepare_pdf = st.form_submit_button("🖨️ Generate Official Card & Stamp")
                 
                 if prepare_pdf:
                     # Generate and wrap in bytes for download
@@ -1560,6 +1561,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
