@@ -337,7 +337,18 @@ if st.sidebar.button("🔓 Logout"):
 # ==========================================
 # MODULE 1: DAILY TOUR PLANNER
 # ==========================================
-if menu == "1. Daily Tour Plan":
+elif menu == "1. Dashboard":
+    st.title("📊 District Health Command Center")
+    st.markdown("### Visavadar MHT-1 | Live Screening & Schedule")
+    st.divider()
+
+    # --- CREATE THE TABS ---
+    tab_tour, tab_charts = st.tabs(["📅 Daily Tour Plan", "📈 Executive Analytics"])
+
+    # --- TAB 1: YOUR ORIGINAL TOUR PLAN ---
+    with tab_tour:
+        st.markdown("#### 🗺️ Today's Field Schedule")
+    if menu == "1. Daily Tour Plan":
     render_header("Executive Dashboard", "Live team overview and daily screening stats", "📊", "#3b82f6")
     st.write("Plan, edit, and track your medical team's field visits.")
 
@@ -423,11 +434,7 @@ if menu == "1. Daily Tour Plan":
 # ==========================================
 # MODULE 1: THE EXECUTIVE DASHBOARD
 # ==========================================
-elif menu == "1. Dashboard":
-    st.title("📊 District Health Command Center")
-    st.markdown("### Visavadar MHT-1 | Live Screening Analytics")
-    st.divider()
-
+with tab_charts:
     # --- 1. SILENT DATA LOADER ---
     @st.cache_data(ttl=600)
     def fetch_dashboard_data():
@@ -1669,6 +1676,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
