@@ -461,7 +461,7 @@ elif menu == "2. Child Screening":
             with st.form("vitals_form"):
                 screening_date = st.date_input("Date of Screening")
                 c_col1, c_col2 = st.columns(2)
-                with c_col1: updated_contact = st.text_input("📞 Contact Number", value=existing_contact)
+                with c_col1: updated_contact = st.text_input("📞 Contact Number", value=existing_contact, max_chars=10, placeholder="10-digit mobile number")
                 with c_col2: techo_id = st.text_input("🆔 Techo ID") if category == "👶 Anganwadi" else "N/A"
 
                 v_col1, v_col2, v_col3, v_col4 = st.columns(4)
@@ -479,6 +479,11 @@ elif menu == "2. Child Screening":
                 save_btn = st.form_submit_button("💾 Save Screening Data")
 
             # --- ACTION BLOCK PROPERLY INDENTED OUTSIDE THE FORM ---
+            if save_btn:
+                # NEW: Strict 10-digit check!
+                if updated_contact and len(updated_contact.strip()) != 10:
+                    st.error("⚠️ Please enter a valid 10-digit contact number.")
+                else:
             if save_btn:
                 # 1. THE AUTOMATIC SAM/MAM CALCULATOR (Autopilot)
                 final_status = "Normal"
@@ -1449,6 +1454,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
