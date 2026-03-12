@@ -82,7 +82,7 @@ def generate_refer_card(data):
     pdf.cell(95, 8, "MHT Team: 1240315")
     pdf.cell(95, 8, f"Date: {data.get('Date', '')}", ln=True)
     
-    return pdf.output()
+    return bytes(pdf.output())
 # --- 1. GET THE LIVE DATABASE CONNECTION ---
 def get_spreadsheet():
     creds_dict = json.loads(st.secrets["gcp_service_account"])
@@ -502,9 +502,15 @@ elif menu == "3. 4D Defect Registry":
                     prepare_pdf = st.form_submit_button("Prepare PDF for Printing")
                 
                 if prepare_pdf:
-                    # NOW THE APP CAN FIND THE FUNCTION!
-                    pdf_bytes = generate_refer_card(p_data)
+                    # 1. Generate the PDF
+                    pdf_output = generate_refer_card(p_data)
+                    
+                    # 2. Convert to raw bytes specifically for Streamlit
+                    pdf_bytes = bytes(pdf_output)
+                    
                     st.success(f"✅ PDF Prepared for {sel}!")
+                    
+                    # 3. The Button
                     st.download_button(
                         label="⬇️ Download Official Refer Card", 
                         data=pdf_bytes, 
@@ -1351,6 +1357,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
