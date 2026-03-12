@@ -11,76 +11,124 @@ import plotly.express as px  # <-- NEW: THE GRAPHICS ENGINE!
 # GLOBAL PDF ENGINE (Place this at the Top)
 # ==========================================
 import os
+import urllib.request
 from fpdf import FPDF
 
 def generate_refer_card(data):
     pdf = FPDF(orientation="P", unit="mm", format="A4")
     pdf.add_page()
-    font_path = "gujarati.ttf"
     
-    # Check for the font file
-    font_exists = os.path.exists(font_path) and font_path.endswith(".ttf")
+    # 🌟 MAGIC FONT DOWNLOADER 🌟
+    # If the font isn't there, the app downloads it automatically!
+    font_path = "gujarati.ttf"
+    if not os.path.exists(font_path):
+        try:
+            url = "https://github.com/googlefonts/noto-fonts/raw/main/hinted/ttf/NotoSansGujarati/NotoSansGujarati-Regular.ttf"
+            urllib.request.urlretrieve(url, font_path)
+        except Exception as e:
+            pass # Fallback to English if internet fails
+
+    # Check if font successfully downloaded
+    font_exists = os.path.exists(font_path)
     
     if font_exists:
         try:
             pdf.add_font('Gujarati', '', font_path)
             pdf.set_font('Gujarati', '', 12)
             f_gu = 'Gujarati'
-            lbl_title = "રાષ્ટ્રીય બાળ સ્વાસ્થ્ય કાર્યક્રમ (સંદર્ભ કાર્ડ)"
-            lbl_name = "બાળકનું પૂરુ નામ (Name)"
-            lbl_gender = "જાતિ (Gender)"
-            lbl_dob = "જન્મ તારીખ (DOB)"
-            lbl_age = "ઉંમર (Age)"
-            lbl_father = "પિતાનું નામ (Father)"
-            lbl_mother = "માતાનું નામ (Mother)"
-            lbl_address = "સરનામું (Address)"
-            lbl_village = "ગામ (Village)"
-            lbl_taluka = "તાલુકો (Taluka)"
-            lbl_condition = "બીમારીની વિગત (Condition)"
+            
+            # EXACT LABELS FROM YOUR PHYSICAL CARD
+            lbl_title1 = "RBSK સંદર્ભ કાર્ડ"
+            lbl_title2 = "શાળા આરોગ્ય - રાષ્ટ્રીય બાળ સ્વાસ્થ્ય કાર્યક્રમ"
+            lbl_name = "બાળકનું પૂરુ નામ:"
+            lbl_gender = "સ્ત્રી / પુરુષ:"
+            lbl_dob = "બાળકની જન્મ તારીખ:"
+            lbl_age = "ઉંમર:"
+            lbl_father = "બાળકના પિતાનું પૂરુ નામ:"
+            lbl_mother = "માતાનું નામ:"
+            lbl_address = "પૂરુ સરનામું:"
+            lbl_village = "ગામ / શહેર:"
+            lbl_taluka = "તાલુકો: Visavadar"
+            lbl_dist = "જિલ્લો: JUNAGADH"
+            lbl_inst = "શાળા / આંગણવાડીનું નામ:"
+            lbl_4d = "4D Category:"
+            lbl_condition = "પ્રાથમિક તપાસણીની વિગત:"
+            lbl_team = "મોબાઈલ હેલ્થ ટીમ નંબર:"
+            lbl_date = "પ્રાથમિક તપાસણી કર્યા તારીખ:"
         except:
             font_exists = False
 
     if not font_exists:
         pdf.set_font('Arial', '', 12)
         f_gu = 'Arial'
-        lbl_title = "RBSK Refer Card"
-        lbl_name = "Name"; lbl_gender = "Gender"; lbl_dob = "DOB"
-        lbl_age = "Age"; lbl_father = "Father"; lbl_mother = "Mother"
-        lbl_address = "Address"; lbl_village = "Village"; lbl_taluka = "Taluka"
-        lbl_condition = "Condition"
+        lbl_title1 = "RBSK Refer Card"
+        lbl_title2 = "School Health - National Child Health Program"
+        lbl_name = "Name:"; lbl_gender = "Gender:"; lbl_dob = "DOB:"
+        lbl_age = "Age:"; lbl_father = "Father's Name:"; lbl_mother = "Mother's Name:"
+        lbl_address = "Address:"; lbl_village = "Village/City:"
+        lbl_taluka = "Taluka: Visavadar"; lbl_dist = "District: JUNAGADH"
+        lbl_inst = "School / AWC Name:"; lbl_4d = "4D Category:"
+        lbl_condition = "Suspected Condition / Findings:"
+        lbl_team = "MHT Team No:"; lbl_date = "Screening Date:"
 
-    # Draw Border & Content
-    pdf.rect(5, 5, 200, 287)
-    pdf.set_font('Arial', 'B', 16)
-    pdf.cell(190, 10, "RBSK - REFER CARD", ln=True, align='C')
+    # --- DRAW THE EXACT CARD FORMAT ---
+    pdf.rect(5, 5, 200, 287) # Outer Border
+    
+    # Header
+    pdf.set_font(f_gu, '', 16)
+    pdf.cell(190, 8, lbl_title1, ln=True, align='C')
     pdf.set_font(f_gu, '', 14)
-    pdf.cell(190, 8, lbl_title, ln=True, align='C')
+    pdf.cell(190, 8, lbl_title2, ln=True, align='C')
     pdf.ln(5)
     
+    # Child & Parent Details
     pdf.set_font(f_gu, '', 11)
-    pdf.cell(190, 8, f"{lbl_name}: {data.get('Name', '')}", border='B', ln=True)
-    pdf.cell(95, 8, f"{lbl_gender}: {data.get('Gender', '')}", border='R')
-    pdf.cell(95, 8, f"{lbl_dob}: {data.get('DOB', '')}", ln=True)
-    pdf.cell(95, 8, f"{lbl_age}: {data.get('Age', '')}", border='R')
-    pdf.cell(95, 8, f"Techo ID: {data.get('Techo', 'N/A')}", ln=True)
-    pdf.ln(2)
-    pdf.cell(190, 8, f"{lbl_father}: {data.get('Father', '')}", ln=True)
-    pdf.cell(190, 8, f"{lbl_mother}: {data.get('Mother', '')}", ln=True)
-    pdf.cell(190, 8, f"{lbl_address}: {data.get('Address', '')}", ln=True)
-    pdf.cell(95, 8, f"{lbl_village}: {data.get('Village', '')}", border='R')
-    pdf.cell(95, 8, f"{lbl_taluka}: Visavadar", ln=True)
+    pdf.cell(190, 8, f"{lbl_name} {data.get('Name', '')}", border='B', ln=True)
     
-    pdf.ln(10)
-    pdf.set_fill_color(240, 240, 240)
-    pdf.set_font('Arial', 'B', 11)
-    pdf.cell(190, 10, lbl_condition.upper(), border=1, ln=True, fill=True)
+    c_w = 95
+    pdf.cell(c_w, 8, f"{lbl_gender} {data.get('Gender', '')}")
+    pdf.cell(c_w, 8, f"{lbl_dob} {data.get('DOB', '')}", ln=True)
+    
+    pdf.cell(c_w, 8, f"{lbl_age} {data.get('Age', '')}")
+    pdf.cell(c_w, 8, f"TECHO ID: {data.get('Techo', 'N/A')}", ln=True)
+    
+    pdf.ln(2)
+    pdf.cell(190, 8, f"{lbl_father} {data.get('Father', '')}", ln=True)
+    pdf.cell(190, 8, f"{lbl_mother} {data.get('Mother', '')}", ln=True)
+    pdf.cell(190, 8, f"{lbl_address} {data.get('Address', '')}", ln=True)
+    
+    pdf.cell(c_w, 8, f"{lbl_village} {data.get('Village', '')}")
+    pdf.cell(c_w, 8, lbl_taluka, ln=True)
+    
+    pdf.cell(c_w, 8, lbl_dist)
+    pdf.cell(c_w, 8, f"{lbl_inst} {data.get('Institution', '')}", ln=True)
+    
+    # 4D Categories & Condition
+    pdf.ln(5)
     pdf.set_font(f_gu, '', 12)
+    pdf.cell(190, 8, lbl_4d, ln=True)
+    pdf.set_font('Arial', '', 10)
+    pdf.cell(190, 8, "[ ] Birth Defect   [ ] Deficiency   [ ] Disease   [ ] Development Delay", ln=True)
+    
+    pdf.ln(3)
+    pdf.set_fill_color(240, 240, 240)
+    pdf.set_font(f_gu, '', 12)
+    pdf.cell(190, 10, lbl_condition, border=1, ln=True, fill=True)
+    pdf.set_font('Arial', '', 11) # Keep medical condition in English
     pdf.multi_cell(190, 10, f"\n {data.get('Condition', 'None')} \n", border=1)
     
+    # Signatures & Dates
     pdf.ln(10)
-    pdf.set_font('Arial', 'B', 10)
-    pdf.cell(95, 8, "MHT Team: 1240315")
-    pdf.cell(95, 8, f"Date: {data.get('Date', '')}", ln=True)
+    pdf.set_font(f_gu, '', 11)
+    pdf.cell(c_w, 8, f"{lbl_team} 1240315")
+    pdf.cell(c_w, 8, f"{lbl_date} {data.get('Date', '')}", ln=True)
+    
+    pdf.ln(20)
+    pdf.set_font('Arial', '', 10)
+    pdf.cell(c_w, 8, "_______________________")
+    pdf.cell(c_w, 8, "_______________________", ln=True)
+    pdf.cell(c_w, 8, "Medical Officer Signature")
+    pdf.cell(c_w, 8, "Institute/AWC Stamp", ln=True)
     
     return bytes(pdf.output())
 # --- 1. GET THE LIVE DATABASE CONNECTION ---
@@ -1357,6 +1405,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
