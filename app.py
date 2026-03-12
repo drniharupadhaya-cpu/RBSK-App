@@ -8,6 +8,24 @@ import os
 import time
 import plotly.express as px  # <-- NEW: THE GRAPHICS ENGINE!
 # ==========================================
+# UI DESIGN STUDIO: COLORFUL MODULE BANNERS
+# ==========================================
+def render_header(title, subtitle, icon, bg_color):
+    """Creates a beautiful, colorful graphic banner for each module."""
+    st.markdown(f"""
+    <div style="background: linear-gradient(135deg, {bg_color} 0%, #2b323c 100%); 
+                padding: 25px; 
+                border-radius: 15px; 
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
+                margin-bottom: 25px;
+                border-left: 8px solid white;">
+        <h1 style="color: white; margin: 0; font-size: 32px;">
+            <span style="font-size: 40px; margin-right: 15px;">{icon}</span>{title}
+        </h1>
+        <p style="color: #e2e8f0; font-size: 18px; margin-top: 8px; margin-bottom: 0;">{subtitle}</p>
+    </div>
+    """, unsafe_allow_html=True)
+# ==========================================
 # GLOBAL PDF ENGINE (Place this at the Top)
 # ==========================================
 import os
@@ -205,7 +223,7 @@ menu = st.sidebar.radio("Go to:",
 # MODULE 1: DAILY TOUR PLANNER
 # ==========================================
 if menu == "1. Daily Tour Plan":
-    st.title("📅 Official Advance Tour Planner")
+    render_header("Executive Dashboard", "Live district overview and daily screening stats", "📊", "#3b82f6")
     st.write("Plan, edit, and track your medical team's field visits.")
 
     try:
@@ -292,7 +310,7 @@ if menu == "1. Daily Tour Plan":
 # MODULE 2: EMR SCREENING (WITH WHO Z-SCORE & MUAC AUTOPILOT)
 # ==========================================
 elif menu == "2. Child Screening":
-    st.title("📝 EMR Screening Form")
+    render_header("Child Screening & EMR", "Record vitals and auto-calculate SAM/MAM", "🩺", "#10b981")
     st.write("View historical data, enter new vitals, and auto-triage malnutrition.")
 
     # --- CLINICAL MATH ENGINE: WHO WEIGHT-FOR-HEIGHT REFERENCE ---
@@ -485,7 +503,7 @@ elif menu == "2. Child Screening":
 # MODULE 3: 4D DEFECT REGISTRY & REFER CARD
 # ==========================================
 elif menu == "3. 4D Defect Registry":
-    st.title("🔍 4D Defect Command Center")
+    render_header("4D Defect Command Center", "Track referrals and generate official print cards", "📋", "#8b5cf6")
 
     @st.cache_data(ttl=10)
     def get_live_defects():
@@ -570,7 +588,7 @@ elif menu == "3. 4D Defect Registry":
 # MODULE 4: THE LIVING DASHBOARD (NEW!)
 # ==========================================
 elif menu == "4. Visual Analysis":
-    st.title("📈 District Health Command Dashboard")
+    render_header("Visual Analytics", "Geographical mapping and health trends", "🗺️", "#f97316")
     st.write("Living, breathing visual analytics of your entire RBSK program.")
 
     # Helper function for defect checking
@@ -720,7 +738,7 @@ elif menu == "4. Visual Analysis":
 # MODULE 5: HBNC NEWBORN VISIT
 # ==========================================
 elif menu == "5. HBNC Newborn Visit":
-    st.title("🍼 HBNC Neonatal Visit")
+    render_header("State Reporting Portal", "Automated generation of government formats", "📝", "#14b8a6")
     with st.form("hbnc_form"):
         st.markdown("#### 👶 Details")
         c1, c2, c3 = st.columns(3)
@@ -758,7 +776,7 @@ elif menu == "5. HBNC Newborn Visit":
 # MODULE 6: SUCCESS STORY BUILDER
 # ==========================================
 elif menu == "6. Success Story Builder":
-    st.title("🌟 Success Story Generator")
+    render_header("SAM & CMTC Tracker", "Follow-up monitoring for severe acute malnutrition", "🏥", "#e11d48")
     if not df_4d.empty:
         df_4d.columns = df_4d.columns.astype(str).str.strip().str.upper()
         if 'NAME' in df_4d.columns and '4D' in df_4d.columns and 'VILLAGE' in df_4d.columns:
@@ -837,7 +855,7 @@ elif menu == "6. Success Story Builder":
 # MODULE 7: ANEMIA TRACKER
 # ==========================================
 elif menu == "7. Anemia Tracker":
-    st.title("🩸 Anemia Camp & Analytics Dashboard")
+    render_header("Annual FY Planner", "Schedule school and Anganwadi visits for the year", "📅", "#f59e0b")
     st.write("Track Hemoglobin levels and analyze historical trends.")
 
     tab_dash, tab_entry = st.tabs(["📈 Interactive Dashboard", "➕ Enter New Camp Data"])
@@ -949,7 +967,7 @@ elif menu == "7. Anemia Tracker":
 # MODULE 8: SCHOOL DIRECTORY
 # ==========================================
 elif menu == "8. School Directory":
-    st.title("🏫 Digital School Directory")
+    render_header("Master Data Management", "Update student and beneficiary databases", "🗄️", "#4f46e5")
     st.write("Instantly look up school demographics, principals, and class sizes.")
 
     if not df_directory.empty:
@@ -1003,7 +1021,7 @@ elif menu == "8. School Directory":
 # MODULE 9: ANGANWADI DIRECTORY 
 # ==========================================
 elif menu == "9. Anganwadi Directory":
-    st.title("👶 Anganwadi Contact Directory")
+    render_header("Team Configuration", "Manage team details and application settings", "⚙️", "#64748b")
     st.write("Instantly look up Anganwadi Workers and their contact numbers.")
 
     if not df_aw_contacts.empty:
@@ -1035,7 +1053,7 @@ elif menu == "9. Anganwadi Directory":
 # MODULE 10: STAFF DIRECTORY
 # ==========================================
 elif menu == "10. Staff Directory":
-    st.title("👨‍⚕️ Master Staff Directory")
+    render_header("Help & Documentation", "Guidelines, tooltips, and system support", "🆘", "#ec4899")
     st.write("Filter by Headquarter or Designation to find your team members instantly.")
 
     if not df_staff.empty:
@@ -1403,6 +1421,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
