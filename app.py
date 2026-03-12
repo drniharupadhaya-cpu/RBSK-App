@@ -630,7 +630,7 @@ def get_age(dob_str):
     except:
         return "N/A"
 
-    # --- 1. THE DATA LOADER WITH FORCE REFRESH ---
+    # --- 1. THE DATA LOADER ---
     @st.cache_data(ttl=600)
     def get_live_defects():
         try:
@@ -640,7 +640,6 @@ def get_age(dob_str):
         except:
             return pd.DataFrame(), pd.DataFrame()
 
-    # Manual Sync Button for the team
     if st.button("🔄 Sync & Refresh Data"):
         st.cache_data.clear()
         st.success("Database refreshed! Fetching latest entries...")
@@ -650,17 +649,14 @@ def get_age(dob_str):
     all_defects = []
 
     def is_real_defect(val):
-        """Filters out 'Normal' or 'None' results."""
         v = str(val).strip().lower()
         return v not in ['', 'nan', 'none', 'no', 'null', 'na', 'false', 'normal', '-']
 
-    # --- 2. UNIVERSAL SCANNER (Finds data even if columns shift) ---
+    # --- 2. UNIVERSAL SCANNER ---
     for df_type, df in [("Anganwadi", aw_logs), ("School", sch_logs)]:
         if not df.empty:
             df.columns = [str(c).strip() for c in df.columns]
-            
             for _, row in df.iterrows():
-                # Disease/Status detection
                 d_val = str(row.get('Disease', row.get('Diseases', row.get('4d', '')))).strip()
                 s_val = str(row.get('Status', '')).strip()
                 
@@ -669,7 +665,6 @@ def get_age(dob_str):
                     if is_real_defect(s_val): condition_parts.append(s_val)
                     if is_real_defect(d_val): condition_parts.append(d_val)
                     
-                    # Universal Column Picker
                     def get_val(search_terms, fallback="Unknown"):
                         for col in df.columns:
                             if any(term in col.lower() for term in search_terms):
@@ -694,57 +689,42 @@ def get_age(dob_str):
     with tab_reg:
         if all_defects:
             df_display = pd.DataFrame(all_defects)
-            
-            # Quick Stats Summary
             c1, c2 = st.columns(2)
             c1.metric("Total Referrals", len(all_defects))
             c2.info("💡 Pro-tip: You can call parents using the 'Contact' column on mobile.")
-
-            # The Registry Table
-            st.dataframe(
-                df_display[['Date', 'Name', 'Institution', 'Condition', 'Contact']], 
-                use_container_width=True, 
-                hide_index=True
-            )
+            st.dataframe(df_display[['Date', 'Name', 'Institution', 'Condition', 'Contact']], use_container_width=True, hide_index=True)
         else:
             st.info("Registry empty. Start screening in Module 2!")
 
     with tab_card:
         if all_defects:
-            # Create list of names for selection
-            names = [d['Name'] for d in all_defects]
-            sel = st.selectbox("Select Child for Refer Card:", ["-- Select --"] + names)
+            display_names = {f"{d['Name']} ({d['Institution']})": d['Name'] for d in all_defects}
+            sel_display = st.selectbox("Select Child for Refer Card:", ["-- Select --"] + list(display_names.keys()))
             
-            if sel != "-- Select --":
-                # Find the specific data for the selected child
-                p_data = next(item for item in all_defects if item["Name"] == sel)
-                p_data['Age'] = get_age(p_data.get('DOB', ''))
-                # ------------------------------------
-
-                st.markdown(f"### 🪪 Preparing Card for: **{actual_name}**")
+            if sel_display != "-- Select --":
+                actual_name = display_names[sel_display]
+                p_data = next(item for item in all_defects if item["Name"] == actual_name)
                 
-                # Show the age next to the condition so the doctor sees it
+                # Add Age
+                p_data['Age'] = get_age(p_data.get('DOB', ''))
+                
+                st.markdown(f"### 🪪 Preparing Card for: **{actual_name}**")
                 st.info(f"**Child Age:** {p_data['Age']} | **Condition:** {p_data.get('Condition', 'Unknown')}")
                 
                 with st.form("refer_card_print_form"):
-                
-                
                     st.write("### 📝 Doctor's Clinical Referral Details")
                     
-                    # Row 1: Demographics Auto-fill (Editable just in case)
                     c1, c2, c3 = st.columns(3)
                     with c1: p_data['Parent_Name'] = st.text_input("Father's Name", value=p_data.get('Father', ''))
                     with c2: p_data['Mother'] = st.text_input("Mother's Name", placeholder="Enter Mother's Name")
                     with c3: p_data['Contact_Num'] = st.text_input("Contact Number", value=p_data.get('Contact', ''), max_chars=10)
                     
-                    # Row 2: Location & Status
                     c4, c5 = st.columns(2)
                     with c4: p_data['Village'] = st.text_input("Village / City", value=p_data.get('Institution', ''))
                     with c5: p_data['School_Status'] = st.selectbox("Child Status", ["School Going", "Not School Going", "Anganwadi"])
                     
                     st.divider()
                     
-                    # Row 3: Medical & Referral Details
                     p_data['Clinical_Findings'] = st.text_area("Medical Condition / 4D", value=p_data.get('Condition', ''))
                     
                     c6, c7 = st.columns(2)
@@ -758,20 +738,17 @@ def get_age(dob_str):
                     prepare_pdf = st.form_submit_button("🖨️ Generate Official Card & Stamp")
                 
                 if prepare_pdf:
-                    # Generate and wrap in bytes for download
                     pdf_output = generate_refer_card(p_data)
                     pdf_bytes = bytes(pdf_output)
-                    
-                    st.success(f"✅ PDF Prepared for {sel}!")
+                    st.success(f"✅ PDF Prepared for {actual_name}!")
                     st.download_button(
-                        label=f"⬇️ Download Refer Card for {sel}", 
+                        label=f"⬇️ Download Refer Card for {actual_name}", 
                         data=pdf_bytes, 
-                        file_name=f"Refer_{sel}.pdf", 
+                        file_name=f"Refer_{actual_name}.pdf", 
                         mime="application/pdf"
                     )
         else:
             st.warning("No children found in registry to generate a card.")
-
 # ==========================================
 # MODULE 4: THE LIVING DASHBOARD (NEW!)
 # ==========================================
@@ -1609,6 +1586,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
