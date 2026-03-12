@@ -337,10 +337,11 @@ if st.sidebar.button("🔓 Logout"):
 # ==========================================
 # MODULE 1: DAILY TOUR PLANNER
 # ==========================================
+# ==========================================
+# MODULE 1: THE EXECUTIVE DASHBOARD & TOUR PLAN
+# ==========================================
 elif menu == "1. Dashboard":
-    st.title("📊 District Health Command Center")
-    st.markdown("### Visavadar MHT-1 | Live Screening & Schedule")
-    st.divider()
+    render_header("Executive Dashboard", "Live team overview and daily screening stats", "📊", "#3b82f6")
 
     # --- CREATE THE TABS ---
     tab_tour, tab_charts = st.tabs(["📅 Daily Tour Plan", "📈 Executive Analytics"])
@@ -348,8 +349,12 @@ elif menu == "1. Dashboard":
     # --- TAB 1: YOUR ORIGINAL TOUR PLAN ---
     with tab_tour:
         st.markdown("#### 🗺️ Today's Field Schedule")
-    if menu == "1. Daily Tour Plan":
-    render_header("Executive Dashboard", "Live team overview and daily screening stats", "📊", "#3b82f6")
+        st.info("📍 **Location:** Visavadar Taluka")
+        
+        # ⚠️ PASTE YOUR ORIGINAL DAILY TOUR PLAN CODE RIGHT HERE! ⚠️
+        # (Make sure the code you paste lines up vertically with this comment)
+        if menu == "1. Daily Tour Plan":
+     render_header("Executive Dashboard", "Live team overview and daily screening stats", "📊", "#3b82f6")
     st.write("Plan, edit, and track your medical team's field visits.")
 
     try:
@@ -431,83 +436,70 @@ elif menu == "1. Dashboard":
                         st.rerun()
         else:
             st.info("No visits available to edit.")
-# ==========================================
-# MODULE 1: THE EXECUTIVE DASHBOARD
-# ==========================================
-with tab_charts:
-    # --- 1. SILENT DATA LOADER ---
-    @st.cache_data(ttl=600)
-    def fetch_dashboard_data():
-        try:
-            aw = pd.DataFrame(spreadsheet.worksheet("daily_screenings_aw").get_all_records())
-            sch = pd.DataFrame(spreadsheet.worksheet("daily_screenings_schools").get_all_records())
-            
-            # Standardize a 'Type' column so we know where the kid came from
-            if not aw.empty: aw['Location_Type'] = 'Anganwadi'
-            if not sch.empty: sch['Location_Type'] = 'School'
-            
-            # Combine them into one massive dataframe
-            master = pd.concat([aw, sch], ignore_index=True)
-            return master
-        except:
-            return pd.DataFrame()
-
-    df = fetch_dashboard_data()
-
-    if df.empty:
-        st.warning("⚠️ No data found in the database. Start screening in Module 2!")
-    else:
-        # --- 2. THE BOSS SUMMARY (Top Metrics) ---
-        st.markdown("#### 📈 Quick Overview")
         
-        # Calculate totals
-        total_screened = len(df)
-        total_aw = len(df[df['Location_Type'] == 'Anganwadi'])
-        total_sch = len(df[df['Location_Type'] == 'School'])
-        
-        # Calculate referred (Kids who don't have 'Normal' or 'None' in Status)
-        if 'Status' in df.columns:
-            referred_df = df[~df['Status'].astype(str).str.lower().isin(['normal', 'none', '', 'nan'])]
-            total_referred = len(referred_df)
+    # --- TAB 2: THE NEW BOSS DASHBOARD ---
+    with tab_charts:
+        @st.cache_data(ttl=600)
+        def fetch_dashboard_data():
+            try:
+                aw = pd.DataFrame(spreadsheet.worksheet("daily_screenings_aw").get_all_records())
+                sch = pd.DataFrame(spreadsheet.worksheet("daily_screenings_schools").get_all_records())
+                
+                if not aw.empty: aw['Location_Type'] = 'Anganwadi'
+                if not sch.empty: sch['Location_Type'] = 'School'
+                
+                return pd.concat([aw, sch], ignore_index=True)
+            except:
+                return pd.DataFrame()
+
+        df = fetch_dashboard_data()
+
+        if df.empty:
+            st.warning("⚠️ No data found in the database. Start screening in Module 2!")
         else:
-            referred_df = pd.DataFrame()
-            total_referred = 0
-
-        # Draw the 4 Big Number Cards
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Total Screened", total_screened)
-        c2.metric("Anganwadi Screenings", total_aw)
-        c3.metric("School Screenings", total_sch)
-        c4.metric("🚨 Total Referrals", total_referred, delta="Requires Action", delta_color="inverse")
-
-        st.divider()
-
-        # --- 3. THE ANALYST MICROSCOPE (Interactive Charts) ---
-        st.markdown("#### 🔬 Deep Dive Analytics")
-        
-        chart_col1, chart_col2 = st.columns(2)
-
-        with chart_col1:
-            st.markdown("**Screenings by Location**")
-            # A beautiful, colorful donut chart
-            loc_counts = df['Location_Type'].value_counts().reset_index()
-            loc_counts.columns = ['Location', 'Count']
-            fig_loc = px.pie(loc_counts, values='Count', names='Location', hole=0.4, 
-                             color_discrete_sequence=['#10b981', '#3b82f6'])
-            st.plotly_chart(fig_loc, use_container_width=True)
-
-        with chart_col2:
-            st.markdown("**Referrals by Condition (4D)**")
-            if not referred_df.empty and 'Disease' in referred_df.columns:
-                # Group by disease to see what is most common
-                disease_counts = referred_df['Disease'].value_counts().reset_index()
-                disease_counts.columns = ['Condition', 'Cases']
-                # A sleek horizontal bar chart
-                fig_dis = px.bar(disease_counts, x='Cases', y='Condition', orientation='h',
-                                 color='Cases', color_continuous_scale='Reds')
-                st.plotly_chart(fig_dis, use_container_width=True)
+            st.markdown("#### 📈 Quick Overview")
+            
+            total_screened = len(df)
+            total_aw = len(df[df['Location_Type'] == 'Anganwadi']) if 'Location_Type' in df.columns else 0
+            total_sch = len(df[df['Location_Type'] == 'School']) if 'Location_Type' in df.columns else 0
+            
+            if 'Status' in df.columns:
+                referred_df = df[~df['Status'].astype(str).str.lower().isin(['normal', 'none', '', 'nan'])]
+                total_referred = len(referred_df)
             else:
-                st.info("Not enough referral data to map conditions yet.")
+                referred_df = pd.DataFrame()
+                total_referred = 0
+
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Total Screened", total_screened)
+            c2.metric("Anganwadi Screenings", total_aw)
+            c3.metric("School Screenings", total_sch)
+            c4.metric("🚨 Total Referrals", total_referred, delta="Requires Action", delta_color="inverse")
+
+            st.divider()
+
+            st.markdown("#### 🔬 Deep Dive Analytics")
+            chart_col1, chart_col2 = st.columns(2)
+
+            with chart_col1:
+                st.markdown("**Screenings by Location**")
+                if 'Location_Type' in df.columns:
+                    loc_counts = df['Location_Type'].value_counts().reset_index()
+                    loc_counts.columns = ['Location', 'Count']
+                    fig_loc = px.pie(loc_counts, values='Count', names='Location', hole=0.4, 
+                                     color_discrete_sequence=['#10b981', '#3b82f6'])
+                    st.plotly_chart(fig_loc, use_container_width=True)
+
+            with chart_col2:
+                st.markdown("**Referrals by Condition (4D)**")
+                if not referred_df.empty and 'Disease' in referred_df.columns:
+                    disease_counts = referred_df['Disease'].value_counts().reset_index()
+                    disease_counts.columns = ['Condition', 'Cases']
+                    fig_dis = px.bar(disease_counts, x='Cases', y='Condition', orientation='h',
+                                     color='Cases', color_continuous_scale='Reds')
+                    st.plotly_chart(fig_dis, use_container_width=True)
+                else:
+                    st.info("Not enough referral data to map conditions yet.")
 # ==========================================
 # MODULE 2: EMR SCREENING (WITH WHO Z-SCORE & MUAC AUTOPILOT)
 # ==========================================
@@ -1676,6 +1668,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
