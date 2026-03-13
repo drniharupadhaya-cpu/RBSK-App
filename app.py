@@ -602,62 +602,55 @@ elif menu == "2. Child Screening":
                 save_btn = st.form_submit_button("💾 Save Screening Data")
 
             # --- ACTION BLOCK PROPERLY ALIGNED ---
-            if save_btn:
-                # QoL UPGRADE: Strict 10-Digit Check
-                if updated_contact and len(updated_contact.strip()) != 10:
-                    st.error("⚠️ Please enter a valid 10-digit contact number before saving.")
-                else:
-                    # Math Translator
-                    def safe_float(val):
-                        try: return float(val)
-                        except: return 0.0
-
-                    height_val = safe_float(height_str)
-                    weight_val = safe_float(weight_str)
-                    muac_val = safe_float(muac_str)
-                    hb_val = safe_float(hb_str)
-
-                    # 1. THE AUTOMATIC SAM/MAM CALCULATOR
-                    final_status = "Normal"
-                    if category == "👶 Anganwadi":
-                        try:
-                            h_m = height_val / 100
-                            bmi = weight_val / (h_m * h_m) if h_m > 0 else 0
-                            
-                            if (muac_val > 0 and muac_val < 11.5) or (bmi > 0 and bmi < 13.0):
-                                final_status = "SAM"
-                            elif (muac_val >= 11.5 and muac_val < 12.5) or (bmi >= 13.0 and bmi < 14.5):
-                                final_status = "MAM"
-                        except:
-                            final_status = "Error in Calculation"
-
-                    # 2. SAVE TO GOOGLE SHEETS
-                    try:
+                if save_btn:
+                    # QoL UPGRADE: Strict 10-Digit Check
+                    if updated_contact and len(updated_contact.strip()) != 10:
+                        st.error("⚠️ Please enter a valid 10-digit contact number before saving.")
+                    else:
+                        # Math Translator
+                        def safe_float(val):
+                            try: return float(val)
+                            except: return 0.0
+    
+                        height_val = safe_float(height_str)
+                        weight_val = safe_float(weight_str)
+                        muac_val = safe_float(muac_str)
+                        hb_val = safe_float(hb_str)
+    
+                        # 1. THE AUTOMATIC SAM/MAM CALCULATOR
+                        final_status = "Normal"
                         if category == "👶 Anganwadi":
-                            ws = spreadsheet.worksheet("daily_screenings_aw")
-                            new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, muac_val, hb_val, disease, updated_contact, techo_id, final_status]
-                            ws.append_row(new_row)
-                            st.success(f"✅ Saved to AWC Log! Status: {final_status}")
-                            if final_status == "SAM":
-                                st.error("🚨 CRITICAL: Child identified as SAM. Refer to CMTC immediately.")
-                        else:
-                            ws = spreadsheet.worksheet("daily_screenings_schools")
-                            new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, hb_val, disease, updated_contact]
-                            ws.append_row(new_row)
-                            st.success(f"✅ Saved to School Log!")
-
-                        else:
-                            ws = spreadsheet.worksheet("daily_screenings_schools")
-                            new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, hb_val, disease, updated_contact]
-                            ws.append_row(new_row)
-                            st.success(f"✅ Saved to School Log!")
-
-                        # 🎯 SURGERY HERE: Only clear the Master Engine, DO NOT nuke the whole app!
-                        get_daily_logs.clear() 
-
-                    except Exception as e:
-
-                        st.error(f"Failed to connect to Google Sheets: {e}")
+                            try:
+                                h_m = height_val / 100
+                                bmi = weight_val / (h_m * h_m) if h_m > 0 else 0
+                                
+                                if (muac_val > 0 and muac_val < 11.5) or (bmi > 0 and bmi < 13.0):
+                                    final_status = "SAM"
+                                elif (muac_val >= 11.5 and muac_val < 12.5) or (bmi >= 13.0 and bmi < 14.5):
+                                    final_status = "MAM"
+                            except:
+                                final_status = "Error in Calculation"
+    
+                        # 2. SAVE TO GOOGLE SHEETS
+                        try:
+                            if category == "👶 Anganwadi":
+                                ws = spreadsheet.worksheet("daily_screenings_aw")
+                                new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, muac_val, hb_val, disease, updated_contact, techo_id, final_status]
+                                ws.append_row(new_row)
+                                st.success(f"✅ Saved to AWC Log! Status: {final_status}")
+                                if final_status == "SAM":
+                                    st.error("🚨 CRITICAL: Child identified as SAM. Refer to CMTC immediately.")
+                            else:
+                                ws = spreadsheet.worksheet("daily_screenings_schools")
+                                new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, hb_val, disease, updated_contact]
+                                ws.append_row(new_row)
+                                st.success(f"✅ Saved to School Log!")
+    
+                            # 🎯 THE SURGERY: Clear ONLY the daily logs, not the whole app memory!
+                            get_daily_logs.clear()
+    
+                        except Exception as e:
+                            st.error(f"Failed to connect to Google Sheets: {e}")
 # ==========================================
 # MODULE 3: 4D DEFECT REGISTRY & FOLLOW-UP
 # ==========================================
@@ -1623,6 +1616,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
