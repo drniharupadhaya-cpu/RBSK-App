@@ -375,8 +375,19 @@ elif menu == "1. Daily Tour Plan":
             submit_tour = st.form_submit_button("💾 Save Tour Plan")
             
             if submit_tour:
-                # You can connect this to a Google Sheet later if you want to save history!
-                st.success(f"✅ Tour plan for {tour_village} saved for {tour_date}!")
+                try:
+                    # Connect to the new worksheet you just made
+                    tour_sheet = spreadsheet.worksheet("tour_plans")
+                    
+                    # Convert the calendar date to a readable text format
+                    date_str = tour_date.strftime("%d-%m-%Y")
+                    
+                    # Send the data to Google Sheets as a new row!
+                    tour_sheet.append_row([date_str, tour_village, tour_school, tour_awc])
+                    
+                    st.success(f"✅ Official Tour Plan for {tour_village} saved to the database!")
+                except Exception as e:
+                    st.error("❌ Could not save! Did you create the 'tour_plans' tab in your Google Sheet?")
         
         st.divider()
         st.markdown("##### ✅ Daily Check-list for MHT-1")
@@ -1604,6 +1615,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
