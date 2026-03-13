@@ -554,12 +554,23 @@ elif menu == "2. Child Screening":
                         except:
                             final_status = "Error in Calculation"
 
+                    # 2. SAVE TO GOOGLE SHEETS
                     try:
                         if category == "👶 Anganwadi":
                             ws = spreadsheet.worksheet("daily_screenings_aw")
                             new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, muac_val, hb_val, disease, updated_contact, techo_id, final_status]
                             ws.append_row(new_row)
                             st.success(f"✅ Saved to AWC Log! Status: {final_status}")
+                            
+                            # 🚀 CMTC AUTO-FORWARDER
+                            if final_status == "SAM" or final_status == "MAM":
+                                try:
+                                    cmtc_ws = spreadsheet.worksheet("cmtc_referral")
+                                    cmtc_ws.append_row([str(screening_date), selected_inst, final_child_name, str(dob), updated_contact, weight_val, height_val, muac_val, final_status])
+                                    st.warning(f"🏥 Auto-forwarded {final_child_name} to CMTC Registry!")
+                                except Exception as e:
+                                    st.error("⚠️ Make sure you have a tab named 'cmtc_referral' in Google Sheets!")
+
                             if final_status == "SAM":
                                 st.error("🚨 CRITICAL: Child identified as SAM. Refer to CMTC immediately.")
                         else:
@@ -1473,3 +1484,4 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
