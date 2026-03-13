@@ -11,6 +11,20 @@ import streamlit as st
 import pandas as pd
 import datetime
 # ... (any other imports you have)
+# --- FETCH DASHBOARD DATA (Must be at the top!) ---
+@st.cache_data(ttl=600)
+def fetch_dashboard_data():
+    try:
+        aw = pd.DataFrame(spreadsheet.worksheet("daily_screenings_aw").get_all_records())
+        sch = pd.DataFrame(spreadsheet.worksheet("daily_screenings_schools").get_all_records())
+        
+        if not aw.empty: aw['Location_Type'] = 'Anganwadi'
+        if not sch.empty: sch['Location_Type'] = 'School'
+        
+        return pd.concat([aw, sch], ignore_index=True)
+    except:
+        return pd.DataFrame()
+
 def get_age(dob_str):
     try:
         # Converts string like "16/8/2025" or "2025-08-16" to a date
@@ -25,19 +39,6 @@ def get_age(dob_str):
         return f"{age_years} Years"
     except:
         return "N/A"
-# --- FETCH DASHBOARD DATA (Must be at the top!) ---
-@st.cache_data(ttl=600)
-def fetch_dashboard_data():
-    try:
-        aw = pd.DataFrame(spreadsheet.worksheet("daily_screenings_aw").get_all_records())
-        sch = pd.DataFrame(spreadsheet.worksheet("daily_screenings_schools").get_all_records())
-        
-        if not aw.empty: aw['Location_Type'] = 'Anganwadi'
-        if not sch.empty: sch['Location_Type'] = 'School'
-        
-        return pd.concat([aw, sch], ignore_index=True)
-    except:
-        return pd.DataFrame()
 
 # 1. DEFINE THE HEADER TOOL FIRST
 def render_header(title, subtitle, icon, bg_color):
@@ -1689,6 +1690,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
