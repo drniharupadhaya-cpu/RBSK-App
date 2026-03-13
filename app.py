@@ -10,10 +10,12 @@ import plotly.express as px  # <-- NEW: THE GRAPHICS ENGINE!
 import streamlit as st
 import pandas as pd
 import datetime
-# ... (any other imports you have)
-# --- FETCH DASHBOARD DATA (Must be at the top!) ---
+# ==========================================
+# MASTER DATA ENGINE (Optimized for Speed & Multiple Users)
+# ==========================================
 @st.cache_data(ttl=600)
-def fetch_dashboard_data():
+def get_daily_logs():
+    """Fetches daily screenings ONCE and shares it with Modules 1, 3, and 12."""
     try:
         aw = pd.DataFrame(spreadsheet.worksheet("daily_screenings_aw").get_all_records())
         sch = pd.DataFrame(spreadsheet.worksheet("daily_screenings_schools").get_all_records())
@@ -21,9 +23,9 @@ def fetch_dashboard_data():
         if not aw.empty: aw['Location_Type'] = 'Anganwadi'
         if not sch.empty: sch['Location_Type'] = 'School'
         
-        return pd.concat([aw, sch], ignore_index=True)
+        return aw, sch, pd.concat([aw, sch], ignore_index=True)
     except:
-        return pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 def get_age(dob_str):
     try:
@@ -396,7 +398,7 @@ elif menu == "1. Daily Tour Plan":
 
     # --- TAB 2: THE BOSS DASHBOARD ---
     with tab_charts:
-        df = fetch_dashboard_data()
+        aw_logs, sch_logs, df = get_daily_logs()
 
         if df.empty:
             st.info("📊 The database is currently empty. Once your team enters screenings in Module 2, the charts will automatically appear here!")
@@ -644,9 +646,17 @@ elif menu == "2. Child Screening":
                             ws.append_row(new_row)
                             st.success(f"✅ Saved to School Log!")
 
-                        st.cache_data.clear()
+                        else:
+                            ws = spreadsheet.worksheet("daily_screenings_schools")
+                            new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, hb_val, disease, updated_contact]
+                            ws.append_row(new_row)
+                            st.success(f"✅ Saved to School Log!")
+
+                        # 🎯 SURGERY HERE: Only clear the Master Engine, DO NOT nuke the whole app!
+                        get_daily_logs.clear() 
 
                     except Exception as e:
+
                         st.error(f"Failed to connect to Google Sheets: {e}")
 # ==========================================
 # MODULE 3: 4D DEFECT REGISTRY & FOLLOW-UP
@@ -657,7 +667,7 @@ elif menu == "3. 4D Defect Registry":
 
     # --- 1. THE DATA LOADER ---
     @st.cache_data(ttl=600)
-    def get_live_defects():
+    
         try:
             aw_logs = pd.DataFrame(spreadsheet.worksheet("daily_screenings_aw").get_all_records())
             sch_logs = pd.DataFrame(spreadsheet.worksheet("daily_screenings_schools").get_all_records())
@@ -666,11 +676,11 @@ elif menu == "3. 4D Defect Registry":
             return pd.DataFrame(), pd.DataFrame()
 
     if st.button("🔄 Sync & Refresh Data"):
-        st.cache_data.clear()
+        get_daily_logs.clear()
         st.success("Database refreshed! Fetching latest entries...")
         st.rerun()
 
-    aw_logs, sch_logs = get_live_defects()
+    aw_logs, sch_logs, df_combined = get_daily_logs()
     all_defects = []
 
     def is_real_defect(val):
@@ -1432,7 +1442,7 @@ elif menu == "12. Automated State Report":
     tab_form3, tab_scoreboard = st.tabs(["📄 Form III (Govt Export)", "🎯 Live Scoreboard (Target vs. Achievement)"])
 
     @st.cache_data(ttl=60)
-    def load_daily_screenings():
+    
         try:
             aw = pd.DataFrame(spreadsheet.worksheet("daily_screenings_aw").get_all_records())
             sch = pd.DataFrame(spreadsheet.worksheet("daily_screenings_schools").get_all_records())
@@ -1441,7 +1451,7 @@ elif menu == "12. Automated State Report":
             st.error(f"Could not load daily screenings. Ensure tabs 'daily_screenings_aw' and 'daily_screenings_schools' exist. {e}")
             return pd.DataFrame(), pd.DataFrame()
 
-    df_aw_daily, df_sch_daily = load_daily_screenings()
+    df_aw_daily, df_sch_daily, df_combined = get_daily_logs()
     df_combined = pd.DataFrame()
 
     if not df_aw_daily.empty or not df_sch_daily.empty:
@@ -1613,6 +1623,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
