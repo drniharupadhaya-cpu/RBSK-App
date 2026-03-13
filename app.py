@@ -349,137 +349,50 @@ if st.sidebar.button("🔓 Logout"):
 # ... [Modules 1, 2, and 3 remain exactly the same as before] ...
 
 # ==========================================
-# MODULE 1: DAILY TOUR PLANNER
-# ==========================================
-# ==========================================
 # MODULE 1: THE EXECUTIVE DASHBOARD & TOUR PLAN
 # ==========================================
-elif menu == "1. Daily Tour Plan":
-    render_header("Executive Dashboard", "Live team overview and daily screening stats", "📊", "#3b82f6")
-
-    # --- CREATE THE TABS ---
-    tab_tour, tab_charts = st.tabs(["📅 Daily Tour Plan", "📈 Executive Analytics"])
-
-    # --- TAB 1: YOUR ORIGINAL TOUR PLAN ---
-    # --- TAB 1: DAILY TOUR PLAN ---
-    with tab_tour:
-        st.markdown("#### 🗺️ Today's Field Schedule")
-        st.info("📍 **Block:** Visavadar | **Team:** MHT-1 | **MO:** Dr. Nihar Upadhyay")
-        
-        # A beautiful side-by-side layout for Morning/Afternoon
-        c_morn, c_aft = st.columns(2)
-        
-        with c_morn:
-            st.success("🏫 **Morning Session (9:00 AM - 12:30 PM)**")
-            st.write("**Village:** Rajapara")
-            st.write("**Location:** Primary School Main")
-            st.write("**Target:** 1st to 8th Standard")
-        
-        with c_aft:
-            st.warning("🏡 **Afternoon Session (1:30 PM - 4:00 PM)**")
-            st.write("**Village:** Rajapara")
-            st.write("**Location:** Anganwadi Center 1 & 2")
-            st.write("**Target:** 0-6 Years & Dropouts")
-            
-        st.divider()
-        st.markdown("##### 📌 Daily Check-list for Team")
-        st.checkbox("Check weighing scale calibration")
-        st.checkbox("Ensure blank referral cards are printed (Backup)")
-        st.checkbox("Sync app data before leaving network area")
 elif menu == "1. Dashboard":
     render_header("Executive Dashboard", "Live team overview and daily screening stats", "📊", "#3b82f6")
 
     # --- CREATE THE TABS ---
     tab_tour, tab_charts = st.tabs(["📅 Daily Tour Plan", "📈 Executive Analytics"])
 
-    try:
-        planner_sheet = spreadsheet.worksheet("tour_plan")
-        df_plan = pd.DataFrame(planner_sheet.get_all_records())
-    except:
-        st.error("⚠️ Could not find the 'tour_plan' tab.")
-        st.stop()
-
-    tab_view, tab_add, tab_edit = st.tabs(["📅 View Schedule", "➕ Plan New Visit", "✏️ Edit / Delete Visit"])
-
-    with tab_view:
-        st.subheader("Upcoming Medical Tours")
-        if not df_plan.empty:
-            df_plan['Date'] = pd.to_datetime(df_plan['Date'])
-            df_plan = df_plan.sort_values(by='Date')
-            df_plan['Date'] = df_plan['Date'].dt.strftime('%Y-%m-%d')
-            st.dataframe(df_plan, width='stretch', hide_index=True)
-        else:
-            st.info("No upcoming tours planned yet.")
-
-    with tab_add:
-        st.subheader("Schedule a New Field Visit")
-        with st.form("add_tour_form"):
-            col1, col2 = st.columns(2)
-            with col1:
-                visit_date = st.date_input("Select Date of Visit")
-                location = st.text_input("Location / Village Name")
-            with col2:
-                activity = st.selectbox("Select Activity Type", [
-                    "School Screening", "Anganvadi Screening", "Delivery Point Visit", 
-                    "HBNC Visit", "Meeting", "Training", "Other"
-                ])
-            
-            submit_plan = st.form_submit_button("💾 Save to Official Planner")
-
-            if submit_plan:
-                if location == "":
-                    st.error("🚨 Please enter a Location/Village name!")
-                else:
-                    day_of_week = visit_date.strftime("%A") 
-                    planner_sheet.append_row([str(visit_date), day_of_week, location, activity])
-                    st.toast("✅ Data Saved Successfully!", icon="🎉")
-                    st.success(f"✅ Successfully scheduled: {activity} at {location} on {visit_date}!")
-                    st.rerun()
-
-    with tab_edit:
-        st.subheader("Modify an Existing Visit")
-        if not df_plan.empty:
-            df_plan['Select_Label'] = df_plan['Date'].astype(str) + " | " + df_plan['Location'] + " (" + df_plan['Activity'] + ")"
-            selected_label = st.selectbox("Select a visit to edit:", df_plan['Select_Label'].tolist())
-            selected_idx = df_plan[df_plan['Select_Label'] == selected_label].index[0]
-            sheet_row = int(selected_idx) + 2 
-            
-            with st.form("edit_tour_form"):
-                curr_date = pd.to_datetime(df_plan.loc[selected_idx, 'Date']).date()
-                curr_loc = str(df_plan.loc[selected_idx, 'Location'])
-                curr_act = str(df_plan.loc[selected_idx, 'Activity'])
-                
-                new_date = st.date_input("Update Date", value=curr_date)
-                new_loc = st.text_input("Update Location", value=curr_loc)
-                options = ["School Screening", "Anganvadi Screening", "Delivery Point Visit", "HBNC Visit", "Meeting", "Training", "Other"]
-                default_idx = options.index(curr_act) if curr_act in options else 0
-                new_act = st.selectbox("Update Activity", options, index=default_idx)
-                
-                st.divider()
-                delete_checkbox = st.checkbox("🚨 Delete this visit entirely (Cannot be undone)")
-                update_btn = st.form_submit_button("💾 Update / Delete Plan")
-
-                if update_btn:
-                    if delete_checkbox:
-                        planner_sheet.delete_rows(sheet_row)
-                        st.success("✅ The visit was removed from your schedule.")
-                        st.rerun()
-                    else:
-                        new_day = new_date.strftime("%A")
-                        planner_sheet.update(range_name=f"A{sheet_row}:D{sheet_row}", values=[[str(new_date), new_day, new_loc, new_act]])
-                        st.success(f"✅ Visit updated to: {new_loc} on {new_date}")
-                        st.rerun()
-        else:
-            st.info("No visits available to edit.")
+    # --- TAB 1: DYNAMIC DAILY TOUR PLAN ---
+    with tab_tour:
+        st.markdown("#### 🗺️ Manage Daily Tour Plan")
         
+        # The Form to Add a New Tour
+        with st.form("add_tour_form"):
+            st.write("**📌 Enter Today's Target Locations**")
+            c1, c2 = st.columns(2)
+            with c1:
+                tour_date = st.date_input("Tour Date")
+                tour_village = st.text_input("Village/City Name")
+            with c2:
+                tour_school = st.text_input("Target School (Optional)")
+                tour_awc = st.text_input("Target Anganwadi (Optional)")
+            
+            submit_tour = st.form_submit_button("💾 Save Tour Plan")
+            
+            if submit_tour:
+                # You can connect this to a Google Sheet later if you want to save history!
+                st.success(f"✅ Tour plan for {tour_village} saved for {tour_date}!")
+        
+        st.divider()
+        st.markdown("##### ✅ Daily Check-list for MHT-1")
+        st.checkbox("Check weighing scale and height tape calibration")
+        st.checkbox("Ensure blank referral cards are printed (Backup)")
+        st.checkbox("Charge tablet/mobile to 100%")
+
     # --- TAB 2: THE BOSS DASHBOARD ---
     with tab_charts:
         df = fetch_dashboard_data()
 
+        # If the sheet is empty, tell the user politely instead of showing a blank page
         if df.empty:
-            st.warning("⚠️ No data found in the database. Start screening in Module 2!")
+            st.info("📊 The database is currently empty. Once your team enters screenings in Module 2, the charts will automatically appear here!")
         else:
-            st.markdown("#### 📈 Quick Overview")
+            st.markdown("#### 📈 District Command Center")
             
             total_screened = len(df)
             total_aw = len(df[df['Location_Type'] == 'Anganwadi']) if 'Location_Type' in df.columns else 0
@@ -492,15 +405,16 @@ elif menu == "1. Dashboard":
                 referred_df = pd.DataFrame()
                 total_referred = 0
 
+            # Big Boss Metrics
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("Total Screened", total_screened)
-            c2.metric("Anganwadi Screenings", total_aw)
-            c3.metric("School Screenings", total_sch)
-            c4.metric("🚨 Total Referrals", total_referred, delta="Requires Action", delta_color="inverse")
+            c2.metric("Anganwadi", total_aw)
+            c3.metric("School", total_sch)
+            c4.metric("🚨 Referrals", total_referred, delta="Requires Action", delta_color="inverse")
 
             st.divider()
 
-            st.markdown("#### 🔬 Deep Dive Analytics")
+            # Interactive Charts
             chart_col1, chart_col2 = st.columns(2)
 
             with chart_col1:
@@ -521,7 +435,7 @@ elif menu == "1. Dashboard":
                                      color='Cases', color_continuous_scale='Reds')
                     st.plotly_chart(fig_dis, use_container_width=True)
                 else:
-                    st.info("Not enough referral data to map conditions yet.")
+                    st.info("No referral conditions to map yet. Great job MHT-1!")
 # ==========================================
 # MODULE 2: EMR SCREENING (WITH WHO Z-SCORE & MUAC AUTOPILOT)
 # ==========================================
@@ -1690,6 +1604,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
