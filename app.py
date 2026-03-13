@@ -6,7 +6,7 @@ from fpdf import FPDF
 import tempfile
 import os
 import time
-import plotly.express as px
+import plotly.express as px  # <-- NEW: THE GRAPHICS ENGINE!
 import streamlit as st
 import pandas as pd
 import datetime
@@ -14,7 +14,7 @@ import datetime
 # --- FETCH DASHBOARD DATA (Must be at the top!) ---
 @st.cache_data(ttl=600)
 def fetch_dashboard_data():
-    
+    try:
         aw = pd.DataFrame(spreadsheet.worksheet("daily_screenings_aw").get_all_records())
         sch = pd.DataFrame(spreadsheet.worksheet("daily_screenings_schools").get_all_records())
         
@@ -26,7 +26,7 @@ def fetch_dashboard_data():
         return pd.DataFrame()
 
 def get_age(dob_str):
-    
+    try:
         # Converts string like "16/8/2025" or "2025-08-16" to a date
         birth = pd.to_datetime(dob_str, dayfirst=True)
         today = datetime.date.today()
@@ -240,7 +240,7 @@ def load_all_data():
     
     def safe_load(tab_name, retries=3):
         for attempt in range(retries):
-            
+            try:
                 df = pd.DataFrame(sheet.worksheet(tab_name).get_all_records()).astype(str)
                 df.columns = df.columns.str.strip() 
                 return df
@@ -278,7 +278,7 @@ except Exception as e:
 # ==========================================
 @st.cache_data(ttl=600) # Checks Google Sheets every 10 mins
 def get_today_stats():
-    
+    try:
         # Get today's date in the exact format your app saves it (YYYY-MM-DD)
         today_str = str(datetime.date.today())
         
@@ -374,7 +374,7 @@ elif menu == "1. Daily Tour Plan":
             submit_tour = st.form_submit_button("💾 Save Tour Plan")
             
             if submit_tour:
-                
+                try:
                     # Connect to the new worksheet you just made
                     tour_sheet = spreadsheet.worksheet("tour_plans")
                     
@@ -607,7 +607,7 @@ elif menu == "2. Child Screening":
                 else:
                     # Math Translator
                     def safe_float(val):
-                         return float(val)
+                        try: return float(val)
                         except: return 0.0
 
                     height_val = safe_float(height_str)
@@ -618,7 +618,7 @@ elif menu == "2. Child Screening":
                     # 1. THE AUTOMATIC SAM/MAM CALCULATOR
                     final_status = "Normal"
                     if category == "👶 Anganwadi":
-                        
+                        try:
                             h_m = height_val / 100
                             bmi = weight_val / (h_m * h_m) if h_m > 0 else 0
                             
@@ -630,7 +630,7 @@ elif menu == "2. Child Screening":
                             final_status = "Error in Calculation"
 
                     # 2. SAVE TO GOOGLE SHEETS
-                    
+                    try:
                         if category == "👶 Anganwadi":
                             ws = spreadsheet.worksheet("daily_screenings_aw")
                             new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, muac_val, hb_val, disease, updated_contact, techo_id, final_status]
@@ -658,7 +658,7 @@ elif menu == "3. 4D Defect Registry":
     # --- 1. THE DATA LOADER ---
     @st.cache_data(ttl=600)
     def get_live_defects():
-        
+        try:
             aw_logs = pd.DataFrame(spreadsheet.worksheet("daily_screenings_aw").get_all_records())
             sch_logs = pd.DataFrame(spreadsheet.worksheet("daily_screenings_schools").get_all_records())
             return aw_logs, sch_logs
@@ -958,7 +958,7 @@ elif menu == "5. HBNC Newborn Visit":
             if child_name == "" or parent_name == "":
                 st.error("🚨 Enter Child and Parent Name.")
             else:
-                
+                try:
                     spreadsheet.worksheet("hbnc_screenings").append_row([str(visit_date), child_name, parent_name, contact_number, str(dob), birth_weight, delivery_type, delivery_point, techo_id, disease, observations])
                     st.success(f"✅ Recorded Visit for {child_name}.")
                 except Exception as e:
@@ -1142,7 +1142,7 @@ elif menu == "7. Anemia Tracker":
                     else:
                         calculated_severity = "Normal"
 
-                    
+                    try:
                         anemia_sheet = spreadsheet.worksheet("ANEMIA")
                         row_data = [
                             facility, str(camp_date), village, child_name, 
@@ -1433,7 +1433,7 @@ elif menu == "12. Automated State Report":
 
     @st.cache_data(ttl=60)
     def load_daily_screenings():
-        
+        try:
             aw = pd.DataFrame(spreadsheet.worksheet("daily_screenings_aw").get_all_records())
             sch = pd.DataFrame(spreadsheet.worksheet("daily_screenings_schools").get_all_records())
             return aw, sch
@@ -1613,5 +1613,3 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
-
-
