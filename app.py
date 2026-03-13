@@ -6,7 +6,7 @@ from fpdf import FPDF
 import tempfile
 import os
 import time
-import plotly.express as px  # <-- NEW: THE GRAPHICS ENGINE!
+import plotly.express as px
 import streamlit as st
 import pandas as pd
 import datetime
@@ -1613,3 +1613,4 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
