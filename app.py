@@ -282,8 +282,7 @@ def get_today_stats():
         # Get today's date in the exact format your app saves it (YYYY-MM-DD)
         today_str = str(datetime.date.today())
         
-        aw_df = pd.DataFrame(spreadsheet.worksheet("daily_screenings_aw").get_all_records())
-        sch_df = pd.DataFrame(spreadsheet.worksheet("daily_screenings_schools").get_all_records())
+       
         
         def count_today(df):
             if df.empty: return 0
@@ -398,6 +397,18 @@ elif menu == "1. Daily Tour Plan":
     # --- TAB 2: THE BOSS DASHBOARD ---
     with tab_charts:
         df = fetch_dashboard_data()
+# --- GLOBAL DATA FETCHER FOR MODULE 2 (The Shield) ---
+@st.cache_data(ttl=600)
+def get_student_lists():
+    try:
+        aw = pd.DataFrame(spreadsheet.worksheet("aw new data").get_all_records())
+        school = pd.DataFrame(spreadsheet.worksheet("1240315 ALL STUDENTS NAMES").get_all_records())
+        return aw, school
+    except Exception as e:
+        return pd.DataFrame(), pd.DataFrame()
+
+# Activate the shield and assign the variables!
+df_aw, df_students = get_student_lists()
 
         # If the sheet is empty, tell the user politely instead of showing a blank page
         if df.empty:
@@ -1615,6 +1626,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
