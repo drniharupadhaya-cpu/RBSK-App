@@ -14,7 +14,7 @@ import datetime
 # --- FETCH DASHBOARD DATA (Must be at the top!) ---
 @st.cache_data(ttl=600)
 def fetch_dashboard_data():
-    try:
+  try:
         aw = pd.DataFrame(spreadsheet.worksheet("daily_screenings_aw").get_all_records())
         sch = pd.DataFrame(spreadsheet.worksheet("daily_screenings_schools").get_all_records())
         
@@ -1613,4 +1613,5 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
