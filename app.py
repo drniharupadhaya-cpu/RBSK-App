@@ -351,7 +351,7 @@ if st.sidebar.button("🔓 Logout"):
 # ==========================================
 # MODULE 1: THE EXECUTIVE DASHBOARD & TOUR PLAN
 # ==========================================
-elif menu == "1. Dashboard":
+elif menu == "1. Daily Tour Plan":
     render_header("Executive Dashboard", "Live team overview and daily screening stats", "📊", "#3b82f6")
 
     # --- CREATE THE TABS ---
@@ -1604,6 +1604,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
 
