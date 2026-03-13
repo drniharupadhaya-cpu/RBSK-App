@@ -465,8 +465,12 @@ elif menu == "2. Child Screening":
             else:
                 st.subheader("👤 Child Profile & History")
                 final_child_name = selected_child
+                
                 if category == "👶 Anganwadi":
-                    child_info = filtered_children[filtered_children['Beneficiary Name'] == selected_child].iloc[0]
+                    # 🛡️ THE FIX: Strip spaces from the raw data before searching!
+                    matched_rows = filtered_children[filtered_children['Beneficiary Name'].astype(str).str.strip() == selected_child]
+                    child_info = matched_rows.iloc[0] if not matched_rows.empty else pd.Series()
+                    
                     dob = child_info.get('DoB', 'N/A')
                     gender = child_info.get('Gender', 'N/A')
                     parent = child_info.get('Mother Name', 'N/A')
@@ -477,7 +481,10 @@ elif menu == "2. Child Screening":
                     hist_disease = child_info.get('4d', 'None')
                     hist_hb = "N/A" 
                 else:
-                    child_info = filtered_children[filtered_children['StudentName'] == selected_child].iloc[0]
+                    # 🛡️ THE FIX: Strip spaces from the raw data before searching!
+                    matched_rows = filtered_children[filtered_children['StudentName'].astype(str).str.strip() == selected_child]
+                    child_info = matched_rows.iloc[0] if not matched_rows.empty else pd.Series()
+                    
                     dob = child_info.get('DOB', 'N/A')
                     gender = child_info.get('Gender', 'N/A')
                     parent = child_info.get('FatherName', 'N/A')
@@ -1484,4 +1491,5 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
