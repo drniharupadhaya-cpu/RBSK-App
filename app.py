@@ -15,7 +15,7 @@ import datetime
 @st.cache_data(ttl=600)
 def fetch_dashboard_data():
   try:
-        aw = pd.DataFrame(spreadsheet.worksheet("daily_screenings_aw").get_all_records())
+        aw = pd.DataFrame(spreadsheet.worksheet("daily_screenings_aw").get_all_records())
         sch = pd.DataFrame(spreadsheet.worksheet("daily_screenings_schools").get_all_records())
         
         if not aw.empty: aw['Location_Type'] = 'Anganwadi'
@@ -1613,5 +1613,6 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 
 
