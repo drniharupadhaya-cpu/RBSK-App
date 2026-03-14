@@ -451,24 +451,32 @@ elif menu == "2. Child Screening":
             selected_inst = "-- Select --"
 
     if selected_inst != "-- Select --":
-        # 🚀 UPGRADE: Dynamic Class Number Display for Schools
+        # 🚀 UPGRADE: The Bulletproof Class Finder
+        class_column = None
+        if category != "👶 Anganwadi":
+            # Fuzzy search: Looks for ANY column that contains these keywords
+            for col in filtered_children.columns:
+                col_name = str(col).lower()
+                if 'class' in col_name or 'std' in col_name or 'standard' in col_name or 'grade' in col_name or 'ધોરણ' in col_name:
+                    class_column = col
+                    break
+        
         child_display = {}
         for idx, name in enumerate(actual_children):
             display_str = f"{idx+1}. {name}"
             
-            # If it's a school, hunt down their class number!
             if category != "👶 Anganwadi":
-                matched_row = filtered_children[filtered_children['StudentName'].astype(str).str.strip() == name]
-                if not matched_row.empty:
-                    class_val = "Unknown"
-                    # Dynamically look for any column that might hold the Class data
-                    for col in matched_row.columns:
-                        if str(col).strip().lower() in ['class', 'std', 'standard', 'grade']:
-                            class_val = str(matched_row.iloc[0][col]).strip()
-                            if class_val.endswith('.0'): class_val = class_val[:-2] # Cleans up weird Excel decimals like "5.0"
-                            break
-                    display_str += f"  [Class: {class_val}]"
-                    
+                class_val = "Unknown"
+                if class_column:
+                    # Match the student and extract their specific class
+                    student_row = filtered_children[filtered_children['StudentName'].astype(str).str.strip() == name]
+                    if not student_row.empty:
+                        raw_class = str(student_row.iloc[0][class_column]).strip()
+                        class_val = raw_class[:-2] if raw_class.endswith('.0') else raw_class
+                
+                # Force the display string to append the Class tag!
+                display_str += f"  [Class: {class_val}]"
+                
             child_display[name] = display_str
             
         selected_child = st.selectbox(
