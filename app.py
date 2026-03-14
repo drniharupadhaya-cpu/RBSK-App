@@ -313,7 +313,7 @@ menu = st.sidebar.radio("Go to:",
         "9. Anganwadi Directory",
         "10. Staff Directory",
         "11. Annual FY Planner",
-        "12. Automated State Report"
+        "12. Automated State Report",
         "13. Offline Batch Sync"
     ])
 
