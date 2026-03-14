@@ -1685,7 +1685,14 @@ elif menu == "13. Offline Batch Sync":
                             loc_col = [c for c in df_offline.columns if 'type' in c.lower()][0]
                             loc_type = str(row[loc_col]).strip().lower()
                             
-                            s_date = str(row.get("Screening Date (DD-MM-YYYY)", "")).strip()
+                            # 🚀 THE DATE TRANSLATOR FIX
+                            raw_date = str(row.get("Screening Date (DD-MM-YYYY)", "")).strip()
+                            try:
+                                # This forces DD-MM-YYYY into official YYYY-MM-DD format!
+                                s_date = pd.to_datetime(raw_date, dayfirst=True).strftime('%Y-%m-%d')
+                            except:
+                                s_date = raw_date # Fallback if they type it weirdly
+                                
                             inst = str(row.get("Location Name", "")).strip()
                             name = str(row.get("Child Name", "")).strip()
                             dob = str(row.get("DOB (DD-MM-YYYY)", "")).strip()
@@ -1704,7 +1711,7 @@ elif menu == "13. Offline Batch Sync":
                             muac = 0.0 if pd.isna(muac) else muac
                             hb = 0.0 if pd.isna(hb) else hb
                             
-                            # 🚀 THE FIX: Give healthy kids their official "None" status!
+                            # Give healthy kids their official "None" status!
                             if raw_disease.lower() in ['nan', '', 'none', 'na', 'null']:
                                 disease = "None"
                             else:
@@ -1736,8 +1743,8 @@ elif menu == "13. Offline Batch Sync":
                         if cmtc_rows_to_add:
                             spreadsheet.worksheet("cmtc_referral").append_rows(cmtc_rows_to_add)
 
-                        # 🚀 THE REFRESH ENGINE
-                        load_all_data.clear() 
+                        # 🚀 THE MASTER CACHE NUKE 
+                        st.cache_data.clear() # This permanently wipes ALL temporary memory in the app!
                         
                         st.success(f"✅ Spectacular! Successfully synced {len(aw_rows_to_add)} Anganwadi records and {len(sch_rows_to_add)} School records!")
                         if cmtc_rows_to_add:
