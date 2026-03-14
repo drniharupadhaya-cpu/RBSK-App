@@ -660,15 +660,31 @@ elif menu == "2. Child Screening":
                             ws.append_row(new_row)
                             st.success(f"✅ Saved new entry to {category} Log!")
 
-                        # 🚀 CMTC AUTO-FORWARDER
+                        # 🚀 CMTC AUTO-FORWARDER (DUPLICATE-PROOF)
                         if category == "👶 Anganwadi" and (final_status == "SAM" or final_status == "MAM"):
                             try:
                                 cmtc_ws = spreadsheet.worksheet("cmtc_referral")
-                                cmtc_ws.append_row([str(screening_date), selected_inst, final_child_name, str(dob), updated_contact, weight_val, height_val, muac_val, final_status])
-                                st.warning(f"🏥 Auto-forwarded {final_child_name} to CMTC Registry!")
+                                cmtc_records = cmtc_ws.get_all_values()
+                                
+                                cmtc_row_to_update = None
+                                # Check if the child was already forwarded to CMTC today
+                                for c_idx, c_row in enumerate(cmtc_records):
+                                    if len(c_row) > 2 and c_row[0] == str(screening_date) and str(c_row[2]).strip() == final_child_name.strip():
+                                        cmtc_row_to_update = c_idx + 1
+                                        break
+                                
+                                cmtc_data = [str(screening_date), selected_inst, final_child_name, str(dob), updated_contact, weight_val, height_val, muac_val, final_status]
+                                
+                                if cmtc_row_to_update:
+                                    # If they exist, silently update their vitals in CMTC without duplicating
+                                    cmtc_ws.update(range_name=f"A{cmtc_row_to_update}", values=[cmtc_data])
+                                else:
+                                    # If they are new, add them and flash the warning
+                                    cmtc_ws.append_row(cmtc_data)
+                                    st.warning(f"🏥 Auto-forwarded {final_child_name} to CMTC Registry!")
+                                    
                             except Exception as e:
-                                st.error("⚠️ Make sure you have a tab named 'cmtc_referral' in Google Sheets!")
-
+                                st.error(f"⚠️ CMTC Error: {e}")
                         if category == "👶 Anganwadi" and final_status == "SAM":
                             st.error("🚨 CRITICAL: Child identified as SAM. Refer to CMTC immediately.")
 
