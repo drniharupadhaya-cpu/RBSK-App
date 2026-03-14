@@ -797,22 +797,22 @@ elif menu == "3. 4D Defect Registry":
                 if prepare_pdf:
                     pdf_output = generate_refer_card(p_data)
                     # 🚀 GENERATE PDF AS RAW BYTES (MODERN FPDF2 FIX)
-                                pdf_bytes = bytes(pdf.output())
-                                st.success("✅ PDF Generated Successfully!")
+                    pdf_bytes = bytes(pdf.output())
+                    st.success("✅ PDF Generated Successfully!")
                                 
-                                # 📱 THE iPHONE FIX: Base64 "New Tab" Button
-                                import base64
-                                b64 = base64.b64encode(pdf_bytes).decode()
+                    # 📱 THE iPHONE FIX: Base64 "New Tab" Button
+                    import base64
+                    b64 = base64.b64encode(pdf_bytes).decode()
                                 
-                                html_button = f'''
-                                    <a href="data:application/pdf;base64,{b64}" download="Success_Story_{child_data['NAME']}.pdf" target="_blank" 
+                    html_button = f'''
+                         <a href="data:application/pdf;base64,{b64}" download="Success_Story_{child_data['NAME']}.pdf" target="_blank" 
                                        style="display: inline-block; padding: 12px 24px; background-color: #e11d48; color: white; 
                                        text-decoration: none; border-radius: 8px; font-weight: bold; text-align: center; width: 100%;">
                                        📄 Tap Here to View / Download Success Story
                                     </a>
                                 '''
                                 st.markdown(html_button, unsafe_allow_html=True)
-                                st.caption("💡 **Mobile Users:** The PDF will open safely in a new window. When you are done, simply close the PDF to return to the app!")
+                                st.caption("💡 **Mobile Users:** The PDF will open safely in a new window. When you are done, simply close the PDF to return to the app!")               
         
         else:
             st.warning("No children found in registry to generate a card.")
