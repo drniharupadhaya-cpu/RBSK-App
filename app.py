@@ -1736,9 +1736,17 @@ elif menu == "13. Offline Batch Sync":
                         if cmtc_rows_to_add:
                             spreadsheet.worksheet("cmtc_referral").append_rows(cmtc_rows_to_add)
 
-                        get_daily_logs.clear()
+                        # 🚀 THE FIX: Clear the MASTER memory and instantly reboot the screen!
+                        load_all_data.clear() 
                         
                         st.success(f"✅ Spectacular! Successfully synced {len(aw_rows_to_add)} Anganwadi records and {len(sch_rows_to_add)} School records!")
+                        if cmtc_rows_to_add:
+                            st.warning(f"🏥 Auto-forwarded {len(cmtc_rows_to_add)} severe cases directly to the CMTC Registry!")
+                        
+                        # Wait 3 seconds so the user can read the success message, then refresh!
+                        import time
+                        time.sleep(3)
+                        st.rerun()
                         if cmtc_rows_to_add:
                             st.warning(f"🏥 Auto-forwarded {len(cmtc_rows_to_add)} severe cases directly to the CMTC Registry!")
 
