@@ -238,6 +238,31 @@ try:
 except Exception as e:
     st.error(f"Could not connect to Google Sheets. Please check your Secret Vault. Error: {e}")
     st.stop()
+# ==========================================
+# 🌍 DISTRICT COMMAND: TEAM UNIFICATION ENGINE
+# ==========================================
+st.sidebar.header("🌍 District Command")
+
+# The exact team names from your Google Sheet!
+team_options = ["TEAM-1240315", "TEAM-1240309", "District Admin (All Teams)"]
+selected_team = st.sidebar.selectbox("🏥 Select Active Team:", team_options)
+st.sidebar.divider()
+
+# Filter the master lists so teams only see their own assigned locations!
+if selected_team != "District Admin (All Teams)":
+    try:
+        # Safely find the 'Team' column even if there are accidental spaces in the header
+        team_col_aw = [c for c in df_aw.columns if 'team' in str(c).strip().lower()][0]
+        team_col_stu = [c for c in df_students.columns if 'team' in str(c).strip().lower()][0]
+        team_col_sch = [c for c in df_schools.columns if 'team' in str(c).strip().lower()][0]
+
+        # Apply the filter!
+        df_aw = df_aw[df_aw[team_col_aw].astype(str).str.strip().str.upper() == selected_team]
+        df_students = df_students[df_students[team_col_stu].astype(str).str.strip().str.upper() == selected_team]
+        df_schools = df_schools[df_schools[team_col_sch].astype(str).str.strip().str.upper() == selected_team]
+        
+    except IndexError:
+        st.sidebar.error("⚠️ Could not find the 'TEAM' column in one of the master sheets. Please check your Google Sheet headers!")
 
 @st.cache_data(ttl=600)
 def get_today_stats():
