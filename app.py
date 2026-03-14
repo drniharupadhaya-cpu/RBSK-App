@@ -811,8 +811,8 @@ elif menu == "3. 4D Defect Registry":
                                        📄 Tap Here to View / Download Success Story
                                     </a>
                                 '''
-                                st.markdown(html_button, unsafe_allow_html=True)
-                                st.caption("💡 **Mobile Users:** The PDF will open safely in a new window. When you are done, simply close the PDF to return to the app!")               
+                    st.markdown(html_button, unsafe_allow_html=True)
+                    st.caption("💡 **Mobile Users:** The PDF will open safely in a new window. When you are done, simply close the PDF to return to the app!")               
         
         else:
             st.warning("No children found in registry to generate a card.")
