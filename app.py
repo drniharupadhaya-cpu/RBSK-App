@@ -212,22 +212,26 @@ def load_all_data():
                 st.error(f"🚨 FAILED ON TAB '{tab_name}': {e}")
                 return pd.DataFrame()
 
+    # 🚀 LEAN & MEAN: Only downloading the 7 absolute essential master lists!
     df_4d = safe_load("4d_list")
-    df_schools = safe_load("school_details")
-    df_aw = safe_load("aw_data")
     df_anemia = safe_load("ANEMIA")
-    df_students = safe_load("students_data")
     df_directory = safe_load("ALL SCHOOL DETAILS")
     df_aw_contacts = safe_load("aw_master_directory")
     df_staff = safe_load("master_staff_directory")
     df_aw_master = safe_load("aw new data")
     df_all_students = safe_load("1240315 ALL STUDENTS NAMES")
 
-    return df_4d, df_schools, df_aw, df_anemia, df_students, df_directory, df_aw_contacts, df_staff, df_aw_master, df_all_students
+    return df_4d, df_anemia, df_directory, df_aw_contacts, df_staff, df_aw_master, df_all_students
 
 try:
     spreadsheet = get_spreadsheet() 
-    df_4d, df_schools, df_aw, df_anemia, df_students, df_directory, df_aw_contacts, df_staff, df_aw_master, df_all_students = load_all_data() 
+    df_4d, df_anemia, df_directory, df_aw_contacts, df_staff, df_aw_master, df_all_students = load_all_data() 
+    
+    # 🎯 THE ALIAS TRICK: Mapping the old variables to your consolidated master sheets!
+    df_aw = df_aw_master
+    df_students = df_all_students
+    df_schools = df_directory
+    
 except Exception as e:
     st.error(f"Could not connect to Google Sheets. Please check your Secret Vault. Error: {e}")
     st.stop()
