@@ -1399,9 +1399,14 @@ elif menu == "12. Automated State Report":
                         st.write(f"👦 Boys: **{boys}**")
                         st.write(f"👧 Girls: **{girls}**")
                 
-                render_bucket_stats("0-3 Years", col_0_3)
+               render_bucket_stats("0-3 Years", col_0_3)
                 render_bucket_stats("3-6 Years", col_3_6)
                 render_bucket_stats("6-18 Years", col_6_18)
+
+                # 🚀 THE GHOST DETECTOR
+                unknown_count = len(report_df[report_df['Govt_Age_Bucket'] == 'Unknown'])
+                if unknown_count > 0:
+                    st.warning(f"⚠️ **DATA ALERT:** There are **{unknown_count} children** with a missing or invalid Date of Birth (like 'N/A'). They are counted in the total, but cannot be sorted into the age buckets. Please update their DOBs in Google Sheets!")
 
                 st.divider()
                 st.markdown("### 🚨 Disease & Malnutrition Referrals (Current Month)")
