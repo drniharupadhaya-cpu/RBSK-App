@@ -1668,14 +1668,12 @@ elif menu == "13. Offline Batch Sync":
 
         if uploaded_file is not None:
             try:
-                # 🚀 THE FIX: 'utf-8-sig' destroys Excel's invisible ghost characters!
+                # Destroys Excel's invisible ghost characters!
                 df_offline = pd.read_csv(uploaded_file, encoding='utf-8-sig')
-                
-                # Strip away any accidental spaces the team might have typed in the headers
                 df_offline.columns = df_offline.columns.str.strip()
                 
                 st.write(f"📊 Found **{len(df_offline)}** records ready to sync.")
-                st.dataframe(df_offline) # Let the user preview what they are about to upload!
+                st.dataframe(df_offline) 
 
                 if st.button("🚀 Sync All to Master Database"):
                     with st.spinner("Processing calculations and syncing in batches... Please wait."):
@@ -1684,33 +1682,36 @@ elif menu == "13. Offline Batch Sync":
                         cmtc_rows_to_add = []
 
                         for index, row in df_offline.iterrows():
-                            # 🚀 THE FIX: Bulletproof column hunting (grabs the first column no matter what it's named)
                             loc_col = [c for c in df_offline.columns if 'type' in c.lower()][0]
                             loc_type = str(row[loc_col]).strip().lower()
                             
-                            s_date = str(row.get("Screening Date (DD-MM-YYYY)", ""))
-                            inst = str(row.get("Location Name", ""))
-                            name = str(row.get("Child Name", ""))
-                            dob = str(row.get("DOB (DD-MM-YYYY)", ""))
-                            gender = str(row.get("Gender", ""))
+                            s_date = str(row.get("Screening Date (DD-MM-YYYY)", "")).strip()
+                            inst = str(row.get("Location Name", "")).strip()
+                            name = str(row.get("Child Name", "")).strip()
+                            dob = str(row.get("DOB (DD-MM-YYYY)", "")).strip()
+                            gender = str(row.get("Gender", "")).strip()
                             
-                            # Clean the math data safely
                             height = pd.to_numeric(row.get("Height (cm)", 0), errors='coerce')
                             weight = pd.to_numeric(row.get("Weight (kg)", 0), errors='coerce')
                             muac = pd.to_numeric(row.get("MUAC (cm - AW only)", 0), errors='coerce')
                             hb = pd.to_numeric(row.get("Hemoglobin", 0), errors='coerce')
-                            disease = str(row.get("Disease or 4D", ""))
-                            contact = str(row.get("Contact Number", ""))
+                            
+                            raw_disease = str(row.get("Disease or 4D", "")).strip()
+                            contact = str(row.get("Contact Number", "")).strip()
 
-                            # Replace 'nan' with blanks/zeros so the math doesn't break
                             height = 0.0 if pd.isna(height) else height
                             weight = 0.0 if pd.isna(weight) else weight
                             muac = 0.0 if pd.isna(muac) else muac
                             hb = 0.0 if pd.isna(hb) else hb
-                            disease = "" if disease.lower() == 'nan' else disease
-                            contact = "" if contact.lower() == 'nan' else contact
+                            
+                            # 🚀 THE FIX: Give healthy kids their official "None" status!
+                            if raw_disease.lower() in ['nan', '', 'none', 'na', 'null']:
+                                disease = "None"
+                            else:
+                                disease = raw_disease
+                                
+                            contact = "" if contact.lower() in ['nan', ''] else contact
 
-                            # 🚀 THE FIX: Forgiving logic. Catches 'Anganwadi', 'aw', 'AWC', 'School', 'sch', etc.
                             if "ang" in loc_type or "aw" in loc_type:
                                 final_status = "Normal"
                                 try:
@@ -1728,7 +1729,6 @@ elif menu == "13. Offline Batch Sync":
                             elif "sch" in loc_type:
                                 sch_rows_to_add.append([s_date, inst, name, dob, gender, height, weight, hb, disease, contact])
 
-                        # Pushes everything to Google in ONE lightning-fast API call per sheet!
                         if aw_rows_to_add:
                             spreadsheet.worksheet("daily_screenings_aw").append_rows(aw_rows_to_add)
                         if sch_rows_to_add:
@@ -1736,19 +1736,16 @@ elif menu == "13. Offline Batch Sync":
                         if cmtc_rows_to_add:
                             spreadsheet.worksheet("cmtc_referral").append_rows(cmtc_rows_to_add)
 
-                        # 🚀 THE FIX: Clear the MASTER memory and instantly reboot the screen!
+                        # 🚀 THE REFRESH ENGINE
                         load_all_data.clear() 
                         
                         st.success(f"✅ Spectacular! Successfully synced {len(aw_rows_to_add)} Anganwadi records and {len(sch_rows_to_add)} School records!")
                         if cmtc_rows_to_add:
                             st.warning(f"🏥 Auto-forwarded {len(cmtc_rows_to_add)} severe cases directly to the CMTC Registry!")
                         
-                        # Wait 3 seconds so the user can read the success message, then refresh!
                         import time
                         time.sleep(3)
                         st.rerun()
-                        if cmtc_rows_to_add:
-                            st.warning(f"🏥 Auto-forwarded {len(cmtc_rows_to_add)} severe cases directly to the CMTC Registry!")
 
             except Exception as e:
                 st.error(f"⚠️ Error reading file. Please ensure you are using the exact template. Detail: {e}")
