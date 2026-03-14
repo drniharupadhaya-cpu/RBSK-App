@@ -594,31 +594,85 @@ elif menu == "2. Child Screening":
                         except:
                             final_status = "Error in Calculation"
 
-                    # 2. SAVE TO GOOGLE SHEETS
+                    # 2. SAVE TO GOOGLE SHEETS (THE COLLABORATION ENGINE)
                     try:
-                        if category == "👶 Anganwadi":
-                            ws = spreadsheet.worksheet("daily_screenings_aw")
-                            new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, muac_val, hb_val, disease, updated_contact, techo_id, final_status]
-                            ws.append_row(new_row)
-                            st.success(f"✅ Saved to AWC Log! Status: {final_status}")
-                            
-                            # 🚀 CMTC AUTO-FORWARDER
-                            if final_status == "SAM" or final_status == "MAM":
+                        sheet_name = "daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools"
+                        ws = spreadsheet.worksheet(sheet_name)
+                        
+                        # Fetch all records to check if someone already screened this child TODAY
+                        all_records = ws.get_all_values()
+                        row_to_update = None
+                        existing_row = []
+                        
+                        for index, row_data in enumerate(all_records):
+                            if len(row_data) > 2: # Ensure it's a valid row
+                                if row_data[0] == str(screening_date) and str(row_data[2]).strip() == final_child_name.strip():
+                                    row_to_update = index + 1 # Google Sheets rows start at 1
+                                    existing_row = row_data
+                                    break
+                                    
+                        # --- THE MERGER: If a row exists, combine old data with new data ---
+                        def merge_vitals(new_v, old_v):
+                            if new_v == 0.0 or new_v == 0 or new_v == "":
+                                try: return float(old_v)
+                                except: return 0.0
+                            return new_v
+
+                        if row_to_update:
+                            if category == "👶 Anganwadi":
+                                height_val = merge_vitals(height_val, existing_row[5] if len(existing_row) > 5 else 0.0)
+                                weight_val = merge_vitals(weight_val, existing_row[6] if len(existing_row) > 6 else 0.0)
+                                muac_val = merge_vitals(muac_val, existing_row[7] if len(existing_row) > 7 else 0.0)
+                                hb_val = merge_vitals(hb_val, existing_row[8] if len(existing_row) > 8 else 0.0)
+                                if not disease or disease.lower() == "none" or disease == "":
+                                    disease = existing_row[9] if len(existing_row) > 9 else disease
+                                    
+                                # Recalculate SAM/MAM based on the MERGED vitals
+                                final_status = "Normal"
                                 try:
-                                    cmtc_ws = spreadsheet.worksheet("cmtc_referral")
-                                    cmtc_ws.append_row([str(screening_date), selected_inst, final_child_name, str(dob), updated_contact, weight_val, height_val, muac_val, final_status])
-                                    st.warning(f"🏥 Auto-forwarded {final_child_name} to CMTC Registry!")
-                                except Exception as e:
-                                    st.error("⚠️ Make sure you have a tab named 'cmtc_referral' in Google Sheets!")
-
-                            if final_status == "SAM":
-                                st.error("🚨 CRITICAL: Child identified as SAM. Refer to CMTC immediately.")
+                                    h_m = height_val / 100
+                                    bmi = weight_val / (h_m * h_m) if h_m > 0 else 0
+                                    if (muac_val > 0 and muac_val < 11.5) or (bmi > 0 and bmi < 13.0): final_status = "SAM"
+                                    elif (muac_val >= 11.5 and muac_val < 12.5) or (bmi >= 13.0 and bmi < 14.5): final_status = "MAM"
+                                except: final_status = "Error in Calculation"
+                                
+                                new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, muac_val, hb_val, disease, updated_contact, techo_id, final_status]
+                            else:
+                                height_val = merge_vitals(height_val, existing_row[5] if len(existing_row) > 5 else 0.0)
+                                weight_val = merge_vitals(weight_val, existing_row[6] if len(existing_row) > 6 else 0.0)
+                                hb_val = merge_vitals(hb_val, existing_row[7] if len(existing_row) > 7 else 0.0)
+                                if not disease or disease.lower() == "none" or disease == "":
+                                    disease = existing_row[8] if len(existing_row) > 8 else disease
+                                    
+                                new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, hb_val, disease, updated_contact]
                         else:
-                            ws = spreadsheet.worksheet("daily_screenings_schools")
-                            new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, hb_val, disease, updated_contact]
-                            ws.append_row(new_row)
-                            st.success(f"✅ Saved to School Log!")
+                            # If no row to update, use standard new_row setup
+                            if category == "👶 Anganwadi":
+                                new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, muac_val, hb_val, disease, updated_contact, techo_id, final_status]
+                            else:
+                                new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, hb_val, disease, updated_contact]
 
+                        # --- WRITE TO GOOGLE SHEETS ---
+                        if row_to_update:
+                            ws.update(range_name=f"A{row_to_update}", values=[new_row])
+                            st.success(f"🤝 Collaboration Engine: Successfully updated and merged {final_child_name}'s record!")
+                        else:
+                            ws.append_row(new_row)
+                            st.success(f"✅ Saved new entry to {category} Log!")
+
+                        # 🚀 CMTC AUTO-FORWARDER
+                        if category == "👶 Anganwadi" and (final_status == "SAM" or final_status == "MAM"):
+                            try:
+                                cmtc_ws = spreadsheet.worksheet("cmtc_referral")
+                                cmtc_ws.append_row([str(screening_date), selected_inst, final_child_name, str(dob), updated_contact, weight_val, height_val, muac_val, final_status])
+                                st.warning(f"🏥 Auto-forwarded {final_child_name} to CMTC Registry!")
+                            except Exception as e:
+                                st.error("⚠️ Make sure you have a tab named 'cmtc_referral' in Google Sheets!")
+
+                        if category == "👶 Anganwadi" and final_status == "SAM":
+                            st.error("🚨 CRITICAL: Child identified as SAM. Refer to CMTC immediately.")
+
+                        # Refresh the app's memory
                         get_daily_logs.clear()
 
                     except Exception as e:
