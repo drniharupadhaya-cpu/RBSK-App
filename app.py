@@ -1048,7 +1048,7 @@ elif menu == "6. Success Story Builder":
                                 
                                 # 🚀 THE iPHONE FIX: Base64 "New Tab" Button
                                 import base64
-                                b64 = base64.b64encode(pdf_output).decode()
+                                b64 = base64.b64encode(pdf_bytes).decode()
                                 
                                 html_button = f'''
                                     <a href="data:application/pdf;base64,{b64}" download="Success_Story_{child_data['NAME']}.pdf" target="_blank" 
