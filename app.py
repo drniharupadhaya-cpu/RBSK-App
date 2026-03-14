@@ -451,8 +451,26 @@ elif menu == "2. Child Screening":
             selected_inst = "-- Select --"
 
     if selected_inst != "-- Select --":
-        child_display = {name: f"{idx+1}. {name}" for idx, name in enumerate(actual_children)}
-        
+        # 🚀 UPGRADE: Dynamic Class Number Display for Schools
+        child_display = {}
+        for idx, name in enumerate(actual_children):
+            display_str = f"{idx+1}. {name}"
+            
+            # If it's a school, hunt down their class number!
+            if category != "👶 Anganwadi":
+                matched_row = filtered_children[filtered_children['StudentName'].astype(str).str.strip() == name]
+                if not matched_row.empty:
+                    class_val = "Unknown"
+                    # Dynamically look for any column that might hold the Class data
+                    for col in matched_row.columns:
+                        if str(col).strip().lower() in ['class', 'std', 'standard', 'grade']:
+                            class_val = str(matched_row.iloc[0][col]).strip()
+                            if class_val.endswith('.0'): class_val = class_val[:-2] # Cleans up weird Excel decimals like "5.0"
+                            break
+                    display_str += f"  [Class: {class_val}]"
+                    
+            child_display[name] = display_str
+            
         selected_child = st.selectbox(
             f"Select Child enrolled in {selected_inst}:", 
             options=["-- Select Child --", "➕ Register New Child"] + actual_children,
