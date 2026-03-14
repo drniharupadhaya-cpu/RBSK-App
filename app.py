@@ -1668,7 +1668,12 @@ elif menu == "13. Offline Batch Sync":
 
         if uploaded_file is not None:
             try:
-                df_offline = pd.read_csv(uploaded_file)
+                # 🚀 THE FIX: 'utf-8-sig' destroys Excel's invisible ghost characters!
+                df_offline = pd.read_csv(uploaded_file, encoding='utf-8-sig')
+                
+                # Strip away any accidental spaces the team might have typed in the headers
+                df_offline.columns = df_offline.columns.str.strip()
+                
                 st.write(f"📊 Found **{len(df_offline)}** records ready to sync.")
                 st.dataframe(df_offline) # Let the user preview what they are about to upload!
 
@@ -1678,9 +1683,11 @@ elif menu == "13. Offline Batch Sync":
                         sch_rows_to_add = []
                         cmtc_rows_to_add = []
 
-                        # The Engine reads the Excel file line by line
                         for index, row in df_offline.iterrows():
-                            loc_type = str(row.get("Location Type (Anganwadi or School)", "")).strip().lower()
+                            # 🚀 THE FIX: Bulletproof column hunting (grabs the first column no matter what it's named)
+                            loc_col = [c for c in df_offline.columns if 'type' in c.lower()][0]
+                            loc_type = str(row[loc_col]).strip().lower()
+                            
                             s_date = str(row.get("Screening Date (DD-MM-YYYY)", ""))
                             inst = str(row.get("Location Name", ""))
                             name = str(row.get("Child Name", ""))
@@ -1703,8 +1710,8 @@ elif menu == "13. Offline Batch Sync":
                             disease = "" if disease.lower() == 'nan' else disease
                             contact = "" if contact.lower() == 'nan' else contact
 
-                            if "anganwadi" in loc_type:
-                                # 🚀 Run the SAM/MAM Calculator on the offline data!
+                            # 🚀 THE FIX: Forgiving logic. Catches 'Anganwadi', 'aw', 'AWC', 'School', 'sch', etc.
+                            if "ang" in loc_type or "aw" in loc_type:
                                 final_status = "Normal"
                                 try:
                                     h_m = height / 100
@@ -1713,17 +1720,15 @@ elif menu == "13. Offline Batch Sync":
                                     elif (muac >= 11.5 and muac < 12.5) or (bmi >= 13.0 and bmi < 14.5): final_status = "MAM"
                                 except: final_status = "Error"
 
-                                # Note: Adding "Offline Sync" as Techo ID placeholder
                                 aw_rows_to_add.append([s_date, inst, name, dob, gender, height, weight, muac, hb, disease, contact, "Offline Sync", final_status])
                                 
-                                # Check for CMTC routing
                                 if final_status in ["SAM", "MAM"]:
                                     cmtc_rows_to_add.append([s_date, inst, name, dob, contact, weight, height, muac, final_status])
 
-                            elif "school" in loc_type:
+                            elif "sch" in loc_type:
                                 sch_rows_to_add.append([s_date, inst, name, dob, gender, height, weight, hb, disease, contact])
 
-                        # 🚀 BATCH UPLOAD: Pushes everything to Google in ONE lightning-fast API call per sheet!
+                        # Pushes everything to Google in ONE lightning-fast API call per sheet!
                         if aw_rows_to_add:
                             spreadsheet.worksheet("daily_screenings_aw").append_rows(aw_rows_to_add)
                         if sch_rows_to_add:
@@ -1731,7 +1736,6 @@ elif menu == "13. Offline Batch Sync":
                         if cmtc_rows_to_add:
                             spreadsheet.worksheet("cmtc_referral").append_rows(cmtc_rows_to_add)
 
-                        # Clear app memory so dashboards update immediately
                         get_daily_logs.clear()
                         
                         st.success(f"✅ Spectacular! Successfully synced {len(aw_rows_to_add)} Anganwadi records and {len(sch_rows_to_add)} School records!")
@@ -1739,6 +1743,6 @@ elif menu == "13. Offline Batch Sync":
                             st.warning(f"🏥 Auto-forwarded {len(cmtc_rows_to_add)} severe cases directly to the CMTC Registry!")
 
             except Exception as e:
-                st.error(f"⚠️ Error reading file. Please ensure you are using the exact template downloaded from Tab 1, and that it is saved as a .csv file. Detail: {e}")
+                st.error(f"⚠️ Error reading file. Please ensure you are using the exact template. Detail: {e}")
 
 
