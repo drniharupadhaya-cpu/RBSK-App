@@ -314,6 +314,7 @@ menu = st.sidebar.radio("Go to:",
         "10. Staff Directory",
         "11. Annual FY Planner",
         "12. Automated State Report"
+        "13. Offline Batch Sync"
     ]
 )
 
@@ -1636,5 +1637,108 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+# ==========================================
+# MODULE 13: OFFLINE BATCH SYNC
+# ==========================================
+elif menu == "13. Offline Batch Sync":
+    render_header("Offline Batch Sync", "Upload field data collected without internet", "📡", "#8b5cf6")
+    st.write("When you lose signal in the field, collect data on the Offline CSV Template. Once you have internet again, upload the file here to instantly sync all children to the Master Database.")
+
+    tab_template, tab_upload = st.tabs(["📥 1. Download Blank Template", "📤 2. Upload & Sync Data"])
+
+    with tab_template:
+        st.subheader("Get the Offline Template")
+        st.write("Download this blank CSV file to your phone or tablet before heading into areas with no internet. You can open and edit this file in any spreadsheet app (like Excel or Google Sheets offline).")
+        
+        # Generates a pristine blank template on the fly!
+        template_cols = ["Location Type (Anganwadi or School)", "Screening Date (DD-MM-YYYY)", "Location Name", "Child Name", "DOB (DD-MM-YYYY)", "Gender", "Height (cm)", "Weight (kg)", "MUAC (cm - AW only)", "Hemoglobin", "Disease or 4D", "Contact Number"]
+        df_template = pd.DataFrame(columns=template_cols)
+        
+        csv_template = df_template.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="⬇️ Download Offline Template (CSV)",
+            data=csv_template,
+            file_name='MHT_Offline_Template.csv',
+            mime='text/csv',
+        )
+
+    with tab_upload:
+        st.subheader("Sync Field Data")
+        uploaded_file = st.file_uploader("Upload your filled Offline Template (CSV format)", type=["csv"])
+
+        if uploaded_file is not None:
+            try:
+                df_offline = pd.read_csv(uploaded_file)
+                st.write(f"📊 Found **{len(df_offline)}** records ready to sync.")
+                st.dataframe(df_offline) # Let the user preview what they are about to upload!
+
+                if st.button("🚀 Sync All to Master Database"):
+                    with st.spinner("Processing calculations and syncing in batches... Please wait."):
+                        aw_rows_to_add = []
+                        sch_rows_to_add = []
+                        cmtc_rows_to_add = []
+
+                        # The Engine reads the Excel file line by line
+                        for index, row in df_offline.iterrows():
+                            loc_type = str(row.get("Location Type (Anganwadi or School)", "")).strip().lower()
+                            s_date = str(row.get("Screening Date (DD-MM-YYYY)", ""))
+                            inst = str(row.get("Location Name", ""))
+                            name = str(row.get("Child Name", ""))
+                            dob = str(row.get("DOB (DD-MM-YYYY)", ""))
+                            gender = str(row.get("Gender", ""))
+                            
+                            # Clean the math data safely
+                            height = pd.to_numeric(row.get("Height (cm)", 0), errors='coerce')
+                            weight = pd.to_numeric(row.get("Weight (kg)", 0), errors='coerce')
+                            muac = pd.to_numeric(row.get("MUAC (cm - AW only)", 0), errors='coerce')
+                            hb = pd.to_numeric(row.get("Hemoglobin", 0), errors='coerce')
+                            disease = str(row.get("Disease or 4D", ""))
+                            contact = str(row.get("Contact Number", ""))
+
+                            # Replace 'nan' with blanks/zeros so the math doesn't break
+                            height = 0.0 if pd.isna(height) else height
+                            weight = 0.0 if pd.isna(weight) else weight
+                            muac = 0.0 if pd.isna(muac) else muac
+                            hb = 0.0 if pd.isna(hb) else hb
+                            disease = "" if disease.lower() == 'nan' else disease
+                            contact = "" if contact.lower() == 'nan' else contact
+
+                            if "anganwadi" in loc_type:
+                                # 🚀 Run the SAM/MAM Calculator on the offline data!
+                                final_status = "Normal"
+                                try:
+                                    h_m = height / 100
+                                    bmi = weight / (h_m * h_m) if h_m > 0 else 0
+                                    if (muac > 0 and muac < 11.5) or (bmi > 0 and bmi < 13.0): final_status = "SAM"
+                                    elif (muac >= 11.5 and muac < 12.5) or (bmi >= 13.0 and bmi < 14.5): final_status = "MAM"
+                                except: final_status = "Error"
+
+                                # Note: Adding "Offline Sync" as Techo ID placeholder
+                                aw_rows_to_add.append([s_date, inst, name, dob, gender, height, weight, muac, hb, disease, contact, "Offline Sync", final_status])
+                                
+                                # Check for CMTC routing
+                                if final_status in ["SAM", "MAM"]:
+                                    cmtc_rows_to_add.append([s_date, inst, name, dob, contact, weight, height, muac, final_status])
+
+                            elif "school" in loc_type:
+                                sch_rows_to_add.append([s_date, inst, name, dob, gender, height, weight, hb, disease, contact])
+
+                        # 🚀 BATCH UPLOAD: Pushes everything to Google in ONE lightning-fast API call per sheet!
+                        if aw_rows_to_add:
+                            spreadsheet.worksheet("daily_screenings_aw").append_rows(aw_rows_to_add)
+                        if sch_rows_to_add:
+                            spreadsheet.worksheet("daily_screenings_schools").append_rows(sch_rows_to_add)
+                        if cmtc_rows_to_add:
+                            spreadsheet.worksheet("cmtc_referral").append_rows(cmtc_rows_to_add)
+
+                        # Clear app memory so dashboards update immediately
+                        get_daily_logs.clear()
+                        
+                        st.success(f"✅ Spectacular! Successfully synced {len(aw_rows_to_add)} Anganwadi records and {len(sch_rows_to_add)} School records!")
+                        if cmtc_rows_to_add:
+                            st.warning(f"🏥 Auto-forwarded {len(cmtc_rows_to_add)} severe cases directly to the CMTC Registry!")
+
+            except Exception as e:
+                st.error(f"⚠️ Error reading file. Please ensure you are using the exact template downloaded from Tab 1, and that it is saved as a .csv file. Detail: {e}")
 
 
