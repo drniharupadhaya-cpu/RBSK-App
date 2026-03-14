@@ -1399,7 +1399,7 @@ elif menu == "12. Automated State Report":
                         st.write(f"👦 Boys: **{boys}**")
                         st.write(f"👧 Girls: **{girls}**")
                 
-               render_bucket_stats("0-3 Years", col_0_3)
+                render_bucket_stats("0-3 Years", col_0_3)
                 render_bucket_stats("3-6 Years", col_3_6)
                 render_bucket_stats("6-18 Years", col_6_18)
 
