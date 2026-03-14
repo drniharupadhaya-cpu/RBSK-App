@@ -1043,7 +1043,7 @@ elif menu == "6. Success Story Builder":
                                         pdf.image(tmp_a_name, x=110, w=70) 
                                         os.remove(tmp_a_name) 
                                 
-                                pdf_output = pdf.output(dest="S").encode("latin-1")
+                                pdf_bytes = bytes(pdf.output())
                                 st.success("✅ PDF Generated Successfully!")
                                 
                                 # 🚀 THE iPHONE FIX: Base64 "New Tab" Button
