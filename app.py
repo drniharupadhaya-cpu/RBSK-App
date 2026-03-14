@@ -236,8 +236,9 @@ try:
     df_schools = df_directory
     
 except Exception as e:
-    st.error(f"Could not connect to Google Sheets. Please check your Secret Vault. Error: {e}")
-    st.stop()
+    if "429" in str(e) or "Quota exceeded" in str(e):
+        st.error("🚦 Whoa there! Google is enforcing a speed limit. Please wait exactly 60 seconds and refresh the page!")
+        st.stop()
 # ==========================================
 # 🌍 DISTRICT COMMAND: TEAM UNIFICATION ENGINE
 # ==========================================
