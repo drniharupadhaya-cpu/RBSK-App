@@ -315,8 +315,8 @@ menu = st.sidebar.radio("Go to:",
         "11. Annual FY Planner",
         "12. Automated State Report"
         "13. Offline Batch Sync"
-    ]
-)
+    ])
+
 
 st.sidebar.markdown("---")
 if st.sidebar.button("🔓 Logout"):
