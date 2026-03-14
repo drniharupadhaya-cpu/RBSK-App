@@ -212,7 +212,6 @@ def load_all_data():
                 st.error(f"🚨 FAILED ON TAB '{tab_name}': {e}")
                 return pd.DataFrame()
 
-    # 🚀 LEAN & MEAN: Only downloading the 7 absolute essential master lists!
     df_4d = safe_load("4d_list")
     df_anemia = safe_load("ANEMIA")
     df_directory = safe_load("ALL SCHOOL DETAILS")
@@ -221,13 +220,17 @@ def load_all_data():
     df_aw_master = safe_load("aw new data")
     df_all_students = safe_load("1240315 ALL STUDENTS NAMES")
 
-    return df_4d, df_anemia, df_directory, df_aw_contacts, df_staff, df_aw_master, df_all_students
+    # 🚀 NEW: THE 3 QUARTERLY ANALYTICS BUFFERS!
+    df_q_perf = safe_load("Q_Performance")
+    df_q_loc = safe_load("Q_Location_4D")
+    df_q_demo = safe_load("Q_Demo_4D")
+
+    return df_4d, df_anemia, df_directory, df_aw_contacts, df_staff, df_aw_master, df_all_students, df_q_perf, df_q_loc, df_q_demo
 
 try:
     spreadsheet = get_spreadsheet() 
-    df_4d, df_anemia, df_directory, df_aw_contacts, df_staff, df_aw_master, df_all_students = load_all_data() 
+    df_4d, df_anemia, df_directory, df_aw_contacts, df_staff, df_aw_master, df_all_students, df_q_perf, df_q_loc, df_q_demo = load_all_data() 
     
-    # 🎯 THE ALIAS TRICK: Mapping the old variables to your consolidated master sheets!
     df_aw = df_aw_master
     df_students = df_all_students
     df_schools = df_directory
@@ -712,128 +715,119 @@ elif menu == "3. 4D Defect Registry":
 # ==========================================
 # MODULE 4: VISUAL ANALYSIS
 # ==========================================
+# ==========================================
+# MODULE 4: VISUAL ANALYSIS (Zero-Lag Edition)
+# ==========================================
 elif menu == "4. Visual Analysis":
-    render_header("Visual Analytics", "Geographical mapping and health trends", "🗺️", "#f97316")
-    st.write("Living, breathing visual analytics of your entire RBSK program.")
+    render_header("Visual Analytics", "Quarterly Zero-Lag Performance & Epidemiological Mapping", "🗺️", "#f97316")
+    st.write("Welcome to the Zero-Lag Command Center. This dashboard processes your Quarterly State Reports for maximum speed and deep insights.")
 
-    def has_defect(val):
-        clean_val = str(val).strip().lower()
-        return clean_val not in ['', 'nan', 'none', 'no', 'null', 'na', 'false']
-
-    tab_funnel, tab_treemap, tab_velocity, tab_pyramid = st.tabs([
-        "🎯 Coverage Funnel", "🗺️ Hotspot Treemap", "⏱️ Screening Velocity", "⚖️ Demographic Pyramid"
+    tab_coverage, tab_hotspot, tab_radar = st.tabs([
+        "🎯 Coverage & Velocity Matrix", "📍 Disease Hotspot Mapper", "🧬 Epidemiological Radar"
     ])
 
-    with tab_funnel:
-        st.subheader("RBSK Program Funnel")
-        st.write("Tracking the pipeline from total enrollment to successful surgical treatment.")
+    with tab_coverage:
+        st.subheader("Village-Wise Screening Coverage")
+        st.write("Identifies which villages have the largest gap between registered children and actual screenings.")
         
-        target_pop = len(df_aw_master) + len(df_all_students)
-        
-        aw_4d_col = next((col for col in df_aw_master.columns if col.lower() == '4d'), None)
-        sch_4d_col = next((col for col in df_all_students.columns if col.lower() == '4d'), None)
-        sch_dis_col = next((col for col in df_all_students.columns if col.lower() == 'disabilityname'), None)
-        
-        identified_4d = 0
-        if aw_4d_col and not df_aw_master.empty:
-            identified_4d += len(df_aw_master[df_aw_master[aw_4d_col].apply(has_defect)])
-        if not df_all_students.empty:
-            sch_mask = pd.Series(False, index=df_all_students.index)
-            if sch_4d_col: sch_mask = sch_mask | df_all_students[sch_4d_col].apply(has_defect)
-            if sch_dis_col: sch_mask = sch_mask | df_all_students[sch_dis_col].apply(has_defect)
-            identified_4d += len(df_all_students[sch_mask])
+        if not df_q_perf.empty and 'Location Name' in df_q_perf.columns:
+            perf_df = df_q_perf.copy()
             
-        treated_cases = len(df_4d) if not df_4d.empty else 0
-        
-        funnel_data = dict(
-            Stage=["1. Target Population", "2. Identified 4D Cases", "3. Successfully Treated"],
-            Count=[target_pop, identified_4d, treated_cases]
-        )
-        
-        fig_funnel = px.funnel(funnel_data, x='Count', y='Stage', color='Stage',
-                               color_discrete_sequence=['#1f77b4', '#ff7f0e', '#2ca02c'])
-        st.plotly_chart(fig_funnel, use_container_width=True)
+            # Clean numbers
+            cols_to_clean = ['Registered Children', 'AWC Screened In First Half', 'Registered Students', 'Students Screened']
+            for col in cols_to_clean:
+                if col in perf_df.columns:
+                    perf_df[col] = pd.to_numeric(perf_df[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
 
-    with tab_treemap:
-        st.subheader("Anemia Hotspots by Region")
-        st.write("Click on a PHC block to zoom into specific high-risk villages.")
-        
-        if not df_anemia.empty:
-            tree_df = df_anemia.copy()
-            tree_df = tree_df.dropna(subset=['PHC/CHC/UPHC', 'VILLAGE', 'SEVERITY'])
-            tree_df = tree_df[tree_df['PHC/CHC/UPHC'].astype(str).str.strip() != 'nan']
-            tree_df['District'] = "Main District" 
-            
-            fig_tree = px.treemap(
-                tree_df, 
-                path=['District', 'PHC/CHC/UPHC', 'VILLAGE', 'SEVERITY'],
-                color='SEVERITY',
-                color_discrete_map={
-                    'Normal': '#2ca02c', 'Mild': '#fdb863', 
-                    'Moderate': '#e66101', 'Severe': '#b2182b', 'nan': '#808080'
-                }
-            )
-            fig_tree.update_traces(root_color="lightgrey")
-            fig_tree.update_layout(margin=dict(t=10, l=10, r=10, b=10))
-            st.plotly_chart(fig_tree, use_container_width=True)
-        else:
-            st.info("Not enough data in the ANEMIA sheet to build the Hotspot Treemap.")
+            # Combine AWC + School
+            perf_df['Total Registered'] = perf_df.get('Registered Children', 0) + perf_df.get('Registered Students', 0)
+            perf_df['Total Screened'] = perf_df.get('AWC Screened In First Half', 0) + perf_df.get('Students Screened', 0)
 
-    with tab_velocity:
-        st.subheader("Screening Velocity (The District Pulse)")
-        st.write("Tracking your team's momentum and daily medical camp output.")
-        
-        if not df_anemia.empty and 'CAMP DATE' in df_anemia.columns:
-            trend_df = df_anemia.copy()
-            trend_df['CAMP DATE'] = pd.to_datetime(trend_df['CAMP DATE'], errors='coerce')
-            trend_df = trend_df.dropna(subset=['CAMP DATE'])
-            
-            daily_counts = trend_df.groupby('CAMP DATE').size().reset_index(name='Children Screened')
-            daily_counts = daily_counts.sort_values('CAMP DATE')
-            
-            fig_line = px.line(daily_counts, x='CAMP DATE', y='Children Screened', markers=True,
-                               title="Daily Anemia Screenings Over Time")
-            fig_line.update_traces(line_color='#d62728', line_width=3)
-            st.plotly_chart(fig_line, use_container_width=True)
-        else:
-            st.info("Need more 'CAMP DATE' data in the ANEMIA sheet to calculate velocity.")
+            # Filter out empty rows and sort
+            perf_df = perf_df[perf_df['Location Name'].str.strip() != '']
+            perf_df = perf_df.sort_values('Total Registered', ascending=False).head(20) # Showing top 20 for perfect mobile viewing
 
-    with tab_pyramid:
-        st.subheader("Demographic Disease Pyramid")
-        st.write("Analyzing Nutritional Status (Stunting/Wasting) by Gender in Anganwadis.")
-        
-        if not df_aw_master.empty and 'Gender' in df_aw_master.columns:
-            pyr_df = df_aw_master.copy()
-            
-            if 'Beneficiary Type' in pyr_df.columns:
-                pyr_df['Category'] = pyr_df['Beneficiary Type']
-            else:
-                pyr_df['Category'] = "General Enrollment"
-                
-            risk_df = pyr_df[
-                (pyr_df['Stunting'].astype(str).str.lower() != 'normal') | 
-                (pyr_df['Wasting'].astype(str).str.lower() != 'normal')
-            ]
-            
-            if not risk_df.empty:
-                pyramid_data = risk_df.groupby(['Category', 'Gender']).size().reset_index(name='Count')
-                
-                def adjust_count(row):
-                    if str(row['Gender']).upper().startswith('M'): return -row['Count']
-                    return row['Count']
-                    
-                pyramid_data['Pyramid_Count'] = pyramid_data.apply(adjust_count, axis=1)
-                
-                fig_pyr = px.bar(pyramid_data, y='Category', x='Pyramid_Count', color='Gender', 
-                                 orientation='h', title="Children with Nutritional Risks (Boys vs Girls)",
-                                 color_discrete_map={'M': '#1f77b4', 'F': '#e377c2', 'Male': '#1f77b4', 'Female': '#e377c2'})
-                
-                fig_pyr.update_layout(barmode='relative', xaxis_title="Count (Boys Left | Girls Right)")
-                st.plotly_chart(fig_pyr, use_container_width=True)
-            else:
-                st.success("No widespread nutritional risks identified to build the pyramid!")
+            fig_cov = px.bar(perf_df, x='Location Name', y=['Total Screened', 'Total Registered'],
+                             barmode='group', title="Screened vs Registered (Top 20 Villages by Population)",
+                             labels={'value': 'Number of Children', 'variable': 'Category'},
+                             color_discrete_map={'Total Screened': '#10b981', 'Total Registered': '#3b82f6'})
+            st.plotly_chart(fig_cov, use_container_width=True)
         else:
-            st.info("Missing 'Gender' column in Anganwadi data.")
+            st.warning("⚠️ Waiting for valid data in the 'Q_Performance' tab.")
+
+    with tab_hotspot:
+        st.subheader("Geographical Disease Hotspots")
+        st.write("Select a specific disease to instantly see which villages have the highest case counts.")
+        
+        if not df_q_loc.empty and 'Location Name' in df_q_loc.columns:
+            loc_df = df_q_loc.copy()
+            
+            # Auto-detect disease columns (ignoring totals and basic info)
+            exclude_cols = ['Sr. No.', 'Parent Location', 'Location Name', 'Total Number of Registered Children', 'Total No of Children Screened']
+            disease_cols = [c for c in loc_df.columns if c not in exclude_cols and 'Total' not in c]
+
+            selected_disease = st.selectbox("🦠 Select Disease to Map:", sorted(disease_cols))
+
+            if selected_disease:
+                loc_df[selected_disease] = pd.to_numeric(loc_df[selected_disease].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
+                loc_df = loc_df[loc_df['Location Name'].str.strip() != '']
+
+                hotspot_data = loc_df[['Location Name', selected_disease]].sort_values(selected_disease, ascending=False).head(15)
+
+                if hotspot_data[selected_disease].sum() > 0:
+                    fig_hot = px.bar(hotspot_data, x=selected_disease, y='Location Name', orientation='h',
+                                     title=f"🚨 Top 15 Villages for: {selected_disease}",
+                                     color=selected_disease, color_continuous_scale='Reds')
+                    fig_hot.update_layout(yaxis={'categoryorder':'total ascending'})
+                    st.plotly_chart(fig_hot, use_container_width=True)
+                else:
+                    st.success(f"✅ Incredible! Zero reported cases of **{selected_disease}** across all villages!")
+        else:
+            st.warning("⚠️ Waiting for valid data in the 'Q_Location_4D' tab.")
+
+    with tab_radar:
+        st.subheader("Demographic Disease Radar (Age & Gender)")
+        st.write("Analyze how specific defects impact different age brackets and genders.")
+        
+        if not df_q_demo.empty and 'Defects' in df_q_demo.columns:
+            demo_df = df_q_demo.copy()
+            # Remove main category totals to only show specific diseases
+            demo_df = demo_df[~demo_df['Defects'].astype(str).str.contains('Total', na=False, case=False)]
+
+            selected_demo_disease = st.selectbox("🧬 Select Disease to Analyze:", sorted(demo_df['Defects'].unique()))
+
+            if selected_demo_disease:
+                disease_data = demo_df[demo_df['Defects'] == selected_demo_disease].iloc[0]
+
+                # Match the exact CSV age brackets
+                age_groups = ['Below 6 weeks', 'Below 3 Years', '3 Years to 6 Years', '6 Years to 18 Years']
+                radar_data = []
+
+                for age in age_groups:
+                    # Search the row data for columns that match Gender + Age
+                    m_val = 0
+                    f_val = 0
+                    for c in demo_df.columns:
+                        if 'Male' in c and age in c: m_val = pd.to_numeric(str(disease_data[c]).replace(',', ''), errors='coerce')
+                        if 'Female' in c and age in c: f_val = pd.to_numeric(str(disease_data[c]).replace(',', ''), errors='coerce')
+
+                    m_val = m_val if pd.notna(m_val) else 0
+                    f_val = f_val if pd.notna(f_val) else 0
+
+                    radar_data.append({'Age Group': age, 'Gender': 'Boys 👦', 'Cases': m_val})
+                    radar_data.append({'Age Group': age, 'Gender': 'Girls 👧', 'Cases': f_val})
+
+                radar_df = pd.DataFrame(radar_data)
+
+                if radar_df['Cases'].sum() > 0:
+                    fig_rad = px.bar(radar_df, x='Age Group', y='Cases', color='Gender', barmode='group',
+                                     title=f"Demographic Breakdown: {selected_demo_disease}",
+                                     color_discrete_map={'Boys 👦': '#3b82f6', 'Girls 👧': '#ec4899'})
+                    st.plotly_chart(fig_rad, use_container_width=True)
+                else:
+                    st.success(f"✅ No demographic cases found for **{selected_demo_disease}**!")
+        else:
+            st.warning("⚠️ Waiting for valid data in the 'Q_Demo_4D' tab.")
 
 # ==========================================
 # MODULE 5: HBNC NEWBORN VISIT
