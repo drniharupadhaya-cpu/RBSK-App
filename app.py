@@ -1098,7 +1098,7 @@ elif menu == "6. Success Story Builder":
                     pdf.set_text_color(255, 255, 255)
                     pdf.set_font("Helvetica", "B", 22)
                     pdf.set_xy(10, 8)
-                    pdf.cell(190, 10, "TRIUMPH OVER MALNUTRITION", ln=True, align="C")
+                    pdf.cell(190, 10, "FROM SURVIVAL TO HEALTHY SURVIVAL", ln=True, align="C")
                     pdf.set_font("Helvetica", "", 12)
                     pdf.cell(190, 8, f"A Journey to Health: {name} ({age}, {gender})", ln=True, align="C")
                     pdf.cell(190, 8, f"Location: {location}", ln=True, align="C")
