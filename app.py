@@ -1587,8 +1587,19 @@ elif menu == "12. Automated State Report":
         status_col = find_col(df_combined, ['status', 'sam', 'mam'])
 
         if date_col and dob_col:
+            # 🛡️ THE BULLETPROOF DATE CLEANER
+            # 1. Convert to string and strip away any accidental spaces
+            df_combined[date_col] = df_combined[date_col].astype(str).str.strip()
+            df_combined[dob_col] = df_combined[dob_col].astype(str).str.strip()
+            
+            # 2. Force all slashes and dots to become dashes so the app only sees ONE format!
+            df_combined[date_col] = df_combined[date_col].str.replace('/', '-').str.replace('.', '-', regex=False)
+            df_combined[dob_col] = df_combined[dob_col].str.replace('/', '-').str.replace('.', '-', regex=False)
+            
+            # 3. Safely convert to official computer time
             df_combined[date_col] = pd.to_datetime(df_combined[date_col], dayfirst=True, errors='coerce')
             df_combined[dob_col] = pd.to_datetime(df_combined[dob_col], dayfirst=True, errors='coerce')
+            
             df_combined = df_combined.dropna(subset=[date_col])
 
     # ==========================================
