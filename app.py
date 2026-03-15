@@ -1585,26 +1585,61 @@ elif menu == "12. Automated State Report":
         gender_col = find_col(df_combined, ['gender', 'sex'])
         disease_col = find_col(df_combined, ['disease', '4d', 'defect'])
         status_col = find_col(df_combined, ['status', 'sam', 'mam'])
-        name_col = find_col(df_combined, ['name', 'child', 'student', 'beneficiary'])
-        inst_col = find_col(df_combined, ['inst', 'school', 'awc', 'center'])
 
         if date_col and dob_col:
-            df_combined[date_col] = pd.to_datetime(df_combined[date_col], errors='coerce')
-            df_combined[dob_col] = pd.to_datetime(df_combined[dob_col], errors='coerce')
+            df_combined[date_col] = pd.to_datetime(df_combined[date_col], dayfirst=True, errors='coerce')
+            df_combined[dob_col] = pd.to_datetime(df_combined[dob_col], dayfirst=True, errors='coerce')
             df_combined = df_combined.dropna(subset=[date_col])
-            df_combined['Month_Year'] = df_combined[date_col].dt.strftime('%B %Y')
 
+    # ==========================================
+    # 📄 TAB 1: FORM III (WITH COLUMN CRUSHER & DYNAMIC MONTHS)
+    # ==========================================
     with tab_form3:
         if not df_combined.empty and date_col and dob_col:
-            available_months = df_combined['Month_Year'].dropna().unique().tolist()
-            if not available_months:
-                st.warning("No valid dates found in the screening logs.")
+            st.write("### 🗓️ Report Timeframe")
+            
+            # 🗓️ THE SCALABILITY FIX: Dynamic Selectors
+            col_y, col_m = st.columns(2)
+            with col_y:
+                selected_year = st.selectbox("📅 Select Year", ["2024", "2025", "2026", "2027"], index=2)
+            with col_m:
+                months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+                import datetime
+                current_month_index = datetime.datetime.now().month - 1
+                selected_month = st.selectbox("🗓️ Select Month", months, index=current_month_index)
+            
+            st.divider()
+
+            # Apply Filter for the exact Month and Year
+            month_num = months.index(selected_month) + 1
+            report_df = df_combined[
+                (df_combined[date_col].dt.year == int(selected_year)) & 
+                (df_combined[date_col].dt.month == month_num)
+            ].copy()
+
+            if report_df.empty:
+                st.info(f"No screenings found for {selected_month} {selected_year}.")
             else:
-                c1, c2 = st.columns(2)
-                selected_month = c1.selectbox("📅 Select Reporting Month:", available_months)
-                
-                report_df = df_combined[df_combined['Month_Year'] == selected_month].copy()
-                
+                # 🗜️ THE COLUMN CRUSHER: Fixes the missing names perfectly!
+                # 1. Crush Child Names
+                child_name_cols = [c for c in report_df.columns if any(k in str(c).lower() for k in ['name', 'child', 'student', 'beneficiary'])]
+                if child_name_cols:
+                    report_df['Official_Child_Name'] = report_df[child_name_cols[0]]
+                    for col in child_name_cols[1:]:
+                        report_df['Official_Child_Name'] = report_df['Official_Child_Name'].combine_first(report_df[col])
+                else:
+                    report_df['Official_Child_Name'] = "Unknown"
+
+                # 2. Crush Institution Names
+                inst_name_cols = [c for c in report_df.columns if any(k in str(c).lower() for k in ['inst', 'school', 'awc', 'center', 'aw name'])]
+                if inst_name_cols:
+                    report_df['Official_Institution'] = report_df[inst_name_cols[0]]
+                    for col in inst_name_cols[1:]:
+                        report_df['Official_Institution'] = report_df['Official_Institution'].combine_first(report_df[col])
+                else:
+                    report_df['Official_Institution'] = "Unknown"
+
+                # Standard Analytics
                 report_df['Age_Years'] = (report_df[date_col] - report_df[dob_col]).dt.days / 365.25
                 
                 def bucket_age(age):
@@ -1620,8 +1655,7 @@ elif menu == "12. Automated State Report":
                 else:
                     report_df['Clean_Gender'] = "U"
 
-                st.divider()
-                st.markdown(f"### 📊 Official Form III Output: **{selected_month}**")
+                st.markdown(f"### 📊 Official Form III Output: **{selected_month} {selected_year}**")
                 st.write(f"Total Children Screened this month: **{len(report_df)}**")
 
                 col_0_3, col_3_6, col_6_18 = st.columns(3)
@@ -1641,13 +1675,13 @@ elif menu == "12. Automated State Report":
                 render_bucket_stats("3-6 Years", col_3_6)
                 render_bucket_stats("6-18 Years", col_6_18)
 
-                # 🚀 THE GHOST DETECTOR
+                # The Ghost Detector
                 unknown_count = len(report_df[report_df['Govt_Age_Bucket'] == 'Unknown'])
                 if unknown_count > 0:
-                    st.warning(f"⚠️ **DATA ALERT:** There are **{unknown_count} children** with a missing or invalid Date of Birth (like 'N/A'). They are counted in the total, but cannot be sorted into the age buckets. Please update their DOBs in Google Sheets!")
+                    st.warning(f"⚠️ **DATA ALERT:** There are **{unknown_count} children** with a missing or invalid Date of Birth. They cannot be sorted into the age buckets.")
 
                 st.divider()
-                st.markdown("### 🚨 Disease & Malnutrition Referrals (Current Month)")
+                st.markdown("### 🚨 Disease & Malnutrition Referrals")
                 
                 m1, m2 = st.columns(2)
                 with m1:
@@ -1678,11 +1712,12 @@ elif menu == "12. Automated State Report":
                 st.divider()
                 st.markdown("### 📥 Download Cleaned Report")
                 
+                # Build the perfect CSV export
                 export_df = pd.DataFrame()
                 export_df['Screening Date'] = report_df[date_col].dt.strftime('%d-%m-%Y')
                 export_df['Source'] = report_df['Source']
-                export_df['Institution'] = report_df[inst_col] if inst_col else "Unknown"
-                export_df['Child Name'] = report_df[name_col] if name_col else "Unknown"
+                export_df['Institution'] = report_df['Official_Institution']  # Powered by Crusher
+                export_df['Child Name'] = report_df['Official_Child_Name']    # Powered by Crusher
                 export_df['DOB'] = report_df[dob_col].dt.strftime('%d-%m-%Y')
                 export_df['Calculated Age (Yrs)'] = report_df['Age_Years'].round(2)
                 export_df['Govt Age Bucket'] = report_df['Govt_Age_Bucket']
@@ -1694,16 +1729,19 @@ elif menu == "12. Automated State Report":
                 with st.expander("👁️ Preview Streamlined CSV Data"):
                     st.dataframe(export_df, use_container_width=True, hide_index=True)
 
-                csv = export_df.to_csv(index=False).encode('utf-8')
+                csv = export_df.to_csv(index=False).encode('utf-8-sig')
                 st.download_button(
-                    label="⬇️ Download Streamlined Monthly Data (CSV)",
+                    label=f"⬇️ Download Streamlined {selected_month} Data (CSV)",
                     data=csv,
-                    file_name=f"RBSK_MPR_Cleaned_{selected_month}.csv",
+                    file_name=f"RBSK_Form_III_{selected_month}_{selected_year}.csv",
                     mime="text/csv",
                 )
         else:
             st.info("No valid daily screening data found yet to generate Form III. Start screening in Module 2!")
 
+    # ==========================================
+    # 🎯 TAB 2: LIVE SCOREBOARD (UNTOUCHED)
+    # ==========================================
     with tab_scoreboard:
         st.subheader("🏆 Live Performance Scoreboard")
         st.markdown("**Team:** Dr. Nihar (MHT-1240315) | **Block:** Visavadar")
