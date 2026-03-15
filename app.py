@@ -999,97 +999,191 @@ elif menu == "5. HBNC Newborn Visit":
                     st.error(f"⚠️ Error: Could not find 'hbnc_screenings' tab. {e}")
 
 # ==========================================
-# MODULE 6: SUCCESS STORY BUILDER
+# MODULE 6: SUCCESS STORY BUILDER (DIGITAL PRO VERSION)
 # ==========================================
 elif menu == "6. Success Story Builder":
-    render_header("Success Story Builder", "Create success stories instantly", "🏥", "#e11d48")
-    if not df_4d.empty:
-        df_4d.columns = df_4d.columns.astype(str).str.strip().str.upper()
-        if 'NAME' in df_4d.columns and '4D' in df_4d.columns and 'VILLAGE' in df_4d.columns:
-            df_4d['Select_Label'] = df_4d['NAME'].astype(str) + " (" + df_4d['4D'].astype(str) + ") - " + df_4d['VILLAGE'].astype(str)
-            selected_label = st.selectbox("Select Treated Child from 4D Registry:", ["-- Select --"] + df_4d['Select_Label'].tolist())
+    render_header("Success Story Builder", "Generate digital, photo-integrated success reports.", "🌟", "#e11d48")
+    
+    with st.form("success_story_form"):
+        # --- 1. THE HERO (Basic Details) ---
+        st.subheader("👤 1. Child Details")
+        c1, c2, c3 = st.columns(3)
+        name = c1.text_input("Child Name")
+        age = c2.text_input("Age (e.g., 3 Years)")
+        gender = c3.selectbox("Gender", ["Male", "Female"])
+        location = st.text_input("Village & Anganwadi / School Name")
+        
+        st.divider()
+        
+        # --- 2. THE DISCOVERY (Before) ---
+        st.subheader("🚨 2. The Discovery (Before Intervention)")
+        col_b1, col_b2 = st.columns([2, 1])
+        with col_b1:
+            date_before = st.date_input("Date of Initial Screening")
+            diagnosis = st.text_input("Initial Diagnosis (e.g., SAM, Severe Anemia)")
+            b1, b2, b3, b4 = st.columns(4)
+            w_before = b1.number_input("Weight (kg)", value=0.0, key="w1")
+            h_before = b2.number_input("Height (cm)", value=0.0, key="h1")
+            m_before = b3.number_input("MUAC (cm)", value=0.0, key="m1")
+            hb_before = b4.number_input("Hb (g/dL)", value=0.0, key="hb1")
+        with col_b2:
+            img_before = st.file_uploader("Upload 'Before' Photo", type=["jpg", "jpeg", "png"], key="img_b")
             
-            if selected_label != "-- Select --":
-                child_data = df_4d[df_4d['Select_Label'] == selected_label].iloc[0]
-                with st.form("success_story_form"):
-                    st.subheader("📝 Treatment Summary")
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        treatment_place = st.text_input("Treatment Center")
-                        surgery_date = st.date_input("Date of Treatment")
-                    with col2:
-                        doctor_notes = st.text_area("Doctor's Narrative", height=100)
-                    
-                    st.subheader("📸 Upload Photos")
-                    col3, col4 = st.columns(2)
-                    with col3: img_before = st.file_uploader("Upload 'Before' Photo", type=["jpg", "jpeg", "png"])
-                    with col4: img_after = st.file_uploader("Upload 'After' Photo", type=["jpg", "jpeg", "png"])
-                    
-                    if st.form_submit_button("📄 Prepare Official PDF Report"):
-                        if treatment_place == "" or doctor_notes == "":
-                            st.error("🚨 Fill in Treatment Center and Narrative.")
-                        else:
-                            with st.spinner("Generating PDF..."):
-                                pdf = FPDF()
-                                pdf.add_page()
-                                pdf.set_auto_page_break(auto=True, margin=15)
-                                pdf.set_font("Arial", "B", 16)
-                                pdf.cell(200, 10, txt="RBSK SUCCESS STORY REPORT", ln=True, align='C')
-                                pdf.ln(10)
-                                pdf.set_font("Arial", "B", 12)
-                                pdf.cell(200, 10, txt="PATIENT DETAILS", ln=True, align='L')
-                                pdf.set_font("Arial", "", 12)
-                                pdf.cell(200, 8, txt=f"Name: {child_data['NAME']}", ln=True)
-                                pdf.cell(200, 8, txt=f"Village: {child_data['VILLAGE']}", ln=True)
-                                pdf.cell(200, 8, txt=f"Identified Defect: {child_data['4D']}", ln=True)
-                                mob = child_data.get('MOBILE NO', child_data.get('MOBILE', 'N/A'))
-                                pdf.cell(200, 8, txt=f"Mobile Number: {mob}", ln=True)
-                                pdf.ln(5)
-                                pdf.set_font("Arial", "B", 12)
-                                pdf.cell(200, 10, txt="TREATMENT SUMMARY", ln=True, align='L')
-                                pdf.set_font("Arial", "", 12)
-                                pdf.cell(200, 8, txt=f"Treated At: {treatment_place}", ln=True)
-                                pdf.cell(200, 8, txt=f"Treatment Date: {surgery_date}", ln=True)
-                                pdf.multi_cell(0, 8, txt=f"Doctor's Narrative:\n{doctor_notes}")
-                                pdf.ln(10)
-                                
-                                if img_before or img_after:
-                                    pdf.set_font("Arial", "B", 12)
-                                    pdf.cell(200, 10, txt="CLINICAL PHOTOGRAPHS", ln=True, align='L')
-                                    if img_before:
-                                        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_b:
-                                            tmp_b.write(img_before.read())
-                                            tmp_b_name = tmp_b.name
-                                        pdf.image(tmp_b_name, x=20, w=70)
-                                        os.remove(tmp_b_name) 
-                                    if img_after:
-                                        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_a:
-                                            tmp_a.write(img_after.read())
-                                            tmp_a_name = tmp_a.name
-                                        pdf.image(tmp_a_name, x=110, w=70) 
-                                        os.remove(tmp_a_name) 
-                                
-                                pdf_bytes = bytes(pdf.output())
-                                st.success("✅ PDF Generated Successfully!")
-                                
-                                # 🚀 THE iPHONE FIX: Base64 "New Tab" Button
-                                import base64
-                                b64 = base64.b64encode(pdf_bytes).decode()
-                                
-                                html_button = f'''
-                                    <a href="data:application/pdf;base64,{b64}" download="Success_Story_{child_data['NAME']}.pdf" target="_blank" 
-                                       style="display: inline-block; padding: 12px 24px; background-color: #e11d48; color: white; 
-                                       text-decoration: none; border-radius: 8px; font-weight: bold; text-align: center; width: 100%;">
-                                       📄 Tap Here to View / Download Success Story
-                                    </a>
-                                '''
-                                st.markdown(html_button, unsafe_allow_html=True)
-                                st.caption("💡 **Mobile Users:** The PDF will open safely in a new window. When you are done, simply close the PDF to return to the app!")
-        else:
-            st.error("⚠️ Headers in 4d_list must be 'NAME', 'VILLAGE', and '4D'.")
-    else:
-        st.warning("No 4D Defect records found.")
+        st.divider()
+            
+        # --- 3. THE INTERVENTION ---
+        st.subheader("⚕️ 3. The Intervention")
+        referred_to = st.text_input("Referred To (e.g., CMTC Junagadh, District Hospital)")
+        treatment = st.text_area("Key Treatments Given (e.g., F-100 diet, Blood Transfusion)", height=100)
+        days_care = st.text_input("Duration of Care (e.g., 14 Days)")
+        
+        st.divider()
+        
+        # --- 4. THE TRIUMPH (After) ---
+        st.subheader("✅ 4. The Triumph (Current Status)")
+        col_a1, col_a2 = st.columns([2, 1])
+        with col_a1:
+            date_after = st.date_input("Date of Discharge / Follow-up")
+            status = st.text_input("Current Health Status (e.g., Recovered, Healthy)")
+            a1, a2, a3, a4 = st.columns(4)
+            w_after = a1.number_input("Weight (kg)", value=0.0, key="w2")
+            h_after = a2.number_input("Height (cm)", value=0.0, key="h2")
+            m_after = a3.number_input("MUAC (cm)", value=0.0, key="m2")
+            hb_after = a4.number_input("Hb (g/dL)", value=0.0, key="hb2")
+        with col_a2:
+            img_after = st.file_uploader("Upload 'After' Photo", type=["jpg", "jpeg", "png"], key="img_a")
+            
+        st.divider()
+        
+        # --- 5. THE NARRATIVE ---
+        st.subheader("📝 5. Medical Officer's Narrative")
+        narrative = st.text_area("Write the human story here. How did the parents react? How did the child transform?", height=150)
+        
+        submit_btn = st.form_submit_button("🎨 Generate Digital Success Story PDF", use_container_width=True)
 
+    # ==========================================
+    # 🚀 THE PDF GENERATION ENGINE
+    # ==========================================
+    if submit_btn:
+        if not name or not location:
+            st.error("⚠️ Please enter at least the Child's Name and Location.")
+        else:
+            with st.spinner("Painting the Digital Success Story..."):
+                from fpdf import FPDF
+                from PIL import Image
+                import tempfile
+                
+                # We use temporary files so FPDF can safely read the uploaded images!
+                def save_temp_img(upload):
+                    if upload is not None:
+                        img = Image.open(upload)
+                        # Convert to RGB to avoid alpha channel PDF crashes
+                        if img.mode != 'RGB': img = img.convert('RGB')
+                        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
+                        img.save(temp_file.name)
+                        return temp_file.name
+                    return None
+
+                path_before = save_temp_img(img_before)
+                path_after = save_temp_img(img_after)
+
+                try:
+                    pdf = FPDF(orientation="P", unit="mm", format="A4")
+                    pdf.add_page()
+                    pdf.set_auto_page_break(auto=False)
+
+                    # --- 1. HEADER (Deep Blue) ---
+                    pdf.set_fill_color(41, 128, 185)
+                    pdf.rect(0, 0, 210, 35, 'F')
+                    pdf.set_text_color(255, 255, 255)
+                    pdf.set_font("Helvetica", "B", 22)
+                    pdf.set_xy(10, 8)
+                    pdf.cell(190, 10, "TRIUMPH OVER MALNUTRITION", ln=True, align="C")
+                    pdf.set_font("Helvetica", "", 12)
+                    pdf.cell(190, 8, f"A Journey to Health: {name} ({age}, {gender})", ln=True, align="C")
+                    pdf.cell(190, 8, f"Location: {location}", ln=True, align="C")
+
+                    # --- 2. THE DISCOVERY (Red Box) ---
+                    pdf.set_fill_color(253, 237, 236)
+                    pdf.rect(10, 45, 190, 55, 'F')
+                    pdf.set_text_color(192, 57, 43)
+                    pdf.set_font("Helvetica", "B", 14)
+                    pdf.set_xy(15, 50)
+                    pdf.cell(90, 8, "1. THE DISCOVERY", ln=True)
+                    
+                    pdf.set_text_color(0, 0, 0)
+                    pdf.set_font("Helvetica", "", 11)
+                    pdf.set_xy(15, 60)
+                    pdf.multi_cell(100, 6, f"Date: {date_before}\nDiagnosis: {diagnosis}\nWeight: {w_before} kg   |   Height: {h_before} cm\nMUAC: {m_before} cm   |   Hb: {hb_before} g/dL")
+                    
+                    if path_before:
+                        pdf.image(path_before, x=130, y=50, w=60, h=45)
+
+                    # --- 3. THE INTERVENTION (Light Blue Box) ---
+                    pdf.set_fill_color(235, 245, 251)
+                    pdf.rect(10, 105, 190, 45, 'F')
+                    pdf.set_text_color(41, 128, 185)
+                    pdf.set_font("Helvetica", "B", 14)
+                    pdf.set_xy(15, 110)
+                    pdf.cell(190, 8, "2. THE INTERVENTION", ln=True)
+                    
+                    pdf.set_text_color(0, 0, 0)
+                    pdf.set_font("Helvetica", "", 11)
+                    pdf.set_xy(15, 120)
+                    pdf.multi_cell(180, 6, f"Referred To: {referred_to}\nDuration of Care: {days_care}\nTreatment Provided: {treatment}")
+
+                    # --- 4. THE TRIUMPH (Green Box) ---
+                    pdf.set_fill_color(234, 250, 234)
+                    pdf.rect(10, 155, 190, 55, 'F')
+                    pdf.set_text_color(39, 174, 96)
+                    pdf.set_font("Helvetica", "B", 14)
+                    pdf.set_xy(15, 160)
+                    pdf.cell(90, 8, "3. THE TRIUMPH", ln=True)
+                    
+                    pdf.set_text_color(0, 0, 0)
+                    pdf.set_font("Helvetica", "", 11)
+                    pdf.set_xy(15, 170)
+                    pdf.multi_cell(100, 6, f"Date: {date_after}\nStatus: {status}\nWeight: {w_after} kg   |   Height: {h_after} cm\nMUAC: {m_after} cm   |   Hb: {hb_after} g/dL")
+                    
+                    if path_after:
+                        pdf.image(path_after, x=130, y=160, w=60, h=45)
+
+                    # --- 5. THE NARRATIVE ---
+                    pdf.set_text_color(0, 0, 0)
+                    pdf.set_font("Helvetica", "I", 12)
+                    pdf.set_xy(15, 220)
+                    pdf.multi_cell(180, 6, f"\"{narrative}\"")
+
+                    # --- 6. SIGNATURES ---
+                    pdf.set_font("Helvetica", "B", 10)
+                    pdf.set_xy(15, 275)
+                    pdf.cell(80, 5, "__________________________", ln=True)
+                    pdf.set_xy(15, 280)
+                    pdf.cell(80, 5, f"Medical Officer", ln=True)
+
+                    pdf.set_xy(115, 275)
+                    pdf.cell(80, 5, "__________________________", ln=True, align="R")
+                    pdf.set_xy(115, 280)
+                    pdf.cell(80, 5, "District Health Officer", ln=True, align="R")
+
+                    # Generate the raw bytes
+                    pdf_bytes = bytes(pdf.output())
+                    st.success("✅ Success Story Generated Flawlessly!")
+                    
+                    # 📱 iPhone/Mobile Safe Download Button
+                    import base64
+                    b64 = base64.b64encode(pdf_bytes).decode()
+                    html_button = f'''
+                        <a href="data:application/pdf;base64,{b64}" download="Success_Story_{name}.pdf" target="_blank" 
+                           style="display: inline-block; padding: 14px 24px; background-color: #e11d48; color: white; 
+                           text-decoration: none; border-radius: 8px; font-weight: bold; text-align: center; width: 100%;">
+                           📄 Tap Here to View / Download Success Story PDF
+                        </a>
+                    '''
+                    st.markdown(html_button, unsafe_allow_html=True)
+                    
+                except Exception as e:
+                    st.error(f"⚠️ An error occurred while painting the PDF: {e}")
 # ==========================================
 # MODULE 7: ANEMIA TRACKER
 # ==========================================
