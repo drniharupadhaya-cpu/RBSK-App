@@ -1157,14 +1157,14 @@ elif menu == "6. Success Story Builder":
                     # --- 6. SIGNATURES ---
                     pdf.set_font("Helvetica", "B", 10)
                     pdf.set_xy(15, 275)
-                    pdf.cell(80, 5, "__________________________", ln=True)
+                    pdf.cell(80, 5, "DR. NIHAR UPADHYAY", ln=True)
                     pdf.set_xy(15, 280)
                     pdf.cell(80, 5, f"Medical Officer", ln=True)
 
                     pdf.set_xy(115, 275)
-                    pdf.cell(80, 5, "__________________________", ln=True, align="R")
+                    pdf.cell(80, 5, "DR. ALPESH BHESANIYA", ln=True, align="R")
                     pdf.set_xy(115, 280)
-                    pdf.cell(80, 5, "District Health Officer", ln=True, align="R")
+                    pdf.cell(80, 5, "TALUKA HEALTH OFFICER", ln=True, align="R")
 
                     # Generate the raw bytes
                     pdf_bytes = bytes(pdf.output())
