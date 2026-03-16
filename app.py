@@ -362,7 +362,7 @@ if menu == "1. Daily Tour Plan":
             else:
                 st.info("No tour plans have been saved yet!")
             
-    except Exception as e:
+        except Exception as e:
         st.error(f"❌ Could not load the table. Error: {e}")
         
         st.divider()
