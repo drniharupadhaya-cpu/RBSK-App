@@ -358,7 +358,29 @@ if menu == "1. Daily Tour Plan":
                     st.success(f"✅ Official Tour Plan for {tour_village} saved to the database!")
                 except Exception as e:
                     st.error("❌ Could not save! Did you create the 'tour_plans' tab in your Google Sheet?")
+
+st.write("---")
+st.subheader("📅 Live Tour Plan Preview")
+
+if st.button("🔄 Refresh Table"):
+    try:
+        # 1. Connect to the sheet and grab ALL the data
+        tour_sheet = spreadsheet.worksheet("tour_plans")
+        data = tour_sheet.get_all_records() 
         
+        # 2. Check if the sheet has data
+        if data:
+            # Turn the raw data into a beautiful Pandas DataFrame (a digital table)
+            df = pd.DataFrame(data)
+            
+            # 3. Display the interactive table!
+            st.dataframe(df, use_container_width=True)
+            
+        else:
+            st.info("No tour plans have been saved yet!")
+            
+    except Exception as e:
+        st.error(f"❌ Could not load the table. Error: {e}")
         st.divider()
         st.markdown("##### ✅ Daily Check-list for MHT-1")
         st.checkbox("Check weighing scale and height tape calibration")
