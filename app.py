@@ -340,7 +340,7 @@ if menu == "1. Daily Tour Plan":
             st.write("**📌 Enter Today's Target Locations**")
             c1, c2 = st.columns(2)
             with c1:
-                staff_name = st.selectbox("select staff name"), ["Dr. Nihar", "Dr. Sushmita", "Dr.Shruti", "Shobhaben", "Rinkalben", "Vaishaliben"])
+                staff_name = st.selectbox("select staff name", ["Dr. Nihar", "Dr. Sushmita", "Dr.Shruti", "Shobhaben", "Rinkalben", "Vaishaliben"])
                 tour_date = st.date_input("Tour Date")
                 tour_village = st.text_input("Village/City Name")
             with c2:
