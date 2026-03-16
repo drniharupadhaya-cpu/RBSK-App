@@ -1939,7 +1939,7 @@ elif menu == "13. Offline Batch Sync":
     # ==========================================
     # MODULE 14: 💻 TECHO PORTAL ENTRY QUEUE
     # ==========================================
-    elif selected_menu == "TECHO Entry Queue":
+elif selected_menu == "TECHO Entry Queue":
         st.header("💻 TECHO Portal Pending Queue")
         st.info("🔒 Safe Mode: View pending children and mark them as entered.")
     
