@@ -359,8 +359,8 @@ if menu == "1. Daily Tour Plan":
                 except Exception as e:
                     st.error("❌ Could not save! Did you create the 'tour_plans' tab in your Google Sheet?")            
             
-        else:
-            st.info("No tour plans have been saved yet!")
+            else:
+                st.info("No tour plans have been saved yet!")
             
     except Exception as e:
         st.error(f"❌ Could not load the table. Error: {e}")
