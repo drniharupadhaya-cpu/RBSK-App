@@ -329,7 +329,6 @@ if st.sidebar.button("🔓 Logout"):
 # ==========================================
 # MODULE 1: THE EXECUTIVE DASHBOARD & TOUR PLAN
 # ==========================================
-st.warning(f"🚨 X-RAY VISION: The computer thinks the menu clicked is: [{menu}]")
 if menu == "1. Daily Tour Plan":
     render_header("Executive Dashboard", "Live team overview and daily screening stats", "📊", "#3b82f6")
 
@@ -1940,7 +1939,7 @@ elif menu == "13. Offline Batch Sync":
     # ==========================================
     # MODULE 14: 💻 TECHO PORTAL ENTRY QUEUE
     # ==========================================
-elif menu == "TECHO Entry Queue":
+elif menu == "14. TECHO Entry Queue":
         st.header("💻 TECHO Portal Pending Queue")
         st.info("🔒 Safe Mode: View pending children and mark them as entered.")
     
