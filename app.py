@@ -354,16 +354,35 @@ if menu == "1. Daily Tour Plan":
                 try:
                     tour_sheet = spreadsheet.worksheet("tour_plans")
                     date_str = tour_date.strftime("%d-%m-%Y")
-                    tour_sheet.append_row([staff_name, date_str, tour_village, tour_school, tour_awc, tour_activity])
+                    # Remember to use the exact variable name you chose for staff here!
+                    tour_sheet.append_row([staff_name, date_str, tour_village, tour_school, tour_awc])
                     st.success(f"✅ Official Tour Plan for {tour_village} saved to the database!")
                 except Exception as e:
-                    st.error("❌ Could not save! Did you create the 'tour_plans' tab in your Google Sheet?")            
-            
-            else:
-                st.info("No tour plans have been saved yet!")
-            
-        except Exception as e:
-            st.error(f"❌ Could not load the table. Error: {e}")
+                    st.error(f"❌ Could not save! Error: {e}")
+
+            # --- THE LIVE PREVIEW TABLE ---
+            st.write("---")
+            st.subheader("📅 Live Tour Plan Preview")
+
+            if st.button("🔄 Refresh Table"):
+                try:
+                    tour_sheet = spreadsheet.worksheet("tour_plans")
+                    data = tour_sheet.get_all_records()
+                    
+                    if data:
+                        df = pd.DataFrame(data)
+                        
+                        # The Search Bar Upgrade!
+                        search_word = st.text_input("🔍 Search for a Staff Name, Village, or Date:")
+                        if search_word:
+                            df = df[df.astype(str).apply(lambda col: col.str.contains(search_word, case=False)).any(axis=1)]
+                        
+                        st.dataframe(df, use_container_width=True)
+                    else:
+                        st.info("No tour plans have been saved yet!")
+                        
+                except Exception as e:
+                    st.error(f"❌ Could not load the table. Error: {e}")
         
         st.divider()
         st.markdown("##### ✅ Daily Check-list for MHT-1")
