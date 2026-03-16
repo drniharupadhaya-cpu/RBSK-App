@@ -329,6 +329,7 @@ if st.sidebar.button("🔓 Logout"):
 # ==========================================
 # MODULE 1: THE EXECUTIVE DASHBOARD & TOUR PLAN
 # ==========================================
+st.warning(f"🚨 X-RAY VISION: The computer thinks the menu clicked is: [{choice}]")
 if menu == "1. Daily Tour Plan":
     render_header("Executive Dashboard", "Live team overview and daily screening stats", "📊", "#3b82f6")
 
