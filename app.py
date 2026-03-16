@@ -717,9 +717,11 @@ elif menu == "2. Child Screening":
 
                         # --- WRITE TO GOOGLE SHEETS ---
                         if row_to_update:
+                            new_row.append("Pending")
                             ws.update(range_name=f"A{row_to_update}", values=[new_row])
                             st.success(f"🤝 Collaboration Engine: Successfully updated and merged {final_child_name}'s record!")
                         else:
+                            new_row.append("Pending")
                             ws.append_row(new_row)
                             st.success(f"✅ Saved new entry to {category} Log!")
 
