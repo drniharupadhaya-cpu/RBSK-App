@@ -361,25 +361,34 @@ if menu == "1. Daily Tour Plan":
                     st.error(f"❌ Could not save! Error: {e}")
 
             # --- THE LIVE PREVIEW TABLE ---
-        st.write("---")
-        st.subheader("📅 Live Tour Plan Preview")
+    st.write("---")
+    st.subheader("📅 Live Tour Plan Preview")
 
-        if st.button("🔄 Refresh Table"):
-            try:
-                tour_sheet = spreadsheet.worksheet("tour_plans")
-                data = tour_sheet.get_all_records()
-                
-                if data:
-                    df = pd.DataFrame(data)
-                    
-                    # The Search Bar Upgrade!
-                    search_word = st.text_input("🔍 Search for a Staff Name, Village, or Date:")
-                    if search_word:
-                        df = df[df.astype(str).apply(lambda col: col.str.contains(search_word, case=False)).any(axis=1)]
-                    
-                    st.dataframe(df, use_container_width=True)
-                else:
-                    st.info("No tour plans have been saved yet!")
+    # 1. The button now only does ONE thing: Downloads data to the Memory Bank
+    if st.button("🔄 Refresh Table"):
+        try:
+            tour_sheet = spreadsheet.worksheet("tour_plans")
+            # Save the raw data into st.session_state (Long-Term Memory)
+            st.session_state.tour_data = tour_sheet.get_all_records()
+        except Exception as e:
+            st.error(f"❌ Could not load the table. Error: {e}")
+
+    # 2. If the data exists in the Memory Bank, draw the search bar and table!
+    if "tour_data" in st.session_state:
+        data = st.session_state.tour_data
+        
+        if data:
+            df = pd.DataFrame(data)
+            
+            # The Search Bar is now safely OUTSIDE the button!
+            search_word = st.text_input("🔍 Search for a Staff Name, Village, or Date:")
+            
+            if search_word:
+                df = df[df.astype(str).apply(lambda col: col.str.contains(search_word, case=False)).any(axis=1)]
+            
+            st.dataframe(df, use_container_width=True)
+        else:
+            st.info("No tour plans have been saved yet!")
                     
             except Exception as e:
                 st.error(f"❌ Could not load the table. Error: {e}")
