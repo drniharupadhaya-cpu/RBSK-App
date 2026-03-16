@@ -315,7 +315,8 @@ menu = st.sidebar.radio("Go to:",
         "10. Staff Directory",
         "11. Annual FY Planner",
         "12. Automated State Report",
-        "13. Offline Batch Sync"
+        "13. Offline Batch Sync",
+        "14. "TECHO Entry Queue"
     ])
 
 
@@ -1935,5 +1936,72 @@ elif menu == "13. Offline Batch Sync":
 
             except Exception as e:
                 st.error(f"⚠️ Error reading file. Please ensure you are using the exact template. Detail: {e}")
-
+    # ==========================================
+    # MODULE 14: 💻 TECHO PORTAL ENTRY QUEUE
+    # ==========================================
+    elif selected_menu == "TECHO Entry Queue":
+        st.header("💻 TECHO Portal Pending Queue")
+        st.info("🔒 Safe Mode: View pending children and mark them as entered.")
+    
+        # --- 🔀 THE SHEET SWITCHER ---
+        queue_type = st.radio("Select which queue to work on:", ["👶 Anganwadi Queue", "🏫 School Queue"])
+        
+        # Tell Python which sheet to open based on the click!
+        if queue_type == "👶 Anganwadi Queue":
+            target_sheet_name = "daily_screenings_aw"
+        else:
+            target_sheet_name = "daily_screenings_schools"
+    
+        st.write("---")
+    
+        try:
+            # 1. Connect to whichever sheet was selected
+            active_sheet = spreadsheet.worksheet(target_sheet_name)
+            data = active_sheet.get_all_records()
+            
+            if data:
+                df = pd.DataFrame(data)
+                
+                if 'TECHO_Status' not in df.columns:
+                    st.error(f"❌ Please add the 'TECHO_Status' column to the {target_sheet_name} sheet!")
+                else:
+                    # Filter for Pending kids
+                    pending_df = df[df['TECHO_Status'] == 'Pending']
+                    
+                    if pending_df.empty:
+                        st.success(f"🎉 Awesome! The {queue_type} is completely empty!")
+                    else:
+                        st.write(f"### 📋 Pending Entries ({len(pending_df)} Children)")
+                        
+                        # Show the data table
+                        st.dataframe(pending_df, use_container_width=True)
+    
+                        # --- ✅ THE 'MARK AS DONE' BUTTON ---
+                        st.write("---")
+                        st.subheader("✅ Update TECHO Status")
+                        
+                        # WARNING: Change 'Name' below to match your actual column for the child's name!
+                        if 'Name' in pending_df.columns:
+                            child_to_update = st.selectbox("Select the child you just entered into TECHO:", pending_df['Name'].tolist())
+                            
+                            if st.button(f"🚀 Mark {child_to_update} as 'Done'"):
+                                with st.spinner("Updating database..."):
+                                    # Find the child in the currently active sheet
+                                    cell = active_sheet.find(child_to_update)
+                                    
+                                    if cell:
+                                        status_col_index = df.columns.get_loc('TECHO_Status') + 1 
+                                        active_sheet.update_cell(cell.row, status_col_index, "Done")
+                                        
+                                        st.success(f"✅ Status updated! Refreshing...")
+                                        st.rerun() 
+                                    else:
+                                        st.error("Could not find that child in the database.")
+                        else:
+                            st.error("❌ Could not find the Child Name column. Please check the exact column name in your sheet.")
+            else:
+                st.info(f"The {target_sheet_name} sheet is currently empty.")
+                
+        except Exception as e:
+            st.error(f"❌ Connection Error: {e}")
 
