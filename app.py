@@ -340,6 +340,7 @@ if menu == "1. Daily Tour Plan":
             st.write("**📌 Enter Today's Target Locations**")
             c1, c2 = st.columns(2)
             with c1:
+                staff_name = st.text_input("name")
                 tour_date = st.date_input("Tour Date")
                 tour_village = st.text_input("Village/City Name")
             with c2:
@@ -352,7 +353,7 @@ if menu == "1. Daily Tour Plan":
                 try:
                     tour_sheet = spreadsheet.worksheet("tour_plans")
                     date_str = tour_date.strftime("%d-%m-%Y")
-                    tour_sheet.append_row([date_str, tour_village, tour_school, tour_awc])
+                    tour_sheet.append_row([name, date_str, tour_village, tour_school, tour_awc])
                     st.success(f"✅ Official Tour Plan for {tour_village} saved to the database!")
                 except Exception as e:
                     st.error("❌ Could not save! Did you create the 'tour_plans' tab in your Google Sheet?")
