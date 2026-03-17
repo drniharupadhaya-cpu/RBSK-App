@@ -957,8 +957,8 @@ elif menu == "5. HBNC Newborn Visit":
                 except Exception as e:
                     st.error(f"⚠️ Error: Could not find 'hbnc_screenings' tab. {e}")
         # --- THE NEW LIVE DATA TABLE ---
-        st.divider()
-        st.subheader("📋 Recent Physical HBNC Records")
+    st.divider()
+    st.subheader("📋 Recent Physical HBNC Records")
         try:
             # Change "hbnc_master" to whatever your actual Google Sheet tab is named!
             ws_hbnc = spreadsheet.worksheet("hbnc_screenings") 
