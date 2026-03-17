@@ -614,20 +614,24 @@ elif menu == "2. Child Screening":
                             except Exception as e: st.error(f"Error: {e}")
 
                     # 5. Screening Form
+                    # 5. Screening Form (Restored 10-digit limit)
                     if not is_absent:
+                        st.divider()
                         st.subheader("🩺 Enter New Screening Vitals")
-                        # DO NOT DELETE your vitals_form below this line!
                         with st.form("vitals_form"):
                             screening_date = st.date_input("Date of Screening")
                             sc1, sc2 = st.columns(2)
-                            with sc1: updated_contact = st.text_input("📞 Contact Number", value=existing_contact)
+                            
+                            # 🚨 FIXED: The 10-Digit limit is hardcoded right here!
+                            with sc1: updated_contact = st.text_input("📞 Contact Number", value=existing_contact, max_chars=10)
+                            
                             with sc2: techo_id = st.text_input("🆔 Techo ID") if category == "👶 Anganwadi" else "N/A"
                             v1, v2, v3, v4 = st.columns(4)
                             with v1: h_str = st.text_input("Height (cm)")
                             with v2: w_str = st.text_input("Weight (kg)")
                             with v3: m_str = st.text_input("MUAC (cm)") if category == "👶 Anganwadi" else "0"
                             with v4: hb_str = st.text_input("Hb %")
-                            disease = st.text_input("🦠 Disease Identifying (4D)", value="None")
+                            disease = st.text_input("🦠 Disease Identified (4D)", value="None")
                             save_btn = st.form_submit_button("💾 Save Screening Data")
 
                         if save_btn:
@@ -640,6 +644,8 @@ elif menu == "2. Child Screening":
                             ws = spreadsheet.worksheet("daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools")
                             all_recs = ws.get_all_values()
                             row_to_update = None
+                            
+                            # The Collaboration Engine checking for duplicates
                             for idx, r in enumerate(all_recs):
                                 if len(r) > 2 and r[0] == str(screening_date) and str(r[2]).strip() == final_child_name.strip():
                                     row_to_update = idx + 1; break
@@ -649,13 +655,21 @@ elif menu == "2. Child Screening":
                             else:
                                 new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, hb_val, disease, updated_contact, "Online Entry", "Pending"]
 
-                            if row_to_update: ws.update(range_name=f"A{row_to_update}", values=[new_row])
-                            else: ws.append_row(new_row)
+                            # 🚨 FIXED: Added a 1.5 second pause so the doctor can actually read the success message!
+                            if row_to_update: 
+                                ws.update(range_name=f"A{row_to_update}", values=[new_row])
+                                st.success(f"✅ Collaborative Update: Added {disease} to {final_child_name}'s record!")
+                            else: 
+                                ws.append_row(new_row)
+                                st.success(f"✅ New screening saved for {final_child_name}!")
                             
                             if category == "👶 Anganwadi" and final_status in ["SAM", "MAM"]:
                                 spreadsheet.worksheet("cmtc_referral").append_row([str(screening_date), selected_inst, final_child_name, str(dob), updated_contact, weight_val, height_val, muac_val, final_status, "Pending"])
                             
-                            st.success("Saved!"); get_daily_logs.clear(); st.rerun()
+                            # The Pause!
+                            import time
+                            time.sleep(1.5) 
+                            st.rerun()
 
 # --- NO STRAY ELSE HERE. MODULE 2 ENDS, MODULE 3 BEGINS ---
 
