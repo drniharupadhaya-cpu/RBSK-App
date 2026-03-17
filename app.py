@@ -689,7 +689,7 @@ elif menu == "3. 4D Defect Registry":
 
     def is_real_defect(val):
         v = str(val).strip().lower()
-        return v not in ['', 'nan', 'none', 'no', 'null', 'na', 'false', 'normal', '-', 'absent']
+        return v not in ['', 'nan', 'none', 'no', 'null', 'na', 'false', 'normal', '-', 'absent', 'out of bounds']
 
     for df_type, df in [("Anganwadi", aw_logs), ("School", sch_logs)]:
         if not df.empty:
