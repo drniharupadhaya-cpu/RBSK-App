@@ -1910,13 +1910,13 @@ elif menu == "13. Offline Batch Sync":
                                     elif (muac >= 11.5 and muac < 12.5) or (bmi >= 13.0 and bmi < 14.5): final_status = "MAM"
                                 except: final_status = "Error"
 
-                                aw_rows_to_add.append([s_date, inst, name, dob, gender, height, weight, muac, hb, disease, contact, "Offline Sync", final_status])
+                                aw_rows_to_add.append([s_date, inst, name, dob, gender, height, weight, muac, hb, disease, contact, "Offline Sync", final_status, "Pending"])
                                 
                                 if final_status in ["SAM", "MAM"]:
-                                    cmtc_rows_to_add.append([s_date, inst, name, dob, contact, weight, height, muac, final_status])
+                                    cmtc_rows_to_add.append([s_date, inst, name, dob, contact, weight, height, muac, final_status, "Pending"])
 
                             elif "sch" in loc_type:
-                                sch_rows_to_add.append([s_date, inst, name, dob, gender, height, weight, hb, disease, contact])
+                                sch_rows_to_add.append([s_date, inst, name, dob, gender, height, weight, hb, disease, contact, "Offline Sync", "Pending"])
 
                         if aw_rows_to_add:
                             spreadsheet.worksheet("daily_screenings_aw").append_rows(aw_rows_to_add)
