@@ -608,7 +608,9 @@ elif menu == "2. Child Screening":
                                 else:
                                     row = [today_str, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, "ABSENT", existing_contact, "Online Single", "Pending"]
                                 ws.append_row(row)
-                                st.success("Recorded absence!"); st.cache_data.clear(); st.rerun()
+                                st.success("Recorded absence!")
+                                import time; time.sleep(1) # Pause for 1 second to show the success message
+                                st.rerun()
                             except Exception as e: st.error(f"Error: {e}")
 
                     # 5. Screening Form
