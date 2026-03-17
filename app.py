@@ -726,20 +726,21 @@ elif menu == "3. 4D Defect Registry":
                         "Type": df_type
                     })
 
-    # ==========================================
+   # ==========================================
     # DATA PREP 2: 5-YEAR HISTORICAL DATABASE
     # ==========================================
     import datetime
     today = datetime.date.today()
+    today_ts = pd.Timestamp(today) # 🚀 FIX: Convert today to a safe Pandas Timestamp
     
     if not df_4d.empty:
         df_4d.columns = df_4d.columns.str.strip()
         df_working = df_4d.copy()
-        # Safely convert dates so Python can calculate who is overdue
-        df_working['Parsed_Next_Date'] = pd.to_datetime(df_working.get('Next Follow-Up Date', ''), errors='coerce').dt.date
+        
+        # 🚀 FIX: Removed the .dt.date at the end so it safely handles blank cells (NaT)
+        df_working['Parsed_Next_Date'] = pd.to_datetime(df_working.get('Next Follow-Up Date', ''), errors='coerce', dayfirst=True)
     else:
         df_working = pd.DataFrame()
-
     # ==========================================
     # THE 5-TAB SUPER SYSTEM
     # ==========================================
