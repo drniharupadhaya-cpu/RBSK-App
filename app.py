@@ -978,7 +978,7 @@ elif menu == "5. HBNC Newborn Visit":
             else:
                 st.info("No physical visit data found yet.")
         except Exception as e:
-            st.warning("Could not load physical data table. Check your Google Sheet tab name.")
+            st.warning(f"⚠️ Could not load physical data table. Reason: {e}")
 
 
     # ---------------------------------------------------------
