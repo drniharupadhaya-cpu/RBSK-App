@@ -574,7 +574,10 @@ elif menu == "2. Child Screening":
                     is_absent = st.checkbox(f"🚨 Mark {selected_child} as ABSENT", key=f"abs_{selected_child}")
                     
                     # --- FIX: Individual Absent Toggle ---
-                    is_absent = st.checkbox(f"🚨 Mark {selected_child} as ABSENT today", key=f"abs_{selected_child}")
+                    is_absent = st.checkbox(
+    f"🚨 Mark {selected_child} as ABSENT today", 
+    key=f"emr_abs_{str(selected_child).replace(' ', '_')}"
+)
                     
                     if is_absent:
                         if st.button("🚩 Confirm Single Absence"):
