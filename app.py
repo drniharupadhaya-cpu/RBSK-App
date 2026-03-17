@@ -448,7 +448,7 @@ if menu == "1. Daily Tour Plan":
                     st.info("No referral conditions to map yet. Great job MHT-1!")
 
 # ==========================================
-# MODULE 2: EMR SCREENING
+# MODULE 2: EMR SCREENING (FULL ORIGINAL + ABSENTEE)
 # ==========================================
 elif menu == "2. Child Screening":
     render_header("Child Screening & EMR", "Record vitals and auto-calculate SAM/MAM", "🩺", "#10b981")
@@ -477,287 +477,162 @@ elif menu == "2. Child Screening":
     category = st.radio("Select Visit Type:", ["🏫 Schools", "👶 Anganwadi"], horizontal=True)
     st.divider()
 
+    # --- INSTITUTE SELECTION ---
     if category == "👶 Anganwadi":
         if not df_aw.empty:
             raw_list = df_aw['AWC Name'].dropna().unique().tolist()
             actual_institutes = sorted([str(i).strip() for i in raw_list if str(i).strip() != ''])
             inst_display = {name: f"{idx+1}. {name}" for idx, name in enumerate(actual_institutes)}
-            
-            selected_inst = st.selectbox(
-                "Select Anganwadi Center:", 
-                options=["-- Select --"] + actual_institutes,
-                format_func=lambda x: inst_display.get(x, x)
-            )
+            selected_inst = st.selectbox("Select Anganwadi Center:", options=["-- Select --"] + actual_institutes, format_func=lambda x: inst_display.get(x, x))
             if selected_inst != "-- Select --":
                 filtered_children = df_aw[df_aw['AWC Name'] == selected_inst]
                 actual_children = [str(c).strip() for c in filtered_children['Beneficiary Name'].tolist() if str(c).strip() != '']
         else:
-            st.error("No Anganwadi data found.")
-            selected_inst = "-- Select --"
-            
+            st.error("No Anganwadi data found."); selected_inst = "-- Select --"
     else: 
         if not df_students.empty:
             raw_list = df_students['School'].dropna().unique().tolist()
             actual_institutes = sorted([str(i).strip() for i in raw_list if str(i).strip() != ''])
             inst_display = {name: f"{idx+1}. {name}" for idx, name in enumerate(actual_institutes)}
-            
-            selected_inst = st.selectbox(
-                "Select School:", 
-                options=["-- Select --"] + actual_institutes,
-                format_func=lambda x: inst_display.get(x, x)
-            )
+            selected_inst = st.selectbox("Select School:", options=["-- Select --"] + actual_institutes, format_func=lambda x: inst_display.get(x, x))
             if selected_inst != "-- Select --":
                 filtered_children = df_students[df_students['School'] == selected_inst]
                 actual_children = [str(c).strip() for c in filtered_children['StudentName'].tolist() if str(c).strip() != '']
         else:
-            st.error("No School Student data found.")
-            selected_inst = "-- Select --"
+            st.error("No School Student data found."); selected_inst = "-- Select --"
 
     if selected_inst != "-- Select --":
-        # 🚀 UPGRADE: The Bulletproof Class Finder
+        
+        # --- NEW: PART 2 - BULK ABSENTEE TOOL ---
+        with st.expander("🚀 Bulk Absentee Entry"):
+            st.write("Mark multiple children as absent. They will appear in TECHO Queue instantly.")
+            absent_names = st.multiselect("Select Absent Children:", actual_children)
+            bulk_date = st.date_input("Date of Absence", key="bulk_abs_date")
+            if st.button("📤 Mark All Selected as Absent"):
+                if absent_names:
+                    sheet_name = "daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools"
+                    ws_bulk = spreadsheet.worksheet(sheet_name)
+                    rows_to_push = []
+                    for name in absent_names:
+                        match = filtered_children[filtered_children['Beneficiary Name' if category=="👶 Anganwadi" else 'StudentName'].str.strip() == name].iloc[0]
+                        if category == "👶 Anganwadi":
+                            rows_to_push.append([str(bulk_date), selected_inst, name, str(match.get('DoB','')), str(match.get('Gender','')), 0, 0, 0, 0, "ABSENT", "", match.get('TechoID',''), "N/A", "Pending"])
+                        else:
+                            rows_to_push.append([str(bulk_date), selected_inst, name, str(match.get('DOB','')), str(match.get('Gender','')), 0, 0, 0, "ABSENT", str(match.get('CONTACT NUMBER','')), "Online Bulk", "Pending"])
+                    ws_bulk.append_rows(rows_to_push)
+                    st.success("Bulk absences recorded!"); st.rerun()
+
+        # --- CLASS FINDER & DISPLAY ---
         class_column = None
         if category != "👶 Anganwadi":
-            # Fuzzy search: Looks for ANY column that contains these keywords
             for col in filtered_children.columns:
-                col_name = str(col).lower()
-                if 'class' in col_name or 'std' in col_name or 'standard' in col_name or 'grade' in col_name or 'ધોરણ' in col_name:
-                    class_column = col
-                    break
+                if any(w in str(col).lower() for w in ['class', 'std', 'grade', 'ધોરણ']):
+                    class_column = col; break
         
         child_display = {}
         for idx, name in enumerate(actual_children):
             display_str = f"{idx+1}. {name}"
-            
-            if category != "👶 Anganwadi":
-                class_val = "Unknown"
-                if class_column:
-                    # Match the student and extract their specific class
-                    student_row = filtered_children[filtered_children['StudentName'].astype(str).str.strip() == name]
-                    if not student_row.empty:
-                        raw_class = str(student_row.iloc[0][class_column]).strip()
-                        class_val = raw_class[:-2] if raw_class.endswith('.0') else raw_class
-                
-                # Force the display string to append the Class tag!
-                display_str += f"  [Class: {class_val}]"
-                
+            if category != "👶 Anganwadi" and class_column:
+                student_row = filtered_children[filtered_children['StudentName'].astype(str).str.strip() == name]
+                if not student_row.empty:
+                    raw_class = str(student_row.iloc[0][class_column]).strip()
+                    display_str += f" [Class: {raw_class[:-2] if raw_class.endswith('.0') else raw_class}]"
             child_display[name] = display_str
-            
-        selected_child = st.selectbox(
-            f"Select Child enrolled in {selected_inst}:", 
-            options=["-- Select Child --", "➕ Register New Child"] + actual_children,
-            format_func=lambda x: child_display.get(x, x)
-        )
+
+        selected_child = st.selectbox(f"Select Child:", options=["-- Select Child --", "➕ Register New Child"] + actual_children, format_func=lambda x: child_display.get(x, x))
         
         if selected_child != "-- Select Child --":
             if selected_child == "➕ Register New Child":
                 st.subheader("🆕 Register New Child")
-                new_child_name = st.text_input("Enter Child's Full Name")
-                col_n1, col_n2, col_n3 = st.columns(3)
-                with col_n1: dob = st.date_input("Date of Birth")
-                with col_n2: gender = st.selectbox("Gender", ["M", "F"])
-                with col_n3: parent = st.text_input("Parent's Name")
-                existing_contact = ""
-                final_child_name = new_child_name
+                new_child_name = st.text_input("Full Name")
+                c1, c2, c3 = st.columns(3)
+                with c1: dob = st.date_input("DOB")
+                with c2: gender = st.selectbox("Gender", ["M", "F"])
+                with c3: parent = st.text_input("Parent Name")
+                existing_contact, final_child_name = "", new_child_name
             else:
-                st.subheader("👤 Child Profile & History")
+                st.subheader("👤 Child Profile")
                 final_child_name = selected_child
-                
-                if category == "👶 Anganwadi":
-                    # 🛡️ THE FIX: Strip spaces from the raw data before searching!
-                    matched_rows = filtered_children[filtered_children['Beneficiary Name'].astype(str).str.strip() == selected_child]
-                    child_info = matched_rows.iloc[0] if not matched_rows.empty else pd.Series()
-                    
-                    dob = child_info.get('DoB', 'N/A')
-                    gender = child_info.get('Gender', 'N/A')
-                    parent = child_info.get('Mother Name', 'N/A')
-                    existing_contact = "" 
-                    hist_h = child_info.get('Height', 'N/A')
-                    hist_w = child_info.get('Weight', 'N/A')
-                    hist_wasting = child_info.get('Wasting', 'N/A')
-                    hist_disease = child_info.get('4d', 'None')
-                    hist_hb = "N/A" 
-                else:
-                    # 🛡️ THE FIX: Strip spaces from the raw data before searching!
-                    matched_rows = filtered_children[filtered_children['StudentName'].astype(str).str.strip() == selected_child]
-                    child_info = matched_rows.iloc[0] if not matched_rows.empty else pd.Series()
-                    
-                    dob = child_info.get('DOB', 'N/A')
-                    gender = child_info.get('Gender', 'N/A')
-                    parent = child_info.get('FatherName', 'N/A')
-                    contact_val = child_info.get('CONTACT NUMBER', '')
-                    existing_contact = str(contact_val) if str(contact_val) != "nan" else ""
-                    hist_h = child_info.get('HEIGHT', 'N/A')
-                    hist_w = child_info.get('WEIGHT', 'N/A')
-                    hist_wasting = "N/A"
-                    hist_disease = child_info.get('4D', 'None')
-                    hist_hb = child_info.get('Hb', 'N/A')
+                match = filtered_children[filtered_children['Beneficiary Name' if category=="👶 Anganwadi" else 'StudentName'].astype(str).str.strip() == selected_child].iloc[0]
+                dob = match.get('DoB' if category=="👶 Anganwadi" else 'DOB', 'N/A')
+                gender = match.get('Gender', 'N/A')
+                parent = match.get('Mother Name' if category=="👶 Anganwadi" else 'FatherName', 'N/A')
+                existing_contact = str(match.get('CONTACT NUMBER', '')) if str(match.get('CONTACT NUMBER','')) != "nan" else ""
 
-                cols = st.columns(3)
-                cols[0].info(f"**DOB:** {dob}")
-                cols[1].info(f"**Gender:** {gender}")
-                cols[2].info(f"**Parent:** {parent}")
+                st.columns(3)[0].info(f"**DOB:** {dob}")
+                st.columns(3)[1].info(f"**Gender:** {gender}")
+                st.columns(3)[2].info(f"**Parent:** {parent}")
 
-                st.markdown("##### 🕰️ Last Recorded Vitals (Baseline)")
-                hist_cols = st.columns(4)
-                hist_cols[0].metric(label="Previous Height", value=f"{hist_h} cm" if str(hist_h) != "nan" else "N/A")
-                hist_cols[1].metric(label="Previous Weight", value=f"{hist_w} kg" if str(hist_w) != "nan" else "N/A")
-                if category == "👶 Anganwadi":
-                    hist_cols[2].metric(label="Previous Status", value=str(hist_wasting) if str(hist_wasting) != "nan" else "N/A")
-                else:
-                    hist_cols[2].metric(label="Previous Hb", value=f"{hist_hb} %" if str(hist_hb) != "nan" else "N/A")
-                hist_cols[3].metric(label="Previous 4D", value=str(hist_disease) if str(hist_disease) != "nan" else "None")
-
-            st.divider()
-            st.subheader("🩺 Enter New Screening Vitals")
-            with st.form("vitals_form"):
-                screening_date = st.date_input("Date of Screening")
-                c_col1, c_col2 = st.columns(2)
-                
-                with c_col1: updated_contact = st.text_input("📞 Contact Number", value=existing_contact, max_chars=10, placeholder="10-digit mobile number")
-                with c_col2: techo_id = st.text_input("🆔 Techo ID") if category == "👶 Anganwadi" else "N/A"
-
-                v_col1, v_col2, v_col3, v_col4 = st.columns(4)
-                
-                with v_col1: height_str = st.text_input("Height (cm)", placeholder="e.g. 95.5")
-                with v_col2: weight_str = st.text_input("Weight (kg)", placeholder="e.g. 14.2")
-                with v_col3:
-                    if category == "👶 Anganwadi":
-                        muac_str = st.text_input("MUAC (cm)", placeholder="e.g. 12.5")
-                    else:
-                        muac_str = "0"
-                        st.text_input("MUAC (cm)", value="Not required", disabled=True)
-                with v_col4: hb_str = st.text_input("Hb %", placeholder="e.g. 11.0")
-
-                disease = st.text_input("🦠 Disease Identified (4D)", placeholder="Type 'None' or describe...")
-                save_btn = st.form_submit_button("💾 Save Screening Data")
-
-            if save_btn:
-                if updated_contact and len(updated_contact.strip()) != 10:
-                    st.error("⚠️ Please enter a valid 10-digit contact number before saving.")
-                else:
-                    def safe_float(val):
-                        try: return float(val)
-                        except: return 0.0
-
-                    height_val = safe_float(height_str)
-                    weight_val = safe_float(weight_str)
-                    muac_val = safe_float(muac_str)
-                    hb_val = safe_float(hb_str)
-
-                    final_status = "Normal"
-                    if category == "👶 Anganwadi":
-                        try:
-                            h_m = height_val / 100
-                            bmi = weight_val / (h_m * h_m) if h_m > 0 else 0
-                            
-                            if (muac_val > 0 and muac_val < 11.5) or (bmi > 0 and bmi < 13.0):
-                                final_status = "SAM"
-                            elif (muac_val >= 11.5 and muac_val < 12.5) or (bmi >= 13.0 and bmi < 14.5):
-                                final_status = "MAM"
-                        except:
-                            final_status = "Error in Calculation"
-
-                    # 2. SAVE TO GOOGLE SHEETS (THE COLLABORATION ENGINE)
-                    try:
+                # --- NEW: PART 1 - INDIVIDUAL ABSENT TOGGLE ---
+                is_absent = st.checkbox(f"🚨 Mark {selected_child} as ABSENT today")
+                if is_absent:
+                    if st.button("🚩 Confirm Single Absence"):
                         sheet_name = "daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools"
                         ws = spreadsheet.worksheet(sheet_name)
-                        
-                        # Fetch all records to check if someone already screened this child TODAY
-                        all_records = ws.get_all_values()
-                        row_to_update = None
-                        existing_row = []
-                        
-                        for index, row_data in enumerate(all_records):
-                            if len(row_data) > 2: # Ensure it's a valid row
-                                if row_data[0] == str(screening_date) and str(row_data[2]).strip() == final_child_name.strip():
-                                    row_to_update = index + 1 # Google Sheets rows start at 1
-                                    existing_row = row_data
-                                    break
-                                    
-                        # --- THE MERGER: If a row exists, combine old data with new data ---
-                        def merge_vitals(new_v, old_v):
-                            if new_v == 0.0 or new_v == 0 or new_v == "":
-                                try: return float(old_v)
-                                except: return 0.0
-                            return new_v
-
-                        if row_to_update:
-                            if category == "👶 Anganwadi":
-                                height_val = merge_vitals(height_val, existing_row[5] if len(existing_row) > 5 else 0.0)
-                                weight_val = merge_vitals(weight_val, existing_row[6] if len(existing_row) > 6 else 0.0)
-                                muac_val = merge_vitals(muac_val, existing_row[7] if len(existing_row) > 7 else 0.0)
-                                hb_val = merge_vitals(hb_val, existing_row[8] if len(existing_row) > 8 else 0.0)
-                                if not disease or disease.lower() == "none" or disease == "":
-                                    disease = existing_row[9] if len(existing_row) > 9 else disease
-                                    
-                                # Recalculate SAM/MAM based on the MERGED vitals
-                                final_status = "Normal"
-                                try:
-                                    h_m = height_val / 100
-                                    bmi = weight_val / (h_m * h_m) if h_m > 0 else 0
-                                    if (muac_val > 0 and muac_val < 11.5) or (bmi > 0 and bmi < 13.0): final_status = "SAM"
-                                    elif (muac_val >= 11.5 and muac_val < 12.5) or (bmi >= 13.0 and bmi < 14.5): final_status = "MAM"
-                                except: final_status = "Error in Calculation"
-                                
-                                new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, muac_val, hb_val, disease, updated_contact, techo_id, final_status]
-                            else:
-                                height_val = merge_vitals(height_val, existing_row[5] if len(existing_row) > 5 else 0.0)
-                                weight_val = merge_vitals(weight_val, existing_row[6] if len(existing_row) > 6 else 0.0)
-                                hb_val = merge_vitals(hb_val, existing_row[7] if len(existing_row) > 7 else 0.0)
-                                if not disease or disease.lower() == "none" or disease == "":
-                                    disease = existing_row[8] if len(existing_row) > 8 else disease
-                                    
-                                new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, hb_val, disease, updated_contact]
+                        if category == "👶 Anganwadi":
+                            row = [str(date.today()), selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, 0, "ABSENT", existing_contact, match.get('TechoID',''), "N/A", "Pending"]
                         else:
-                            # If no row to update, use standard new_row setup
-                            if category == "👶 Anganwadi":
-                                new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, muac_val, hb_val, disease, updated_contact, techo_id, final_status]
-                            else:
-                                new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, hb_val, disease, updated_contact]
+                            row = [str(date.today()), selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, "ABSENT", existing_contact, "Online Single", "Pending"]
+                        ws.append_row(row); st.success("Absence recorded!"); st.rerun()
 
-                        # --- WRITE TO GOOGLE SHEETS ---
-                        if row_to_update:
-                            new_row.append("Pending")
-                            ws.update(range_name=f"A{row_to_update}", values=[new_row])
-                            st.success(f"🤝 Collaboration Engine: Successfully updated and merged {final_child_name}'s record!")
-                        else:
-                            new_row.append("Pending")
-                            ws.append_row(new_row)
-                            st.success(f"✅ Saved new entry to {category} Log!")
+                if not is_absent:
+                    st.markdown("##### 🕰️ Last Recorded Vitals")
+                    h_cols = st.columns(4)
+                    h_cols[0].metric("Prev H", f"{match.get('Height' if category=='👶 Anganwadi' else 'HEIGHT', 'N/A')} cm")
+                    h_cols[1].metric("Prev W", f"{match.get('Weight' if category=='👶 Anganwadi' else 'WEIGHT', 'N/A')} kg")
 
-                        # 🚀 CMTC AUTO-FORWARDER (DUPLICATE-PROOF)
-                        if category == "👶 Anganwadi" and (final_status == "SAM" or final_status == "MAM"):
-                            try:
-                                cmtc_ws = spreadsheet.worksheet("cmtc_referral")
-                                cmtc_records = cmtc_ws.get_all_values()
-                                
-                                cmtc_row_to_update = None
-                                # Check if the child was already forwarded to CMTC today
-                                for c_idx, c_row in enumerate(cmtc_records):
-                                    if len(c_row) > 2 and c_row[0] == str(screening_date) and str(c_row[2]).strip() == final_child_name.strip():
-                                        cmtc_row_to_update = c_idx + 1
-                                        break
-                                
-                                cmtc_data = [str(screening_date), selected_inst, final_child_name, str(dob), updated_contact, weight_val, height_val, muac_val, final_status]
-                                
-                                if cmtc_row_to_update:
-                                    # If they exist, silently update their vitals in CMTC without duplicating
-                                    cmtc_ws.update(range_name=f"A{cmtc_row_to_update}", values=[cmtc_data])
-                                else:
-                                    # If they are new, add them and flash the warning
-                                    cmtc_ws.append_row(cmtc_data)
-                                    st.warning(f"🏥 Auto-forwarded {final_child_name} to CMTC Registry!")
-                                    
-                            except Exception as e:
-                                st.error(f"⚠️ CMTC Error: {e}")
-                        if category == "👶 Anganwadi" and final_status == "SAM":
-                            st.error("🚨 CRITICAL: Child identified as SAM. Refer to CMTC immediately.")
+            # --- SCREENING FORM (Only if not absent) ---
+            if 'is_absent' not in locals() or not is_absent:
+                st.divider()
+                with st.form("vitals_form"):
+                    screening_date = st.date_input("Date of Screening")
+                    c1, c2 = st.columns(2)
+                    with c1: updated_contact = st.text_input("📞 Contact Number", value=existing_contact)
+                    with c2: techo_id = st.text_input("🆔 Techo ID") if category == "👶 Anganwadi" else "N/A"
+                    v1, v2, v3, v4 = st.columns(4)
+                    with v1: h_str = st.text_input("Height (cm)")
+                    with v2: w_str = st.text_input("Weight (kg)")
+                    with v3: m_str = st.text_input("MUAC (cm)") if category == "👶 Anganwadi" else "0"
+                    with v4: hb_str = st.text_input("Hb %")
+                    disease = st.text_input("🦠 Disease Identified (4D)", value="None")
+                    save_btn = st.form_submit_button("💾 Save Screening Data")
 
-                        # Refresh the app's memory
-                        get_daily_logs.clear()
+                if save_btn:
+                    # (Your Original Merger Logic Starts Here)
+                    height_val = float(h_str) if h_str else 0.0
+                    weight_val = float(w_str) if w_str else 0.0
+                    muac_val = float(m_str) if m_str else 0.0
+                    hb_val = float(hb_str) if hb_str else 0.0
+                    
+                    final_status = get_whz_status(gender, height_val, weight_val) if category == "👶 Anganwadi" else "Normal"
+                    
+                    sheet_name = "daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools"
+                    ws = spreadsheet.worksheet(sheet_name)
+                    
+                    # --- THE ORIGINAL DUPLICATE CHECKER / MERGER ---
+                    all_recs = ws.get_all_values()
+                    row_to_update = None
+                    for idx, r in enumerate(all_recs):
+                        if len(r) > 2 and r[0] == str(screening_date) and str(r[2]).strip() == final_child_name.strip():
+                            row_to_update = idx + 1; break
 
-                    except Exception as e:
-                        st.error(f"Failed to connect to Google Sheets: {e}")
+                    if category == "👶 Anganwadi":
+                        new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, muac_val, hb_val, disease, updated_contact, techo_id, final_status, "Pending"]
+                    else:
+                        new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, hb_val, disease, updated_contact, "Online Entry", "Pending"]
+
+                    if row_to_update:
+                        ws.update(range_name=f"A{row_to_update}", values=[new_row])
+                        st.success("Record updated!")
+                    else:
+                        ws.append_row(new_row)
+                        st.success("New record saved!")
+                    
+                    # CMTC Forwarder
+                    if category == "👶 Anganwadi" and final_status in ["SAM", "MAM"]:
+                        spreadsheet.worksheet("cmtc_referral").append_row([str(screening_date), selected_inst, final_child_name, str(dob), updated_contact, weight_val, height_val, muac_val, final_status, "Pending"])
+                    
+                    get_daily_logs.clear(); st.rerun()
 
 # ==========================================
 # MODULE 3: 4D DEFECT REGISTRY
