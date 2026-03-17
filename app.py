@@ -575,13 +575,23 @@ elif menu == "2. Child Screening":
                     
                     if is_absent:
                         if st.button("🚩 Confirm Single Absence"):
-                            ws = spreadsheet.worksheet("daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools")
-                            today_str = date.today().strftime('%Y-%m-%d')
-                            if category == "👶 Anganwadi":
-                                row = [today_str, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, 0, "ABSENT", existing_contact, str(match.get('TechoID','')), "N/A", "Pending"]
-                            else:
-                                row = [today_str, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, "ABSENT", existing_contact, "Online Single", "Pending"]
-                            ws.append_row(row); st.success("Absence recorded!"); st.cache_data.clear(); st.rerun()
+                           try:
+                                ws = spreadsheet.worksheet("daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools")
+                            # Using datetime directly to avoid NameErrors
+            import datetime as dt
+            today_str = dt.date.today().strftime('%Y-%m-%d')
+            
+            if category == "👶 Anganwadi":
+                row = [today_str, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, 0, "ABSENT", existing_contact, str(match.get('TechoID','')), "N/A", "Pending"]
+            else:
+                row = [today_str, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, "ABSENT", existing_contact, "Online Single", "Pending"]
+            
+            ws.append_row(row)
+            st.success(f"✅ Recorded {final_child_name} as absent.")
+            st.cache_data.clear()
+            st.rerun()
+        except Exception as e:
+            st.error(f"Error: {e}")
 
                     # --- SCREENING FORM ---
                     if not is_absent:
