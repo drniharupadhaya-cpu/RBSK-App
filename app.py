@@ -761,7 +761,7 @@ elif menu == "3. 4D Defect Registry":
 
         if not df_working.empty:
             # 1. OVERDUE & TODAY (Red / Urgent)
-            overdue_mask = (df_working['Parsed_Next_Date'] <= today) & (df_working.get('Current Status', '').astype(str).str.upper() != 'CURED/RESOLVED')
+            overdue_mask = (df_working['Parsed_Next_Date'] <= today_ts) & (df_working.get('Current Status', '').astype(str).str.upper() != 'CURED/RESOLVED')
             df_action = df_working[overdue_mask].copy()
             
             # 2. NEW / UNSCHEDULED (Yellow / Needs Initial Assessment)
