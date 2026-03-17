@@ -552,60 +552,64 @@ elif menu == "2. Child Screening":
                 with c3: parent = st.text_input("Parent Name")
                 existing_contact = ""
             else:
-                # --- FIXED PROFILE SECTION ---
-                st.subheader("👤 Child Profile")
+                st.subheader("👤 Child Profile & History")
                 final_child_name = selected_child
-                name_col_to_search = 'Beneficiary Name' if category == "👶 Anganwadi" else 'StudentName'
-                matched_rows = filtered_children[filtered_children[name_col_to_search].astype(str).str.strip() == selected_child]
+                
+                # 1. Correct Data Fetching
+                name_col = 'Beneficiary Name' if category == "👶 Anganwadi" else 'StudentName'
+                matched_rows = filtered_children[filtered_children[name_col].astype(str).str.strip() == selected_child]
                 
                 if not matched_rows.empty:
                     match = matched_rows.iloc[0]
                     dob = match.get('DoB' if category == "👶 Anganwadi" else 'DOB', 'N/A')
                     gender = match.get('Gender', 'N/A')
                     parent = match.get('Mother Name' if category == "👶 Anganwadi" else 'FatherName', 'N/A')
-                    contact_raw = match.get('CONTACT NUMBER', '')
-                    existing_contact = str(contact_raw) if str(contact_raw) != "nan" else ""
+                    
+                    # Get historical vitals
+                    hist_h = match.get('Height' if category=="👶 Anganwadi" else 'HEIGHT', 'N/A')
+                    hist_w = match.get('Weight' if category=="👶 Anganwadi" else 'WEIGHT', 'N/A')
+                    hist_disease = match.get('4d' if category=="👶 Anganwadi" else '4D', 'None')
+                    hist_hb = match.get('Hb', 'N/A')
+                    contact_val = match.get('CONTACT NUMBER', '')
+                    existing_contact = str(contact_val) if str(contact_val) != "nan" else ""
 
+                    # 2. Balanced Profile Columns (NO MORE STAIRCASE)
                     p_col1, p_col2, p_col3 = st.columns(3)
                     with p_col1: st.info(f"**DOB:** {dob}")
                     with p_col2: st.info(f"**Gender:** {gender}")
                     with p_col3: st.info(f"**Parent:** {parent}")
 
-                    is_absent = st.checkbox(f"🚨 Mark {selected_child} as ABSENT", key=f"abs_{selected_child}")
-                    
-                    # --- FIX: Individual Absent Toggle ---
-                    is_absent = st.checkbox(
-    f"🚨 Mark {selected_child} as ABSENT today", 
-    key=f"emr_abs_{str(selected_child).replace(' ', '_')}"
-)
+                    # 3. Baseline Metrics (RESTORED!)
+                    st.markdown("##### 🕰️ Last Recorded Vitals (Baseline)")
+                    h_cols = st.columns(4)
+                    h_cols[0].metric("Prev Height", f"{hist_h} cm")
+                    h_cols[1].metric("Prev Weight", f"{hist_w} kg")
+                    h_cols[2].metric("Prev Hb", f"{hist_hb} %" if category != "👶 Anganwadi" else "N/A")
+                    h_cols[3].metric("Prev 4D", str(hist_disease))
+
+                    st.divider()
+
+                    # 4. SINGLE Checkbox for Absentee
+                    is_absent = st.checkbox(f"🚨 Mark {selected_child} as ABSENT today", key=f"emr_single_abs_{str(selected_child).replace(' ', '_')}")
                     
                     if is_absent:
                         if st.button("🚩 Confirm Single Absence"):
                             try:
-                                # We define the date safely right here
                                 import datetime
                                 today_str = datetime.date.today().strftime('%Y-%m-%d')
-                                
-                                sheet_name = "daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools"
-                                ws = spreadsheet.worksheet(sheet_name)
-                                
+                                ws = spreadsheet.worksheet("daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools")
                                 if category == "👶 Anganwadi":
-                                    # 14 Column structure for Anganwadi
                                     row = [today_str, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, 0, "ABSENT", existing_contact, str(match.get('TechoID','')), "N/A", "Pending"]
                                 else:
-                                    # 12 Column structure for Schools
                                     row = [today_str, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, "ABSENT", existing_contact, "Online Single", "Pending"]
-                                
                                 ws.append_row(row)
-                                st.success(f"✅ {selected_child} marked absent!")
-                                st.cache_data.clear() 
-                                st.rerun()
-                            except Exception as e:
-                                st.error(f"⚠️ Error saving absence: {e}")
+                                st.success("Recorded absence!"); st.cache_data.clear(); st.rerun()
+                            except Exception as e: st.error(f"Error: {e}")
 
-                    # --- SCREENING FORM ---
+                    # 5. Screening Form
                     if not is_absent:
-                        st.divider()
+                        st.subheader("🩺 Enter New Screening Vitals")
+                        # DO NOT DELETE your vitals_form below this line!
                         with st.form("vitals_form"):
                             screening_date = st.date_input("Date of Screening")
                             sc1, sc2 = st.columns(2)
