@@ -550,36 +550,54 @@ elif menu == "2. Child Screening":
                 with c2: gender = st.selectbox("Gender", ["M", "F"])
                 with c3: parent = st.text_input("Parent Name")
                 existing_contact, final_child_name = "", new_child_name
-            else:
-                st.subheader("👤 Child Profile")
-                final_child_name = selected_child
-                match = filtered_children[filtered_children['Beneficiary Name' if category=="👶 Anganwadi" else 'StudentName'].astype(str).str.strip() == selected_child].iloc[0]
-                dob = match.get('DoB' if category=="👶 Anganwadi" else 'DOB', 'N/A')
-                gender = match.get('Gender', 'N/A')
-                parent = match.get('Mother Name' if category=="👶 Anganwadi" else 'FatherName', 'N/A')
-                existing_contact = str(match.get('CONTACT NUMBER', '')) if str(match.get('CONTACT NUMBER','')) != "nan" else ""
+            # --- FIX FOR MODULE 2 CHILD PROFILE ---
+else:
+    st.subheader("👤 Child Profile")
+    final_child_name = selected_child
+    
+    # Identify the correct name column based on category
+    name_col_to_search = 'Beneficiary Name' if category == "👶 Anganwadi" else 'StudentName'
+    matched_rows = filtered_children[filtered_children[name_col_to_search].astype(str).str.strip() == selected_child]
+    
+    if not matched_rows.empty:
+        match = matched_rows.iloc[0]
+        dob = match.get('DoB' if category == "👶 Anganwadi" else 'DOB', 'N/A')
+        gender = match.get('Gender', 'N/A')
+        parent = match.get('Mother Name' if category == "👶 Anganwadi" else 'FatherName', 'N/A')
+        contact_raw = match.get('CONTACT NUMBER', '')
+        existing_contact = str(contact_raw) if str(contact_raw) != "nan" else ""
 
-                st.columns(3)[0].info(f"**DOB:** {dob}")
-                st.columns(3)[1].info(f"**Gender:** {gender}")
-                st.columns(3)[2].info(f"**Parent:** {parent}")
+        # --- FIX: Balanced Columns (No more jumbled menu) ---
+        col1, col2, col3 = st.columns(3)
+        with col1: st.info(f"**DOB:** {dob}")
+        with col2: st.info(f"**Gender:** {gender}")
+        with col3: st.info(f"**Parent:** {parent}")
 
-                # --- NEW: PART 1 - INDIVIDUAL ABSENT TOGGLE ---
-                is_absent = st.checkbox(f"🚨 Mark {selected_child} as ABSENT today")
-                if is_absent:
-                    if st.button("🚩 Confirm Single Absence"):
-                        sheet_name = "daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools"
-                        ws = spreadsheet.worksheet(sheet_name)
-                        if category == "👶 Anganwadi":
-                            row = [str(date.today()), selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, 0, "ABSENT", existing_contact, match.get('TechoID',''), "N/A", "Pending"]
-                        else:
-                            row = [str(date.today()), selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, "ABSENT", existing_contact, "Online Single", "Pending"]
-                        ws.append_row(row); st.success("Absence recorded!"); st.rerun()
-
-                if not is_absent:
-                    st.markdown("##### 🕰️ Last Recorded Vitals")
-                    h_cols = st.columns(4)
-                    h_cols[0].metric("Prev H", f"{match.get('Height' if category=='👶 Anganwadi' else 'HEIGHT', 'N/A')} cm")
-                    h_cols[1].metric("Prev W", f"{match.get('Weight' if category=='👶 Anganwadi' else 'WEIGHT', 'N/A')} kg")
+        # --- FIX: Individual Absent Toggle ---
+        is_absent = st.checkbox(f"🚨 Mark {selected_child} as ABSENT today", key=f"abs_{selected_child}")
+        
+        if is_absent:
+            if st.button("🚩 Confirm Single Absence"):
+                try:
+                    sheet_name = "daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools"
+                    ws = spreadsheet.worksheet(sheet_name)
+                    
+                    # Using date.today() safely now
+                    today_str = date.today().strftime('%Y-%m-%d')
+                    
+                    if category == "👶 Anganwadi":
+                        # 14 Column structure
+                        row = [today_str, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, 0, "ABSENT", existing_contact, str(match.get('TechoID','')), "N/A", "Pending"]
+                    else:
+                        # 12 Column structure
+                        row = [today_str, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, "ABSENT", existing_contact, "Online Single", "Pending"]
+                    
+                    ws.append_row(row)
+                    st.success(f"✅ {selected_child} marked absent in Master Sheet & TECHO Queue!")
+                    st.cache_data.clear() # Clear cache to show changes
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Error saving absence: {e}")
 
             # --- SCREENING FORM (Only if not absent) ---
             if 'is_absent' not in locals() or not is_absent:
