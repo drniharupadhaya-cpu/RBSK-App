@@ -916,7 +916,14 @@ elif menu == "4. Visual Analysis":
 # MODULE 5: HBNC NEWBORN VISIT
 # ==========================================
 elif menu == "5. HBNC Newborn Visit":
-    render_header("Record HBNC visits", "Record HBNC and Delivery point visits easily", "📝", "#14b8a6")
+    render_header("HBNC Newborn Visit", "Track physical visits and telephonic Techo consultations", "👶", "#f472b6")
+    # Create the Dual-Tab System
+    tab_physical, tab_telephonic = st.tabs(["🏠 1. Physical Field Visits", "📞 2. Telephonic Techo Queue"])
+    # ---------------------------------------------------------
+    # TAB 1: PHYSICAL VISITS (Your existing form + New Table)
+    # ---------------------------------------------------------
+    with tab_physical:
+        st.subheader("📝 Log Physical Visit")
     with st.form("hbnc_form"):
         st.markdown("#### 👶 Details")
         c1, c2, c3 = st.columns(3)
@@ -949,6 +956,96 @@ elif menu == "5. HBNC Newborn Visit":
                     st.success(f"✅ Recorded Visit for {child_name}.")
                 except Exception as e:
                     st.error(f"⚠️ Error: Could not find 'hbnc_screenings' tab. {e}")
+        # --- THE NEW LIVE DATA TABLE ---
+        st.divider()
+        st.subheader("📋 Recent Physical HBNC Records")
+        try:
+            # Change "hbnc_master" to whatever your actual Google Sheet tab is named!
+            ws_hbnc = spreadsheet.worksheet("hbnc_master") 
+            df_hbnc = pd.DataFrame(ws_hbnc.get_all_records())
+            
+            if not df_hbnc.empty:
+                st.dataframe(df_hbnc, use_container_width=True)
+                
+                # Excel/CSV friendly encoding for Gujarati/English
+                csv_hbnc = df_hbnc.to_csv(index=False).encode('utf-8-sig')
+                st.download_button(
+                    label="⬇️ Download Physical Visit Data",
+                    data=csv_hbnc,
+                    file_name=f"HBNC_Physical_Visits_{date.today()}.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.info("No physical visit data found yet.")
+        except Exception as e:
+            st.warning("Could not load physical data table. Check your Google Sheet tab name.")
+
+
+    # ---------------------------------------------------------
+    # TAB 2: TELEPHONIC TECHO QUEUE (The Gujarati File Reader)
+    # ---------------------------------------------------------
+    with tab_telephonic:
+        st.subheader("📞 Techo Telephonic Consultation")
+        st.info("Upload the Gujarati Techo list here. The team can view the list and log call outcomes directly.")
+
+        techo_file = st.file_uploader("Upload Techo Export (Excel or CSV)", type=["csv", "xlsx", "xls"])
+
+        if techo_file:
+            try:
+                # Safely read Gujarati text whether it's CSV or Excel
+                if techo_file.name.endswith('.csv'):
+                    df_techo = pd.read_csv(techo_file, encoding='utf-8-sig')
+                else:
+                    df_techo = pd.read_excel(techo_file)
+
+                # Clean up invisible characters from Gujarati headers
+                df_techo.columns = df_techo.columns.str.strip()
+
+                st.success(f"✅ Loaded {len(df_techo)} children from Techo Export.")
+                
+                # Display the Gujarati Dataframe for the team to see
+                st.dataframe(df_techo, use_container_width=True)
+                
+                st.divider()
+                st.markdown("### 🗣️ Log Telephonic Call")
+                
+                # Dynamic Selectors (Because we don't know the exact Gujarati header names!)
+                c1, c2 = st.columns(2)
+                with c1: name_col = st.selectbox("Which column contains the Child/Beneficiary Name?", df_techo.columns.tolist())
+                with c2: phone_col = st.selectbox("Which column contains the Phone Number?", df_techo.columns.tolist())
+
+                if name_col and phone_col:
+                    names_list = df_techo[name_col].dropna().astype(str).unique().tolist()
+                    selected_target = st.selectbox("🎯 Select Beneficiary to Call:", ["-- Select --"] + names_list)
+
+                    if selected_target != "-- Select --":
+                        target_data = df_techo[df_techo[name_col].astype(str) == selected_target].iloc[0]
+                        phone_num = str(target_data.get(phone_col, 'No Number Listed'))
+                        
+                        st.info(f"**📞 Calling:** {selected_target}  |  **📱 Number:** {phone_num}")
+
+                        with st.form("telephonic_form"):
+                            call_status = st.radio("Call Outcome:", ["✅ Successfully Consulted", "❌ Did Not Answer", "📵 Wrong/Invalid Number"], horizontal=True)
+                            remarks = st.text_input("Remarks / Advice Given (Can type in Gujarati or English)")
+                            save_call = st.form_submit_button("💾 Save Call Log")
+
+                        if save_call:
+                            # Save this to a new Google Sheet tab!
+                            try:
+                                ws_tele = spreadsheet.worksheet("hbnc_telephonic")
+                            except:
+                                st.error("⚠️ Please create a new tab in your Google Sheet called 'hbnc_telephonic' with headers: [Date, Name, Phone, Status, Remarks]")
+                                st.stop()
+
+                            import datetime
+                            today_str = datetime.date.today().strftime("%Y-%m-%d")
+                            
+                            ws_tele.append_row([today_str, selected_target, phone_num, call_status, remarks])
+                            st.success(f"Successfully logged call for {selected_target}!")
+                            import time; time.sleep(1.5); st.rerun()
+
+            except Exception as e:
+                st.error(f"Error reading the Techo file: {e}")
 
 # ==========================================
 # MODULE 6: SUCCESS STORY BUILDER (DIGITAL PRO VERSION)
