@@ -573,25 +573,32 @@ elif menu == "2. Child Screening":
 
                     is_absent = st.checkbox(f"🚨 Mark {selected_child} as ABSENT", key=f"abs_{selected_child}")
                     
+                    # --- FIX: Individual Absent Toggle ---
+                    is_absent = st.checkbox(f"🚨 Mark {selected_child} as ABSENT today", key=f"abs_{selected_child}")
+                    
                     if is_absent:
                         if st.button("🚩 Confirm Single Absence"):
-                           try:
-                                ws = spreadsheet.worksheet("daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools")
-                            # Using datetime directly to avoid NameErrors
-            import datetime as dt
-            today_str = dt.date.today().strftime('%Y-%m-%d')
-            
-            if category == "👶 Anganwadi":
-                row = [today_str, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, 0, "ABSENT", existing_contact, str(match.get('TechoID','')), "N/A", "Pending"]
-            else:
-                row = [today_str, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, "ABSENT", existing_contact, "Online Single", "Pending"]
-            
-            ws.append_row(row)
-            st.success(f"✅ Recorded {final_child_name} as absent.")
-            st.cache_data.clear()
-            st.rerun()
-        except Exception as e:
-            st.error(f"Error: {e}")
+                            try:
+                                # We define the date safely right here
+                                import datetime
+                                today_str = datetime.date.today().strftime('%Y-%m-%d')
+                                
+                                sheet_name = "daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools"
+                                ws = spreadsheet.worksheet(sheet_name)
+                                
+                                if category == "👶 Anganwadi":
+                                    # 14 Column structure for Anganwadi
+                                    row = [today_str, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, 0, "ABSENT", existing_contact, str(match.get('TechoID','')), "N/A", "Pending"]
+                                else:
+                                    # 12 Column structure for Schools
+                                    row = [today_str, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, "ABSENT", existing_contact, "Online Single", "Pending"]
+                                
+                                ws.append_row(row)
+                                st.success(f"✅ {selected_child} marked absent!")
+                                st.cache_data.clear() 
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"⚠️ Error saving absence: {e}")
 
                     # --- SCREENING FORM ---
                     if not is_absent:
