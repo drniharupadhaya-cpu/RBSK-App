@@ -961,7 +961,7 @@ elif menu == "5. HBNC Newborn Visit":
         st.subheader("📋 Recent Physical HBNC Records")
         try:
             # Change "hbnc_master" to whatever your actual Google Sheet tab is named!
-            ws_hbnc = spreadsheet.worksheet("hbnc_master") 
+            ws_hbnc = spreadsheet.worksheet("hbnc_screenings") 
             df_hbnc = pd.DataFrame(ws_hbnc.get_all_records())
             
             if not df_hbnc.empty:
