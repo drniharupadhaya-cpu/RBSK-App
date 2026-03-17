@@ -189,6 +189,8 @@ def generate_refer_card(data):
 # ==========================================
 # DATABASE CONNECTION
 # ==========================================
+import time # <--- Make sure time is imported!
+
 def get_spreadsheet():
     creds_dict = json.loads(st.secrets["gcp_service_account"])
     client = gspread.service_account_from_dict(creds_dict)
@@ -203,12 +205,15 @@ def load_all_data():
             try:
                 df = pd.DataFrame(sheet.worksheet(tab_name).get_all_records()).astype(str)
                 df.columns = df.columns.str.strip() 
+                
+                time.sleep(1.5)  # 🚦 THE FIX: A 1.5 second breather so Google doesn't panic
+                
                 return df
             except Exception as e:
                 error_msg = str(e)
                 if '429' in error_msg or 'RESOURCE_EXHAUSTED' in error_msg:
                     if attempt < retries - 1:
-                        time.sleep(10)
+                        time.sleep(5) # Give it 5 seconds before retrying
                         continue 
                 st.error(f"🚨 FAILED ON TAB '{tab_name}': {e}")
                 return pd.DataFrame()
