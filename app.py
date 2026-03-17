@@ -959,26 +959,26 @@ elif menu == "5. HBNC Newborn Visit":
         # --- THE NEW LIVE DATA TABLE ---
     st.divider()
     st.subheader("📋 Recent Physical HBNC Records")
-        try:
-            # Change "hbnc_master" to whatever your actual Google Sheet tab is named!
-            ws_hbnc = spreadsheet.worksheet("hbnc_screenings") 
-            df_hbnc = pd.DataFrame(ws_hbnc.get_all_records())
+    try:
+        # Change "hbnc_master" to whatever your actual Google Sheet tab is named!
+        ws_hbnc = spreadsheet.worksheet("hbnc_screenings") 
+        df_hbnc = pd.DataFrame(ws_hbnc.get_all_records())
+        
+        if not df_hbnc.empty:
+            st.dataframe(df_hbnc, use_container_width=True)
             
-            if not df_hbnc.empty:
-                st.dataframe(df_hbnc, use_container_width=True)
-                
-                # Excel/CSV friendly encoding for Gujarati/English
-                csv_hbnc = df_hbnc.to_csv(index=False).encode('utf-8-sig')
-                st.download_button(
-                    label="⬇️ Download Physical Visit Data",
-                    data=csv_hbnc,
-                    file_name=f"HBNC_Physical_Visits_{date.today()}.csv",
-                    mime="text/csv"
-                )
-            else:
-                st.info("No physical visit data found yet.")
-        except Exception as e:
-            st.warning(f"⚠️ Could not load physical data table. Reason: {e}")
+            # Excel/CSV friendly encoding for Gujarati/English
+            csv_hbnc = df_hbnc.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                label="⬇️ Download Physical Visit Data",
+                data=csv_hbnc,
+                file_name=f"HBNC_Physical_Visits_{date.today()}.csv",
+                mime="text/csv"
+            )
+        else:
+            st.info("No physical visit data found yet.")
+    except Exception as e:
+        st.warning(f"⚠️ Could not load physical data table. Reason: {e}")
 
 
     # ---------------------------------------------------------
