@@ -1814,7 +1814,7 @@ elif menu == "13. Offline Batch Sync":
                                     cmtc_rows_to_add.append([s_date, inst, name, dob, contact, weight, height, muac, final_status, "Pending"])
 
                             elif "sch" in loc_type:
-                                sch_rows_to_add.append([s_date, inst, name, dob, gender, height, weight, hb, disease, contact, "Offline Sync", "Pending"]))
+                                sch_rows_to_add.append([s_date, inst, name, dob, gender, height, weight, hb, disease, contact, "Offline Sync", "Pending"])
 
                         if aw_rows_to_add:
                             spreadsheet.worksheet("daily_screenings_aw").append_rows(aw_rows_to_add)
