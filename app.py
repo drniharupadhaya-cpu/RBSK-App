@@ -454,7 +454,7 @@ if menu == "1. Daily Tour Plan":
                     st.info("No referral conditions to map yet. Great job MHT-1!")
 
 # ==========================================
-# MODULE 2: EMR SCREENING (FULL ORIGINAL + ABSENTEE)
+# MODULE 2: EMR SCREENING (FULL ORIGINAL + ABSENTEE + NEW CHILD)
 # ==========================================
 elif menu == "2. Child Screening":
     render_header("Child Screening & EMR", "Record vitals and auto-calculate SAM/MAM", "🩺", "#10b981")
@@ -548,14 +548,72 @@ elif menu == "2. Child Screening":
         selected_child = st.selectbox(f"Select Child:", options=["-- Select Child --", "➕ Register New Child"] + actual_children, format_func=lambda x: child_display.get(x, x))
         
         if selected_child != "-- Select Child --":
+            
+            # ==========================================
+            # 🆕 1. THE RESTORED "ADD NEW CHILD" FEATURE
+            # ==========================================
             if selected_child == "➕ Register New Child":
-                st.subheader("🆕 Register New Child")
-                final_child_name = st.text_input("Full Name")
-                c1, c2, c3 = st.columns(3)
-                with c1: dob = st.date_input("DOB")
-                with c2: gender = st.selectbox("Gender", ["M", "F"])
-                with c3: parent = st.text_input("Parent Name")
-                existing_contact = ""
+                st.subheader("🆕 Register & Screen New Child")
+                st.info("Fill out the details below to add a new walk-in or enrolled child and record their first screening.")
+                
+                with st.form("new_child_form"):
+                    c1, c2 = st.columns(2)
+                    with c1: new_name = st.text_input("Child Full Name *")
+                    with c2: new_dob = st.date_input("Date of Birth")
+                    
+                    c3, c4 = st.columns(2)
+                    with c3: new_gender = st.selectbox("Gender *", ["M", "F"])
+                    with c4: new_parent = st.text_input("Parent's Name")
+                    
+                    c5, c6 = st.columns(2)
+                    with c5: new_contact = st.text_input("📞 Contact Number", max_chars=10)
+                    if category == "👶 Anganwadi":
+                        with c6: new_techo = st.text_input("🆔 Techo ID (Optional)")
+                    else:
+                        new_techo = "N/A"
+                    
+                    st.divider()
+                    st.markdown("##### 🩺 Today's Vitals")
+                    v1, v2, v3, v4 = st.columns(4)
+                    with v1: h_str = st.text_input("Height (cm) *")
+                    with v2: w_str = st.text_input("Weight (kg) *")
+                    with v3: m_str = st.text_input("MUAC (cm)") if category == "👶 Anganwadi" else "0"
+                    with v4: hb_str = st.text_input("Hb %")
+                    
+                    disease = st.text_input("🦠 Disease Identified (4D)", value="None")
+                    save_new = st.form_submit_button("💾 Save New Child & Screening")
+                    
+                if save_new:
+                    if not new_name or not h_str or not w_str:
+                        st.error("⚠️ Name, Height, and Weight are mandatory fields!")
+                    else:
+                        import datetime
+                        screening_date = datetime.date.today().strftime('%Y-%m-%d')
+                        height_val = float(h_str) if h_str else 0.0
+                        weight_val = float(w_str) if w_str else 0.0
+                        muac_val = float(m_str) if m_str else 0.0
+                        hb_val = float(hb_str) if hb_str else 0.0
+                        
+                        final_status = get_whz_status(new_gender, height_val, weight_val) if category == "👶 Anganwadi" else "Normal"
+                        
+                        ws = spreadsheet.worksheet("daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools")
+                        
+                        if category == "👶 Anganwadi":
+                            new_row = [screening_date, selected_inst, new_name, str(new_dob), new_gender, height_val, weight_val, muac_val, hb_val, disease, new_contact, new_techo, final_status, "Pending"]
+                        else:
+                            new_row = [screening_date, selected_inst, new_name, str(new_dob), new_gender, height_val, weight_val, hb_val, disease, new_contact, "Online Entry", "Pending"]
+                            
+                        ws.append_row(new_row)
+                        st.success(f"✅ Successfully registered and screened {new_name}!")
+                        
+                        if category == "👶 Anganwadi" and final_status in ["SAM", "MAM"]:
+                            spreadsheet.worksheet("cmtc_referral").append_row([screening_date, selected_inst, new_name, str(new_dob), new_contact, weight_val, height_val, muac_val, final_status, "Pending"])
+                        
+                        import time; time.sleep(1.5); st.rerun()
+
+            # ==========================================
+            # 👤 2. EXISTING CHILD PROFILE & SCREENING
+            # ==========================================
             else:
                 st.subheader("👤 Child Profile & History")
                 final_child_name = selected_child
@@ -578,13 +636,13 @@ elif menu == "2. Child Screening":
                     contact_val = match.get('CONTACT NUMBER', '')
                     existing_contact = str(contact_val) if str(contact_val) != "nan" else ""
 
-                    # 2. Balanced Profile Columns (NO MORE STAIRCASE)
+                    # 2. Balanced Profile Columns
                     p_col1, p_col2, p_col3 = st.columns(3)
                     with p_col1: st.info(f"**DOB:** {dob}")
                     with p_col2: st.info(f"**Gender:** {gender}")
                     with p_col3: st.info(f"**Parent:** {parent}")
 
-                    # 3. Baseline Metrics (RESTORED!)
+                    # 3. Baseline Metrics
                     st.markdown("##### 🕰️ Last Recorded Vitals (Baseline)")
                     h_cols = st.columns(4)
                     h_cols[0].metric("Prev Height", f"{hist_h} cm")
@@ -609,12 +667,11 @@ elif menu == "2. Child Screening":
                                     row = [today_str, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, "ABSENT", existing_contact, "Online Single", "Pending"]
                                 ws.append_row(row)
                                 st.success("Recorded absence!")
-                                import time; time.sleep(1) # Pause for 1 second to show the success message
+                                import time; time.sleep(1) 
                                 st.rerun()
                             except Exception as e: st.error(f"Error: {e}")
 
-                    # 5. Screening Form
-                    # 5. Screening Form (Restored 10-digit limit)
+                    # 5. Screening Form (Restored 10-digit limit & Collaboration Engine)
                     if not is_absent:
                         st.divider()
                         st.subheader("🩺 Enter New Screening Vitals")
@@ -622,7 +679,6 @@ elif menu == "2. Child Screening":
                             screening_date = st.date_input("Date of Screening")
                             sc1, sc2 = st.columns(2)
                             
-                            # 🚨 FIXED: The 10-Digit limit is hardcoded right here!
                             with sc1: updated_contact = st.text_input("📞 Contact Number", value=existing_contact, max_chars=10)
                             
                             with sc2: techo_id = st.text_input("🆔 Techo ID") if category == "👶 Anganwadi" else "N/A"
@@ -645,7 +701,6 @@ elif menu == "2. Child Screening":
                             all_recs = ws.get_all_values()
                             row_to_update = None
                             
-                            # The Collaboration Engine checking for duplicates
                             for idx, r in enumerate(all_recs):
                                 if len(r) > 2 and r[0] == str(screening_date) and str(r[2]).strip() == final_child_name.strip():
                                     row_to_update = idx + 1; break
@@ -655,7 +710,6 @@ elif menu == "2. Child Screening":
                             else:
                                 new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, hb_val, disease, updated_contact, "Online Entry", "Pending"]
 
-                            # 🚨 FIXED: Added a 1.5 second pause so the doctor can actually read the success message!
                             if row_to_update: 
                                 ws.update(range_name=f"A{row_to_update}", values=[new_row])
                                 st.success(f"✅ Collaborative Update: Added {disease} to {final_child_name}'s record!")
@@ -666,7 +720,6 @@ elif menu == "2. Child Screening":
                             if category == "👶 Anganwadi" and final_status in ["SAM", "MAM"]:
                                 spreadsheet.worksheet("cmtc_referral").append_row([str(screening_date), selected_inst, final_child_name, str(dob), updated_contact, weight_val, height_val, muac_val, final_status, "Pending"])
                             
-                            # The Pause!
                             import time
                             time.sleep(1.5) 
                             st.rerun()
