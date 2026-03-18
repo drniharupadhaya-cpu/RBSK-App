@@ -1067,10 +1067,19 @@ elif menu == "4. Visual Analysis":
             st.warning("⚠️ Waiting for valid data in the 'Q_Demo_4D' tab.")
 
 # ==========================================
-# MODULE 5: HBNC NEWBORN VISIT (Cached)
+# MODULE 5: HBNC NEWBORN VISIT (Zero-Lag Micro-Cache)
 # ==========================================
 elif menu == "5. HBNC Newborn Visit":
     render_header("HBNC Newborn Visit", "Track physical visits and telephonic Techo consultations", "👶", "#f472b6")
+    
+    # 🚀 THE FIX: A dedicated micro-memory just for the HBNC table!
+    @st.cache_data(ttl=600)
+    def get_hbnc_logs():
+        try: return pd.DataFrame(spreadsheet.worksheet("hbnc_screenings").get_all_records())
+        except: return pd.DataFrame()
+        
+    df_hbnc_live = get_hbnc_logs()
+
     tab_physical, tab_telephonic = st.tabs(["🏠 1. Physical Field Visits", "📞 2. Telephonic Techo Queue"])
     
     with tab_physical:
@@ -1105,7 +1114,10 @@ elif menu == "5. HBNC Newborn Visit":
                     try:
                         spreadsheet.worksheet("hbnc_screenings").append_row([str(visit_date), child_name, parent_name, contact_number, str(dob), birth_weight, delivery_type, delivery_point, techo_id, disease, observations])
                         st.toast(f"✅ Recorded Visit for {child_name}.", icon="🎉")
-                        st.cache_data.clear() # Essential: Wipes the old table from memory
+                        
+                        # 🚀 THE FIX: We only clear the HBNC micro-memory, keeping the 11-tab database completely safe!
+                        get_hbnc_logs.clear() 
+                        
                         time.sleep(0.5)
                         st.rerun()
                     except Exception as e:
@@ -1113,12 +1125,12 @@ elif menu == "5. HBNC Newborn Visit":
                         
         st.divider()
         st.subheader("📋 Recent Physical HBNC Records")
-        # 🚀 ZERO-LAG CACHED TABLE IMPLEMENTATION
+        
         try:
-            if not df_hbnc.empty:
-                st.dataframe(df_hbnc, use_container_width=True)
+            if not df_hbnc_live.empty:
+                st.dataframe(df_hbnc_live, use_container_width=True)
                 
-                csv_hbnc = df_hbnc.to_csv(index=False).encode('utf-8-sig')
+                csv_hbnc = df_hbnc_live.to_csv(index=False).encode('utf-8-sig')
                 st.download_button(
                     label="⬇️ Download Physical Visit Data",
                     data=csv_hbnc,
@@ -1186,7 +1198,6 @@ elif menu == "5. HBNC Newborn Visit":
 
             except Exception as e:
                 st.error(f"Error reading the Techo file: {e}")
-
 # ==========================================
 # MODULE 6: SUCCESS STORY BUILDER
 # ==========================================
