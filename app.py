@@ -13,6 +13,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 import plotly.express as px
+import numpy as np # Added globally for maximum speed
 
 # ==========================================
 # MASTER DATA ENGINE (Optimized for Speed & Multiple Users)
@@ -187,10 +188,8 @@ def generate_refer_card(data):
     return buffer.getvalue()
 
 # ==========================================
-# DATABASE CONNECTION
+# DATABASE CONNECTION (Zero-Lag Optimized)
 # ==========================================
-import time # <--- Make sure time is imported!
-
 def get_spreadsheet():
     creds_dict = json.loads(st.secrets["gcp_service_account"])
     client = gspread.service_account_from_dict(creds_dict)
@@ -206,14 +205,14 @@ def load_all_data():
                 df = pd.DataFrame(sheet.worksheet(tab_name).get_all_records()).astype(str)
                 df.columns = df.columns.str.strip() 
                 
-                time.sleep(1.5)  # 🚦 THE FIX: A 1.5 second breather so Google doesn't panic
+                time.sleep(1.5)  # 🚦 Keeps Google from blocking us during initial boot!
                 
                 return df
             except Exception as e:
                 error_msg = str(e)
                 if '429' in error_msg or 'RESOURCE_EXHAUSTED' in error_msg:
                     if attempt < retries - 1:
-                        time.sleep(5) # Give it 5 seconds before retrying
+                        time.sleep(5) 
                         continue 
                 st.error(f"🚨 FAILED ON TAB '{tab_name}': {e}")
                 return pd.DataFrame()
@@ -225,17 +224,16 @@ def load_all_data():
     df_staff = safe_load("master_staff_directory")
     df_aw_master = safe_load("aw new data")
     df_all_students = safe_load("1240315 ALL STUDENTS NAMES")
-
-    # 🚀 NEW: THE 3 QUARTERLY ANALYTICS BUFFERS!
     df_q_perf = safe_load("Q_Performance")
     df_q_loc = safe_load("Q_Location_4D")
     df_q_demo = safe_load("Q_Demo_4D")
+    df_hbnc = safe_load("hbnc_screenings") # 🚀 Added Module 5 to the fast-cache!
 
-    return df_4d, df_anemia, df_directory, df_aw_contacts, df_staff, df_aw_master, df_all_students, df_q_perf, df_q_loc, df_q_demo
+    return df_4d, df_anemia, df_directory, df_aw_contacts, df_staff, df_aw_master, df_all_students, df_q_perf, df_q_loc, df_q_demo, df_hbnc
 
 try:
     spreadsheet = get_spreadsheet() 
-    df_4d, df_anemia, df_directory, df_aw_contacts, df_staff, df_aw_master, df_all_students, df_q_perf, df_q_loc, df_q_demo = load_all_data() 
+    df_4d, df_anemia, df_directory, df_aw_contacts, df_staff, df_aw_master, df_all_students, df_q_perf, df_q_loc, df_q_demo, df_hbnc = load_all_data() 
     
     df_aw = df_aw_master
     df_students = df_all_students
@@ -245,25 +243,22 @@ except Exception as e:
     if "429" in str(e) or "Quota exceeded" in str(e):
         st.error("🚦 Whoa there! Google is enforcing a speed limit. Please wait exactly 60 seconds and refresh the page!")
         st.stop()
+
 # ==========================================
 # 🌍 DISTRICT COMMAND: TEAM UNIFICATION ENGINE
 # ==========================================
 st.sidebar.header("🌍 District Command")
 
-# The exact team names from your Google Sheet!
 team_options = ["TEAM-1240315", "TEAM-1240309", "District Admin (All Teams)"]
 selected_team = st.sidebar.selectbox("🏥 Select Active Team:", team_options)
 st.sidebar.divider()
 
-# Filter the master lists so teams only see their own assigned locations!
 if selected_team != "District Admin (All Teams)":
     try:
-        # Safely find the 'Team' column even if there are accidental spaces in the header
         team_col_aw = [c for c in df_aw.columns if 'team' in str(c).strip().lower()][0]
         team_col_stu = [c for c in df_students.columns if 'team' in str(c).strip().lower()][0]
         team_col_sch = [c for c in df_schools.columns if 'team' in str(c).strip().lower()][0]
 
-        # Apply the filter!
         df_aw = df_aw[df_aw[team_col_aw].astype(str).str.strip().str.upper() == selected_team]
         df_students = df_students[df_students[team_col_stu].astype(str).str.strip().str.upper() == selected_team]
         df_schools = df_schools[df_schools[team_col_sch].astype(str).str.strip().str.upper() == selected_team]
@@ -325,7 +320,6 @@ menu = st.sidebar.radio("Go to:",
         "14. TECHO Entry Queue",
     ])
 
-
 st.sidebar.markdown("---")
 if st.sidebar.button("🔓 Logout"):
     for key in st.session_state.keys():
@@ -361,44 +355,32 @@ if menu == "1. Daily Tour Plan":
                 try:
                     tour_sheet = spreadsheet.worksheet("tour_plans")
                     date_str = tour_date.strftime("%d-%m-%Y")
-                    # Remember to use the exact variable name you chose for staff here!
                     tour_sheet.append_row([staff_name, date_str, tour_village, tour_school, tour_awc])
-                    st.success(f"✅ Official Tour Plan for {tour_village} saved to the database!")
+                    st.toast(f"✅ Tour Plan for {tour_village} saved!", icon="🎉")
                 except Exception as e:
                     st.error(f"❌ Could not save! Error: {e}")
 
-            # --- THE LIVE PREVIEW TABLE ---
-    st.write("---")
-    st.subheader("📅 Live Tour Plan Preview")
+        st.write("---")
+        st.subheader("📅 Live Tour Plan Preview")
 
-    # 1. The button now only does ONE thing: Downloads data to the Memory Bank
-    if st.button("🔄 Refresh Table"):
-        try:
-            tour_sheet = spreadsheet.worksheet("tour_plans")
-            # Save the raw data into st.session_state (Long-Term Memory)
-            st.session_state.tour_data = tour_sheet.get_all_records()
-        except Exception as e:
-            st.error(f"❌ Could not load the table. Error: {e}")
+        if st.button("🔄 Refresh Table"):
+            try:
+                tour_sheet = spreadsheet.worksheet("tour_plans")
+                st.session_state.tour_data = tour_sheet.get_all_records()
+            except Exception as e:
+                st.error(f"❌ Could not load the table. Error: {e}")
 
-    # 2. If the data exists in the Memory Bank, draw the search bar and table!
-    if "tour_data" in st.session_state:
-        data = st.session_state.tour_data
-        
-        if data:
-            df = pd.DataFrame(data)
-            
-            # The Search Bar is now safely OUTSIDE the button!
-            search_word = st.text_input("🔍 Search for a Staff Name, Village, or Date:")
-            
-            if search_word:
-                df = df[df.astype(str).apply(lambda col: col.str.contains(search_word, case=False)).any(axis=1)]
-            
-            st.dataframe(df, use_container_width=True)
-        else:
-            st.info("No tour plans have been saved yet!")
-                    
-            
-        
+        if "tour_data" in st.session_state:
+            data = st.session_state.tour_data
+            if data:
+                df = pd.DataFrame(data)
+                search_word = st.text_input("🔍 Search for a Staff Name, Village, or Date:")
+                if search_word:
+                    df = df[df.astype(str).apply(lambda col: col.str.contains(search_word, case=False)).any(axis=1)]
+                st.dataframe(df, use_container_width=True)
+            else:
+                st.info("No tour plans have been saved yet!")
+                
         st.divider()
         st.markdown("##### ✅ Daily Check-list for MHT-1")
         st.checkbox("Check weighing scale and height tape calibration")
@@ -454,7 +436,7 @@ if menu == "1. Daily Tour Plan":
                     st.info("No referral conditions to map yet. Great job MHT-1!")
 
 # ==========================================
-# MODULE 2: EMR SCREENING (FULL ORIGINAL + ABSENTEE + NEW CHILD)
+# MODULE 2: EMR SCREENING
 # ==========================================
 elif menu == "2. Child Screening":
     render_header("Child Screening & EMR", "Record vitals and auto-calculate SAM/MAM", "🩺", "#10b981")
@@ -483,7 +465,6 @@ elif menu == "2. Child Screening":
     category = st.radio("Select Visit Type:", ["🏫 Schools", "👶 Anganwadi"], horizontal=True)
     st.divider()
 
-    # --- INSTITUTE SELECTION ---
     selected_inst = "-- Select --"
     if category == "👶 Anganwadi":
         if not df_aw.empty:
@@ -509,7 +490,6 @@ elif menu == "2. Child Screening":
             st.error("No School Student data found.")
 
     if selected_inst != "-- Select --":
-        # --- BULK ABSENTEE TOOL ---
         with st.expander("🚀 Bulk Absentee Entry"):
             st.write("Mark multiple children as absent instantly.")
             absent_names = st.multiselect("Select Absent Children:", actual_children)
@@ -526,9 +506,10 @@ elif menu == "2. Child Screening":
                         else:
                             rows_to_push.append([str(bulk_date), selected_inst, name, str(match.get('DOB','')), str(match.get('Gender','')), 0, 0, 0, "ABSENT", str(match.get('CONTACT NUMBER','')), "Online Bulk", "Pending"])
                     ws_bulk.append_rows(rows_to_push)
-                    st.success("Bulk absences recorded!"); st.rerun()
+                    st.toast("Bulk absences recorded!", icon="✅")
+                    time.sleep(0.5)
+                    st.rerun()
 
-        # --- CLASS FINDER ---
         class_column = None
         if category != "👶 Anganwadi":
             for col in filtered_children.columns:
@@ -548,10 +529,6 @@ elif menu == "2. Child Screening":
         selected_child = st.selectbox(f"Select Child:", options=["-- Select Child --", "➕ Register New Child"] + actual_children, format_func=lambda x: child_display.get(x, x))
         
         if selected_child != "-- Select Child --":
-            
-            # ==========================================
-            # 🆕 1. THE RESTORED "ADD NEW CHILD" FEATURE
-            # ==========================================
             if selected_child == "➕ Register New Child":
                 st.subheader("🆕 Register & Screen New Child")
                 st.info("Fill out the details below to add a new walk-in or enrolled child and record their first screening.")
@@ -604,21 +581,18 @@ elif menu == "2. Child Screening":
                             new_row = [screening_date, selected_inst, new_name, str(new_dob), new_gender, height_val, weight_val, hb_val, disease, new_contact, "Online Entry", "Pending"]
                             
                         ws.append_row(new_row)
-                        st.success(f"✅ Successfully registered and screened {new_name}!")
                         
                         if category == "👶 Anganwadi" and final_status in ["SAM", "MAM"]:
                             spreadsheet.worksheet("cmtc_referral").append_row([screening_date, selected_inst, new_name, str(new_dob), new_contact, weight_val, height_val, muac_val, final_status, "Pending"])
                         
-                        import time; time.sleep(1.5); st.rerun()
+                        st.toast(f"✅ Successfully registered and screened {new_name}!", icon="🎉")
+                        time.sleep(0.5)
+                        st.rerun()
 
-            # ==========================================
-            # 👤 2. EXISTING CHILD PROFILE & SCREENING
-            # ==========================================
             else:
                 st.subheader("👤 Child Profile & History")
                 final_child_name = selected_child
                 
-                # 1. Correct Data Fetching
                 name_col = 'Beneficiary Name' if category == "👶 Anganwadi" else 'StudentName'
                 matched_rows = filtered_children[filtered_children[name_col].astype(str).str.strip() == selected_child]
                 
@@ -628,7 +602,6 @@ elif menu == "2. Child Screening":
                     gender = match.get('Gender', 'N/A')
                     parent = match.get('Mother Name' if category == "👶 Anganwadi" else 'FatherName', 'N/A')
                     
-                    # Get historical vitals
                     hist_h = match.get('Height' if category=="👶 Anganwadi" else 'HEIGHT', 'N/A')
                     hist_w = match.get('Weight' if category=="👶 Anganwadi" else 'WEIGHT', 'N/A')
                     hist_disease = match.get('4d' if category=="👶 Anganwadi" else '4D', 'None')
@@ -636,13 +609,11 @@ elif menu == "2. Child Screening":
                     contact_val = match.get('CONTACT NUMBER', '')
                     existing_contact = str(contact_val) if str(contact_val) != "nan" else ""
 
-                    # 2. Balanced Profile Columns
                     p_col1, p_col2, p_col3 = st.columns(3)
                     with p_col1: st.info(f"**DOB:** {dob}")
                     with p_col2: st.info(f"**Gender:** {gender}")
                     with p_col3: st.info(f"**Parent:** {parent}")
 
-                    # 3. Baseline Metrics
                     st.markdown("##### 🕰️ Last Recorded Vitals (Baseline)")
                     h_cols = st.columns(4)
                     h_cols[0].metric("Prev Height", f"{hist_h} cm")
@@ -652,7 +623,6 @@ elif menu == "2. Child Screening":
 
                     st.divider()
 
-                    # 4. SINGLE Checkbox for Absentee
                     is_absent = st.checkbox(f"🚨 Mark {selected_child} as ABSENT today", key=f"emr_single_abs_{str(selected_child).replace(' ', '_')}")
                     
                     if is_absent:
@@ -666,12 +636,11 @@ elif menu == "2. Child Screening":
                                 else:
                                     row = [today_str, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, "ABSENT", existing_contact, "Online Single", "Pending"]
                                 ws.append_row(row)
-                                st.success("Recorded absence!")
-                                import time; time.sleep(1) 
+                                st.toast("Recorded absence!", icon="✅")
+                                time.sleep(0.5) 
                                 st.rerun()
                             except Exception as e: st.error(f"Error: {e}")
 
-                    # 5. Screening Form (Restored 10-digit limit & Collaboration Engine)
                     if not is_absent:
                         st.divider()
                         st.subheader("🩺 Enter New Screening Vitals")
@@ -712,22 +681,19 @@ elif menu == "2. Child Screening":
 
                             if row_to_update: 
                                 ws.update(range_name=f"A{row_to_update}", values=[new_row])
-                                st.success(f"✅ Collaborative Update: Added {disease} to {final_child_name}'s record!")
+                                st.toast(f"✅ Collaborative Update: Added {disease} to {final_child_name}'s record!", icon="🎉")
                             else: 
                                 ws.append_row(new_row)
-                                st.success(f"✅ New screening saved for {final_child_name}!")
+                                st.toast(f"✅ New screening saved for {final_child_name}!", icon="🎉")
                             
                             if category == "👶 Anganwadi" and final_status in ["SAM", "MAM"]:
                                 spreadsheet.worksheet("cmtc_referral").append_row([str(screening_date), selected_inst, final_child_name, str(dob), updated_contact, weight_val, height_val, muac_val, final_status, "Pending"])
                             
-                            import time
-                            time.sleep(1.5) 
+                            time.sleep(0.5) 
                             st.rerun()
 
-# --- NO STRAY ELSE HERE. MODULE 2 ENDS, MODULE 3 BEGINS ---
-
 # ==========================================
-# MODULE 3: 4D DEFECT REGISTRY & CASE MANAGEMENT
+# MODULE 3: 4D DEFECT REGISTRY & CASE MANAGEMENT (Vectorized Zero-Lag)
 # ==========================================
 elif menu == "3. 4D Defect Registry":
     render_header("4D Defect Command Center", "Track live referrals, manage 5-year case history, and generate official print cards", "📋", "#8b5cf6")
@@ -735,13 +701,10 @@ elif menu == "3. 4D Defect Registry":
     if st.button("🔄 Sync & Refresh Data"):
         try: get_daily_logs.clear()
         except: st.cache_data.clear()
-        st.success("Database refreshed! Fetching latest entries...")
-        import time; time.sleep(1)
+        st.toast("Database refreshed!", icon="✅")
+        time.sleep(0.5)
         st.rerun()
 
-    # ==========================================
-    # DATA PREP 1: DAILY LIVE SCREENINGS (Your Original Code)
-    # ==========================================
     aw_logs, sch_logs, df_combined = get_daily_logs()
     all_defects = []
 
@@ -749,54 +712,56 @@ elif menu == "3. 4D Defect Registry":
         v = str(val).strip().lower()
         return v not in ['', 'nan', 'none', 'no', 'null', 'na', 'false', 'normal', '-', 'absent', 'out of bounds']
 
+    # 🚀 VECTORIZED SPEED UPGRADE: Processes thousands of rows instantly!
     for df_type, df in [("Anganwadi", aw_logs), ("School", sch_logs)]:
         if not df.empty:
             df.columns = [str(c).strip() for c in df.columns]
-            for _, row in df.iterrows():
-                d_val = str(row.get('Disease', row.get('Diseases', row.get('4d', '')))).strip()
-                s_val = str(row.get('Status', '')).strip()
+            
+            disease_col = next((c for c in df.columns if c.lower() in ['disease', 'diseases', '4d']), None)
+            status_col = next((c for c in df.columns if c.lower() in ['status', 'sam', 'mam']), None)
+            
+            mask = pd.Series(False, index=df.index)
+            if disease_col: mask = mask | df[disease_col].apply(is_real_defect)
+            if status_col: mask = mask | df[status_col].apply(is_real_defect)
+            
+            sick_kids = df[mask]
+            
+            for _, row in sick_kids.iterrows():
+                d_val = str(row[disease_col]).strip() if disease_col else ""
+                s_val = str(row[status_col]).strip() if status_col else ""
                 
-                if is_real_defect(s_val) or is_real_defect(d_val):
-                    condition_parts = []
-                    if is_real_defect(s_val): condition_parts.append(s_val)
-                    if is_real_defect(d_val): condition_parts.append(d_val)
-                    
-                    def get_val(search_terms, fallback="Unknown"):
-                        for col in df.columns:
-                            if any(term in col.lower() for term in search_terms):
-                                return str(row[col])
-                        return fallback
+                condition_parts = []
+                if is_real_defect(s_val): condition_parts.append(s_val)
+                if is_real_defect(d_val): condition_parts.append(d_val)
+                
+                def get_val(search_terms, fallback="Unknown"):
+                    for col in df.columns:
+                        if any(term in col.lower() for term in search_terms): return str(row[col])
+                    return fallback
 
-                    all_defects.append({
-                        "Date": get_val(['date', 'screening']),
-                        "Name": get_val(['name', 'beneficiary', 'student']),
-                        "Institution": get_val(['inst', 'school', 'awc']),
-                        "Condition": " + ".join(condition_parts),
-                        "Contact": get_val(['contact', 'mobile', 'phone', 'techo']),
-                        "Gender": get_val(['gender', 'sex'], "N/A"),
-                        "DOB": get_val(['dob', 'birth'], "N/A"),
-                        "Father": get_val(['father', 'parent', 'mother'], "N/A"),
-                        "Type": df_type
-                    })
+                all_defects.append({
+                    "Date": get_val(['date', 'screening']),
+                    "Name": get_val(['name', 'beneficiary', 'student']),
+                    "Institution": get_val(['inst', 'school', 'awc']),
+                    "Condition": " + ".join(condition_parts),
+                    "Contact": get_val(['contact', 'mobile', 'phone', 'techo']),
+                    "Gender": get_val(['gender', 'sex'], "N/A"),
+                    "DOB": get_val(['dob', 'birth'], "N/A"),
+                    "Father": get_val(['father', 'parent', 'mother'], "N/A"),
+                    "Type": df_type
+                })
 
-   # ==========================================
-    # DATA PREP 2: 5-YEAR HISTORICAL DATABASE
-    # ==========================================
     import datetime
     today = datetime.date.today()
-    today_ts = pd.Timestamp(today) # 🚀 FIX: Convert today to a safe Pandas Timestamp
+    today_ts = pd.Timestamp(today) 
     
     if not df_4d.empty:
         df_4d.columns = df_4d.columns.str.strip()
         df_working = df_4d.copy()
-        
-        # 🚀 FIX: Removed the .dt.date at the end so it safely handles blank cells (NaT)
         df_working['Parsed_Next_Date'] = pd.to_datetime(df_working.get('Next Follow-Up Date', ''), errors='coerce', dayfirst=True)
     else:
         df_working = pd.DataFrame()
-    # ==========================================
-    # THE 5-TAB SUPER SYSTEM
-    # ==========================================
+
     tab_action, tab_logger, tab_live, tab_card, tab_master = st.tabs([
         "🚨 1. Action Desk", 
         "📞 2. Follow-Up Logger", 
@@ -805,19 +770,14 @@ elif menu == "3. 4D Defect Registry":
         "🗄️ 5. Master Database"
     ])
 
-    # ---------------------------------------------------------
-    # TAB 1: THE ACTION DESK (Smart Queue)
-    # ---------------------------------------------------------
     with tab_action:
         st.subheader("🎯 Today's Action Desk")
         st.write("Historical 4D cases that need immediate follow-up.")
 
         if not df_working.empty:
-            # 1. OVERDUE & TODAY (Red / Urgent)
             overdue_mask = (df_working['Parsed_Next_Date'] <= today_ts) & (df_working.get('Current Status', '').astype(str).str.upper() != 'CURED/RESOLVED')
             df_action = df_working[overdue_mask].copy()
             
-            # 2. NEW / UNSCHEDULED (Yellow / Needs Initial Assessment)
             unscheduled_mask = df_working['Parsed_Next_Date'].isna() & (df_working.get('Current Status', '').astype(str).str.upper() != 'CURED/RESOLVED')
             df_new = df_working[unscheduled_mask].copy()
 
@@ -828,7 +788,6 @@ elif menu == "3. 4D Defect Registry":
             st.divider()
             if not df_action.empty:
                 st.error(f"🚨 **{len(df_action)} Children require immediate contact!**")
-                # Showing only the most important columns
                 cols_to_show = [c for c in ['NAME', 'VILLAGE', '4D', 'MOBILE NO', 'Current Status', 'Next Follow-Up Date'] if c in df_action.columns]
                 st.dataframe(df_action[cols_to_show], use_container_width=True, hide_index=True)
             else:
@@ -841,9 +800,6 @@ elif menu == "3. 4D Defect Registry":
         else:
             st.warning("⚠️ No historical data found in the '4d_list' tab.")
 
-    # ---------------------------------------------------------
-    # TAB 2: FOLLOW-UP LOGGER
-    # ---------------------------------------------------------
     with tab_logger:
         st.subheader("📞 Log a Follow-Up Contact")
         
@@ -900,17 +856,16 @@ elif menu == "3. 4D Defect Registry":
                                 if remarks_idx is not None:
                                     ws_4d.update_cell(row_to_update, remarks_idx + 1, f"[{today}] {contact_method}: {remarks}")
 
-                                st.success(f"✅ Successfully updated Case File for {exact_name}!")
-                                st.cache_data.clear(); import time; time.sleep(1.5); st.rerun()
+                                st.toast(f"✅ Successfully updated Case File for {exact_name}!", icon="🎉")
+                                st.cache_data.clear()
+                                time.sleep(0.5)
+                                st.rerun()
                             else:
                                 st.error("Could not find this specific child in the Google Sheet.")
                         except Exception as e: st.error(f"Error saving to Google Sheets: {e}")
             else:
                 st.success("No active cases found! Everyone is cured.")
 
-    # ---------------------------------------------------------
-    # TAB 3: LIVE DAILY REGISTRY (Your Original Code)
-    # ---------------------------------------------------------
     with tab_live:
         st.subheader("🌍 Today's Screened Defects")
         if all_defects:
@@ -922,9 +877,6 @@ elif menu == "3. 4D Defect Registry":
         else:
             st.info("Registry empty. Start screening in Module 2!")
 
-    # ---------------------------------------------------------
-    # TAB 4: REFER CARD GENERATOR (Your Original Code)
-    # ---------------------------------------------------------
     with tab_card:
         st.subheader("🪪 Print Official Refer Cards")
         if all_defects:
@@ -934,7 +886,6 @@ elif menu == "3. 4D Defect Registry":
             if sel_display != "-- Select --":
                 actual_name = display_names[sel_display]
                 p_data = next(item for item in all_defects if item["Name"] == actual_name)
-                
                 p_data['Age'] = get_age(p_data.get('DOB', ''))
                 
                 st.markdown(f"### 🪪 Preparing Card for: **{actual_name}**")
@@ -981,23 +932,17 @@ elif menu == "3. 4D Defect Registry":
                         </a>
                     '''
                     st.markdown(html_button, unsafe_allow_html=True)
-                    st.caption("💡 **Mobile Users:** The PDF will open safely in a new window. When you are done, simply close the PDF to return to the app!")               
+                    st.caption("💡 **Mobile Users:** The PDF will open safely in a new window. When you are done, simply close the PDF to return to the app!")                
         
         else:
             st.warning("No children found in daily registry to generate a card. Screen children in Module 2 first.")
 
-    # ---------------------------------------------------------
-    # TAB 5: THE 5-YEAR MASTER DATABASE
-    # ---------------------------------------------------------
     with tab_master:
         st.subheader("🗄️ Search the Historical Database (2021-Present)")
         
         if not df_working.empty:
             search_query = st.text_input("🔍 Search by Name, Village, or Disease:")
             if search_query:
-                # 🚀 FIX: We just needed to import numpy right here!
-                import numpy as np 
-                
                 mask = np.column_stack([df_4d[col].astype(str).str.contains(search_query, case=False, na=False) for col in df_4d.columns])
                 df_display = df_4d.loc[mask.any(axis=1)]
             else:
@@ -1017,9 +962,6 @@ elif menu == "3. 4D Defect Registry":
 # ==========================================
 # MODULE 4: VISUAL ANALYSIS
 # ==========================================
-# ==========================================
-# MODULE 4: VISUAL ANALYSIS (Zero-Lag Edition)
-# ==========================================
 elif menu == "4. Visual Analysis":
     render_header("Visual Analytics", "Quarterly Zero-Lag Performance & Epidemiological Mapping", "🗺️", "#f97316")
     st.write("Welcome to the Zero-Lag Command Center. This dashboard processes your Quarterly State Reports for maximum speed and deep insights.")
@@ -1035,19 +977,16 @@ elif menu == "4. Visual Analysis":
         if not df_q_perf.empty and 'Location Name' in df_q_perf.columns:
             perf_df = df_q_perf.copy()
             
-            # Clean numbers
             cols_to_clean = ['Registered Children', 'AWC Screened In First Half', 'Registered Students', 'Students Screened']
             for col in cols_to_clean:
                 if col in perf_df.columns:
                     perf_df[col] = pd.to_numeric(perf_df[col].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
 
-            # Combine AWC + School
             perf_df['Total Registered'] = perf_df.get('Registered Children', 0) + perf_df.get('Registered Students', 0)
             perf_df['Total Screened'] = perf_df.get('AWC Screened In First Half', 0) + perf_df.get('Students Screened', 0)
 
-            # Filter out empty rows and sort
             perf_df = perf_df[perf_df['Location Name'].str.strip() != '']
-            perf_df = perf_df.sort_values('Total Registered', ascending=False).head(20) # Showing top 20 for perfect mobile viewing
+            perf_df = perf_df.sort_values('Total Registered', ascending=False).head(20) 
 
             fig_cov = px.bar(perf_df, x='Location Name', y=['Total Screened', 'Total Registered'],
                              barmode='group', title="Screened vs Registered (Top 20 Villages by Population)",
@@ -1064,7 +1003,6 @@ elif menu == "4. Visual Analysis":
         if not df_q_loc.empty and 'Location Name' in df_q_loc.columns:
             loc_df = df_q_loc.copy()
             
-            # Auto-detect disease columns (ignoring totals and basic info)
             exclude_cols = ['Sr. No.', 'Parent Location', 'Location Name', 'Total Number of Registered Children', 'Total No of Children Screened']
             disease_cols = [c for c in loc_df.columns if c not in exclude_cols and 'Total' not in c]
 
@@ -1093,7 +1031,6 @@ elif menu == "4. Visual Analysis":
         
         if not df_q_demo.empty and 'Defects' in df_q_demo.columns:
             demo_df = df_q_demo.copy()
-            # Remove main category totals to only show specific diseases
             demo_df = demo_df[~demo_df['Defects'].astype(str).str.contains('Total', na=False, case=False)]
 
             selected_demo_disease = st.selectbox("🧬 Select Disease to Analyze:", sorted(demo_df['Defects'].unique()))
@@ -1101,12 +1038,10 @@ elif menu == "4. Visual Analysis":
             if selected_demo_disease:
                 disease_data = demo_df[demo_df['Defects'] == selected_demo_disease].iloc[0]
 
-                # Match the exact CSV age brackets
                 age_groups = ['Below 6 weeks', 'Below 3 Years', '3 Years to 6 Years', '6 Years to 18 Years']
                 radar_data = []
 
                 for age in age_groups:
-                    # Search the row data for columns that match Gender + Age
                     m_val = 0
                     f_val = 0
                     for c in demo_df.columns:
@@ -1132,77 +1067,69 @@ elif menu == "4. Visual Analysis":
             st.warning("⚠️ Waiting for valid data in the 'Q_Demo_4D' tab.")
 
 # ==========================================
-# MODULE 5: HBNC NEWBORN VISIT
+# MODULE 5: HBNC NEWBORN VISIT (Cached)
 # ==========================================
 elif menu == "5. HBNC Newborn Visit":
     render_header("HBNC Newborn Visit", "Track physical visits and telephonic Techo consultations", "👶", "#f472b6")
-    # Create the Dual-Tab System
     tab_physical, tab_telephonic = st.tabs(["🏠 1. Physical Field Visits", "📞 2. Telephonic Techo Queue"])
-    # ---------------------------------------------------------
-    # TAB 1: PHYSICAL VISITS (Your existing form + New Table)
-    # ---------------------------------------------------------
+    
     with tab_physical:
         st.subheader("📝 Log Physical Visit")
-    with st.form("hbnc_form"):
-        st.markdown("#### 👶 Details")
-        c1, c2, c3 = st.columns(3)
-        with c1: visit_date = st.date_input("Date of Visit")
-        with c2: child_name = st.text_input("Child's Name")
-        with c3: techo_id = st.text_input("Techo ID")
-            
-        c4, c5 = st.columns(2)
-        with c4: parent_name = st.text_input("Parent's Name")
-        with c5: contact_number = st.text_input("Contact Number")
+        with st.form("hbnc_form"):
+            st.markdown("#### 👶 Details")
+            c1, c2, c3 = st.columns(3)
+            with c1: visit_date = st.date_input("Date of Visit")
+            with c2: child_name = st.text_input("Child's Name")
+            with c3: techo_id = st.text_input("Techo ID")
+                
+            c4, c5 = st.columns(2)
+            with c4: parent_name = st.text_input("Parent's Name")
+            with c5: contact_number = st.text_input("Contact Number")
 
+            st.divider()
+            st.markdown("#### 🏥 Birth History")
+            b1, b2, b3, b4 = st.columns(4)
+            with b1: dob = st.date_input("Date of Birth")
+            with b2: birth_weight = st.number_input("Birth Weight (kg)", min_value=0.0, step=0.1)
+            with b3: delivery_type = st.selectbox("Delivery Type", ["Normal Delivery (ND)", "C-Section (LSCS)", "Instrumental"])
+            with b4: delivery_point = st.selectbox("Delivery Point", ["Vatsalya Hospital", "SDH Visavadar", "Jay Ambe Hospital", "CHC/PHC", "Home Delivery", "Other Private Hospital"])
+
+            st.divider()
+            disease = st.text_input("🦠 Disease / Defect Identified?", placeholder="e.g., Cleft lip, None")
+            observations = st.text_area("📝 Clinical Observations", height=100)
+
+            if st.form_submit_button("💾 Save HBNC Record"):
+                if child_name == "" or parent_name == "":
+                    st.error("🚨 Enter Child and Parent Name.")
+                else:
+                    try:
+                        spreadsheet.worksheet("hbnc_screenings").append_row([str(visit_date), child_name, parent_name, contact_number, str(dob), birth_weight, delivery_type, delivery_point, techo_id, disease, observations])
+                        st.toast(f"✅ Recorded Visit for {child_name}.", icon="🎉")
+                        st.cache_data.clear() # Essential: Wipes the old table from memory
+                        time.sleep(0.5)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"⚠️ Error: Could not find 'hbnc_screenings' tab. {e}")
+                        
         st.divider()
-        st.markdown("#### 🏥 Birth History")
-        b1, b2, b3, b4 = st.columns(4)
-        with b1: dob = st.date_input("Date of Birth")
-        with b2: birth_weight = st.number_input("Birth Weight (kg)", min_value=0.0, step=0.1)
-        with b3: delivery_type = st.selectbox("Delivery Type", ["Normal Delivery (ND)", "C-Section (LSCS)", "Instrumental"])
-        with b4: delivery_point = st.selectbox("Delivery Point", ["Vatsalya Hospital", "SDH Visavadar", "Jay Ambe Hospital", "CHC/PHC", "Home Delivery", "Other Private Hospital"])
-
-        st.divider()
-        disease = st.text_input("🦠 Disease / Defect Identified?", placeholder="e.g., Cleft lip, None")
-        observations = st.text_area("📝 Clinical Observations", height=100)
-
-        if st.form_submit_button("💾 Save HBNC Record"):
-            if child_name == "" or parent_name == "":
-                st.error("🚨 Enter Child and Parent Name.")
+        st.subheader("📋 Recent Physical HBNC Records")
+        # 🚀 ZERO-LAG CACHED TABLE IMPLEMENTATION
+        try:
+            if not df_hbnc.empty:
+                st.dataframe(df_hbnc, use_container_width=True)
+                
+                csv_hbnc = df_hbnc.to_csv(index=False).encode('utf-8-sig')
+                st.download_button(
+                    label="⬇️ Download Physical Visit Data",
+                    data=csv_hbnc,
+                    file_name=f"HBNC_Physical_Visits_{date.today()}.csv",
+                    mime="text/csv"
+                )
             else:
-                try:
-                    spreadsheet.worksheet("hbnc_screenings").append_row([str(visit_date), child_name, parent_name, contact_number, str(dob), birth_weight, delivery_type, delivery_point, techo_id, disease, observations])
-                    st.success(f"✅ Recorded Visit for {child_name}.")
-                except Exception as e:
-                    st.error(f"⚠️ Error: Could not find 'hbnc_screenings' tab. {e}")
-        # --- THE NEW LIVE DATA TABLE ---
-    st.divider()
-    st.subheader("📋 Recent Physical HBNC Records")
-    try:
-        # Change "hbnc_master" to whatever your actual Google Sheet tab is named!
-        ws_hbnc = spreadsheet.worksheet("hbnc_screenings") 
-        df_hbnc = pd.DataFrame(ws_hbnc.get_all_records())
-        
-        if not df_hbnc.empty:
-            st.dataframe(df_hbnc, use_container_width=True)
-            
-            # Excel/CSV friendly encoding for Gujarati/English
-            csv_hbnc = df_hbnc.to_csv(index=False).encode('utf-8-sig')
-            st.download_button(
-                label="⬇️ Download Physical Visit Data",
-                data=csv_hbnc,
-                file_name=f"HBNC_Physical_Visits_{date.today()}.csv",
-                mime="text/csv"
-            )
-        else:
-            st.info("No physical visit data found yet.")
-    except Exception as e:
-        st.warning(f"⚠️ Could not load physical data table. Reason: {e}")
+                st.info("No physical visit data found yet.")
+        except Exception as e:
+            st.warning(f"⚠️ Could not load physical data table. Reason: {e}")
 
-
-    # ---------------------------------------------------------
-    # TAB 2: TELEPHONIC TECHO QUEUE (The Gujarati File Reader)
-    # ---------------------------------------------------------
     with tab_telephonic:
         st.subheader("📞 Techo Telephonic Consultation")
         st.info("Upload the Gujarati Techo list here. The team can view the list and log call outcomes directly.")
@@ -1211,24 +1138,18 @@ elif menu == "5. HBNC Newborn Visit":
 
         if techo_file:
             try:
-                # Safely read Gujarati text whether it's CSV or Excel
                 if techo_file.name.endswith('.csv'):
                     df_techo = pd.read_csv(techo_file, encoding='utf-8-sig')
                 else:
                     df_techo = pd.read_excel(techo_file)
 
-                # Clean up invisible characters from Gujarati headers
                 df_techo.columns = df_techo.columns.str.strip()
-
                 st.success(f"✅ Loaded {len(df_techo)} children from Techo Export.")
-                
-                # Display the Gujarati Dataframe for the team to see
                 st.dataframe(df_techo, use_container_width=True)
                 
                 st.divider()
                 st.markdown("### 🗣️ Log Telephonic Call")
                 
-                # Dynamic Selectors (Because we don't know the exact Gujarati header names!)
                 c1, c2 = st.columns(2)
                 with c1: name_col = st.selectbox("Which column contains the Child/Beneficiary Name?", df_techo.columns.tolist())
                 with c2: phone_col = st.selectbox("Which column contains the Phone Number?", df_techo.columns.tolist())
@@ -1249,7 +1170,6 @@ elif menu == "5. HBNC Newborn Visit":
                             save_call = st.form_submit_button("💾 Save Call Log")
 
                         if save_call:
-                            # Save this to a new Google Sheet tab!
                             try:
                                 ws_tele = spreadsheet.worksheet("hbnc_telephonic")
                             except:
@@ -1260,20 +1180,20 @@ elif menu == "5. HBNC Newborn Visit":
                             today_str = datetime.date.today().strftime("%Y-%m-%d")
                             
                             ws_tele.append_row([today_str, selected_target, phone_num, call_status, remarks])
-                            st.success(f"Successfully logged call for {selected_target}!")
-                            import time; time.sleep(1.5); st.rerun()
+                            st.toast(f"Successfully logged call for {selected_target}!", icon="📞")
+                            time.sleep(0.5)
+                            st.rerun()
 
             except Exception as e:
                 st.error(f"Error reading the Techo file: {e}")
 
 # ==========================================
-# MODULE 6: SUCCESS STORY BUILDER (DIGITAL PRO VERSION)
+# MODULE 6: SUCCESS STORY BUILDER
 # ==========================================
 elif menu == "6. Success Story Builder":
     render_header("Success Story Builder", "Generate digital, photo-integrated success reports.", "🌟", "#e11d48")
     
     with st.form("success_story_form"):
-        # --- 1. THE HERO (Basic Details) ---
         st.subheader("👤 1. Child Details")
         c1, c2, c3 = st.columns(3)
         name = c1.text_input("Child Name")
@@ -1283,7 +1203,6 @@ elif menu == "6. Success Story Builder":
         
         st.divider()
         
-        # --- 2. THE DISCOVERY (Before) ---
         st.subheader("🚨 2. The Discovery (Before Intervention)")
         col_b1, col_b2 = st.columns([2, 1])
         with col_b1:
@@ -1299,7 +1218,6 @@ elif menu == "6. Success Story Builder":
             
         st.divider()
             
-        # --- 3. THE INTERVENTION ---
         st.subheader("⚕️ 3. The Intervention")
         referred_to = st.text_input("Referred To (e.g., CMTC Junagadh, District Hospital)")
         treatment = st.text_area("Key Treatments Given (e.g., F-100 diet, Blood Transfusion)", height=100)
@@ -1307,7 +1225,6 @@ elif menu == "6. Success Story Builder":
         
         st.divider()
         
-        # --- 4. THE TRIUMPH (After) ---
         st.subheader("✅ 4. The Triumph (Current Status)")
         col_a1, col_a2 = st.columns([2, 1])
         with col_a1:
@@ -1323,15 +1240,11 @@ elif menu == "6. Success Story Builder":
             
         st.divider()
         
-        # --- 5. THE NARRATIVE ---
         st.subheader("📝 5. Medical Officer's Narrative")
         narrative = st.text_area("Write the human story here. How did the parents react? How did the child transform?", height=150)
         
         submit_btn = st.form_submit_button("🎨 Generate Digital Success Story PDF", use_container_width=True)
 
-    # ==========================================
-    # 🚀 THE PDF GENERATION ENGINE
-    # ==========================================
     if submit_btn:
         if not name or not location:
             st.error("⚠️ Please enter at least the Child's Name and Location.")
@@ -1341,11 +1254,9 @@ elif menu == "6. Success Story Builder":
                 from PIL import Image
                 import tempfile
                 
-                # We use temporary files so FPDF can safely read the uploaded images!
                 def save_temp_img(upload):
                     if upload is not None:
                         img = Image.open(upload)
-                        # Convert to RGB to avoid alpha channel PDF crashes
                         if img.mode != 'RGB': img = img.convert('RGB')
                         temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.jpg')
                         img.save(temp_file.name)
@@ -1360,7 +1271,6 @@ elif menu == "6. Success Story Builder":
                     pdf.add_page()
                     pdf.set_auto_page_break(auto=False)
 
-                    # --- 1. HEADER (Deep Blue) ---
                     pdf.set_fill_color(41, 128, 185)
                     pdf.rect(0, 0, 210, 35, 'F')
                     pdf.set_text_color(255, 255, 255)
@@ -1371,7 +1281,6 @@ elif menu == "6. Success Story Builder":
                     pdf.cell(190, 8, f"A Journey to Health: {name} ({age}, {gender})", ln=True, align="C")
                     pdf.cell(190, 8, f"Location: {location}", ln=True, align="C")
 
-                    # --- 2. THE DISCOVERY (Red Box) ---
                     pdf.set_fill_color(253, 237, 236)
                     pdf.rect(10, 45, 190, 55, 'F')
                     pdf.set_text_color(192, 57, 43)
@@ -1387,7 +1296,6 @@ elif menu == "6. Success Story Builder":
                     if path_before:
                         pdf.image(path_before, x=130, y=50, w=60, h=45)
 
-                    # --- 3. THE INTERVENTION (Light Blue Box) ---
                     pdf.set_fill_color(235, 245, 251)
                     pdf.rect(10, 105, 190, 45, 'F')
                     pdf.set_text_color(41, 128, 185)
@@ -1400,7 +1308,6 @@ elif menu == "6. Success Story Builder":
                     pdf.set_xy(15, 120)
                     pdf.multi_cell(180, 6, f"Referred To: {referred_to}\nDuration of Care: {days_care}\nTreatment Provided: {treatment}")
 
-                    # --- 4. THE TRIUMPH (Green Box) ---
                     pdf.set_fill_color(234, 250, 234)
                     pdf.rect(10, 155, 190, 55, 'F')
                     pdf.set_text_color(39, 174, 96)
@@ -1416,13 +1323,11 @@ elif menu == "6. Success Story Builder":
                     if path_after:
                         pdf.image(path_after, x=130, y=160, w=60, h=45)
 
-                    # --- 5. THE NARRATIVE ---
                     pdf.set_text_color(0, 0, 0)
                     pdf.set_font("Helvetica", "I", 12)
                     pdf.set_xy(15, 220)
                     pdf.multi_cell(180, 6, f"\"{narrative}\"")
 
-                    # --- 6. SIGNATURES ---
                     pdf.set_font("Helvetica", "B", 10)
                     pdf.set_xy(15, 275)
                     pdf.cell(80, 5, "DR. NIHAR UPADHYAY", ln=True)
@@ -1434,11 +1339,9 @@ elif menu == "6. Success Story Builder":
                     pdf.set_xy(115, 280)
                     pdf.cell(80, 5, "TALUKA HEALTH OFFICER", ln=True, align="R")
 
-                    # Generate the raw bytes
                     pdf_bytes = bytes(pdf.output())
                     st.success("✅ Success Story Generated Flawlessly!")
                     
-                    # 📱 iPhone/Mobile Safe Download Button
                     import base64
                     b64 = base64.b64encode(pdf_bytes).decode()
                     html_button = f'''
@@ -1452,6 +1355,7 @@ elif menu == "6. Success Story Builder":
                     
                 except Exception as e:
                     st.error(f"⚠️ An error occurred while painting the PDF: {e}")
+
 # ==========================================
 # MODULE 7: ANEMIA TRACKER
 # ==========================================
@@ -1855,16 +1759,12 @@ elif menu == "12. Automated State Report":
         status_col = find_col(df_combined, ['status', 'sam', 'mam'])
 
         if date_col and dob_col:
-            # 🛡️ THE BULLETPROOF DATE CLEANER
-            # 1. Convert to string and strip away any accidental spaces
             df_combined[date_col] = df_combined[date_col].astype(str).str.strip()
             df_combined[dob_col] = df_combined[dob_col].astype(str).str.strip()
             
-            # 2. Force all slashes and dots to become dashes so the app only sees ONE format!
             df_combined[date_col] = df_combined[date_col].str.replace('/', '-').str.replace('.', '-', regex=False)
             df_combined[dob_col] = df_combined[dob_col].str.replace('/', '-').str.replace('.', '-', regex=False)
             
-            # 3. Safely convert to official computer time
             df_combined[date_col] = pd.to_datetime(df_combined[date_col], dayfirst=True, errors='coerce')
             df_combined[dob_col] = pd.to_datetime(df_combined[dob_col], dayfirst=True, errors='coerce')
             
@@ -1877,7 +1777,6 @@ elif menu == "12. Automated State Report":
         if not df_combined.empty and date_col and dob_col:
             st.write("### 🗓️ Report Timeframe")
             
-            # 🗓️ THE SCALABILITY FIX: Dynamic Selectors
             col_y, col_m = st.columns(2)
             with col_y:
                 selected_year = st.selectbox("📅 Select Year", ["2024", "2025", "2026", "2027"], index=2)
@@ -1889,7 +1788,6 @@ elif menu == "12. Automated State Report":
             
             st.divider()
 
-            # Apply Filter for the exact Month and Year
             month_num = months.index(selected_month) + 1
             report_df = df_combined[
                 (df_combined[date_col].dt.year == int(selected_year)) & 
@@ -1899,8 +1797,6 @@ elif menu == "12. Automated State Report":
             if report_df.empty:
                 st.info(f"No screenings found for {selected_month} {selected_year}.")
             else:
-                # 🗜️ THE COLUMN CRUSHER: Fixes the missing names perfectly!
-                # 1. Crush Child Names
                 child_name_cols = [c for c in report_df.columns if any(k in str(c).lower() for k in ['name', 'child', 'student', 'beneficiary'])]
                 if child_name_cols:
                     report_df['Official_Child_Name'] = report_df[child_name_cols[0]]
@@ -1909,7 +1805,6 @@ elif menu == "12. Automated State Report":
                 else:
                     report_df['Official_Child_Name'] = "Unknown"
 
-                # 2. Crush Institution Names
                 inst_name_cols = [c for c in report_df.columns if any(k in str(c).lower() for k in ['inst', 'school', 'awc', 'center', 'aw name'])]
                 if inst_name_cols:
                     report_df['Official_Institution'] = report_df[inst_name_cols[0]]
@@ -1918,7 +1813,6 @@ elif menu == "12. Automated State Report":
                 else:
                     report_df['Official_Institution'] = "Unknown"
 
-                # Standard Analytics
                 report_df['Age_Years'] = (report_df[date_col] - report_df[dob_col]).dt.days / 365.25
                 
                 def bucket_age(age):
@@ -1954,7 +1848,6 @@ elif menu == "12. Automated State Report":
                 render_bucket_stats("3-6 Years", col_3_6)
                 render_bucket_stats("6-18 Years", col_6_18)
 
-                # The Ghost Detector
                 unknown_count = len(report_df[report_df['Govt_Age_Bucket'] == 'Unknown'])
                 if unknown_count > 0:
                     st.warning(f"⚠️ **DATA ALERT:** There are **{unknown_count} children** with a missing or invalid Date of Birth. They cannot be sorted into the age buckets.")
@@ -1991,12 +1884,11 @@ elif menu == "12. Automated State Report":
                 st.divider()
                 st.markdown("### 📥 Download Cleaned Report")
                 
-                # Build the perfect CSV export
                 export_df = pd.DataFrame()
                 export_df['Screening Date'] = report_df[date_col].dt.strftime('%d-%m-%Y')
                 export_df['Source'] = report_df['Source']
-                export_df['Institution'] = report_df['Official_Institution']  # Powered by Crusher
-                export_df['Child Name'] = report_df['Official_Child_Name']    # Powered by Crusher
+                export_df['Institution'] = report_df['Official_Institution'] 
+                export_df['Child Name'] = report_df['Official_Child_Name']   
                 export_df['DOB'] = report_df[dob_col].dt.strftime('%d-%m-%Y')
                 export_df['Calculated Age (Yrs)'] = report_df['Age_Years'].round(2)
                 export_df['Govt Age Bucket'] = report_df['Govt_Age_Bucket']
@@ -2049,6 +1941,7 @@ elif menu == "12. Automated State Report":
             
         else:
             st.info("No screening data logged yet. Your scoreboard will update as soon as you save your first screening!")
+
 # ==========================================
 # MODULE 13: OFFLINE BATCH SYNC
 # ==========================================
@@ -2062,7 +1955,6 @@ elif menu == "13. Offline Batch Sync":
         st.subheader("Get the Offline Template")
         st.write("Download this blank CSV file to your phone or tablet before heading into areas with no internet. You can open and edit this file in any spreadsheet app (like Excel or Google Sheets offline).")
         
-        # Generates a pristine blank template on the fly!
         template_cols = ["Location Type (Anganwadi or School)", "Screening Date (DD-MM-YYYY)", "Location Name", "Child Name", "DOB (DD-MM-YYYY)", "Gender", "Height (cm)", "Weight (kg)", "MUAC (cm - AW only)", "Hemoglobin", "Disease or 4D", "Contact Number"]
         df_template = pd.DataFrame(columns=template_cols)
         
@@ -2080,7 +1972,6 @@ elif menu == "13. Offline Batch Sync":
 
         if uploaded_file is not None:
             try:
-                # Destroys Excel's invisible ghost characters!
                 df_offline = pd.read_csv(uploaded_file, encoding='utf-8-sig')
                 df_offline.columns = df_offline.columns.str.strip()
                 
@@ -2097,13 +1988,11 @@ elif menu == "13. Offline Batch Sync":
                             loc_col = [c for c in df_offline.columns if 'type' in c.lower()][0]
                             loc_type = str(row[loc_col]).strip().lower()
                             
-                            # 🚀 THE DATE TRANSLATOR FIX
                             raw_date = str(row.get("Screening Date (DD-MM-YYYY)", "")).strip()
                             try:
-                                # This forces DD-MM-YYYY into official YYYY-MM-DD format!
                                 s_date = pd.to_datetime(raw_date, dayfirst=True).strftime('%Y-%m-%d')
                             except:
-                                s_date = raw_date # Fallback if they type it weirdly
+                                s_date = raw_date 
                                 
                             inst = str(row.get("Location Name", "")).strip()
                             name = str(row.get("Child Name", "")).strip()
@@ -2123,7 +2012,6 @@ elif menu == "13. Offline Batch Sync":
                             muac = 0.0 if pd.isna(muac) else muac
                             hb = 0.0 if pd.isna(hb) else hb
                             
-                            # Give healthy kids their official "None" status!
                             if raw_disease.lower() in ['nan', '', 'none', 'na', 'null']:
                                 disease = "None"
                             else:
@@ -2148,43 +2036,37 @@ elif menu == "13. Offline Batch Sync":
                             elif "sch" in loc_type:
                                 sch_rows_to_add.append([s_date, inst, name, dob, gender, height, weight, hb, disease, contact, "Offline Sync", "Pending"])
 
-                        if aw_rows_to_add:
-                            spreadsheet.worksheet("daily_screenings_aw").append_rows(aw_rows_to_add)
-                        if sch_rows_to_add:
-                            spreadsheet.worksheet("daily_screenings_schools").append_rows(sch_rows_to_add)
-                        if cmtc_rows_to_add:
-                            spreadsheet.worksheet("cmtc_referral").append_rows(cmtc_rows_to_add)
+                        if aw_rows_to_add: spreadsheet.worksheet("daily_screenings_aw").append_rows(aw_rows_to_add)
+                        if sch_rows_to_add: spreadsheet.worksheet("daily_screenings_schools").append_rows(sch_rows_to_add)
+                        if cmtc_rows_to_add: spreadsheet.worksheet("cmtc_referral").append_rows(cmtc_rows_to_add)
 
-                        # 🚀 THE MASTER CACHE NUKE 
-                        st.cache_data.clear() # This permanently wipes ALL temporary memory in the app!
+                        st.cache_data.clear() 
                         
-                        st.success(f"✅ Spectacular! Successfully synced {len(aw_rows_to_add)} Anganwadi records and {len(sch_rows_to_add)} School records!")
+                        st.toast(f"✅ Synced {len(aw_rows_to_add)} AWC & {len(sch_rows_to_add)} School records!", icon="🎉")
                         if cmtc_rows_to_add:
-                            st.warning(f"🏥 Auto-forwarded {len(cmtc_rows_to_add)} severe cases directly to the CMTC Registry!")
+                            st.toast(f"🏥 Auto-forwarded {len(cmtc_rows_to_add)} cases to CMTC!", icon="🚑")
                         
-                        import time
-                        time.sleep(3)
+                        time.sleep(0.5)
                         st.rerun()
 
             except Exception as e:
                 st.error(f"⚠️ Error reading file. Please ensure you are using the exact template. Detail: {e}")
-    # ==========================================
-    # MODULE 14: 💻 TECHO PORTAL ENTRY QUEUE
-    # ==========================================
-elif menu == "14. TECHO Entry Queue":  # <--- Make sure this matches your variable!
+
+# ==========================================
+# MODULE 14: 💻 TECHO PORTAL ENTRY QUEUE
+# ==========================================
+elif menu == "14. TECHO Entry Queue":  
         st.header("💻 TECHO Portal Pending Queue")
         st.info("🔒 Safe Mode: View pending children and mark them as entered.")
 
-        # --- 🔀 THE SMART SHEET SWITCHER ---
         queue_type = st.radio("Select which queue to work on:", ["👶 Anganwadi Queue", "🏫 School Queue"])
         
-        # This tells Python which sheet to open AND which name column to look for!
         if queue_type == "👶 Anganwadi Queue":
             target_sheet_name = "daily_screenings_aw"
-            name_col = "Child Name"  # The Anganwadi column header
+            name_col = "Child Name"  
         else:
             target_sheet_name = "daily_screenings_schools"
-            name_col = "Student Name" # The School column header
+            name_col = "Student Name" 
 
         st.write("---")
 
@@ -2206,11 +2088,9 @@ elif menu == "14. TECHO Entry Queue":  # <--- Make sure this matches your variab
                         st.write(f"### 📋 Pending Entries ({len(pending_df)} Children)")
                         st.dataframe(pending_df, use_container_width=True)
 
-                        # --- ✅ THE 'MARK AS DONE' BUTTON ---
                         st.write("---")
                         st.subheader("✅ Update TECHO Status")
                         
-                        # Python now uses the 'name_col' variable so it always looks for the right word!
                         if name_col in pending_df.columns:
                             child_to_update = st.selectbox(f"Select the child you just entered into TECHO:", pending_df[name_col].tolist())
                             
@@ -2222,7 +2102,8 @@ elif menu == "14. TECHO Entry Queue":  # <--- Make sure this matches your variab
                                         status_col_index = df.columns.get_loc('TECHO_Status') + 1 
                                         active_sheet.update_cell(cell.row, status_col_index, "Done")
                                         
-                                        st.success(f"✅ Status updated! Refreshing...")
+                                        st.toast("✅ Status updated!", icon="🎉")
+                                        time.sleep(0.5)
                                         st.rerun() 
                                     else:
                                         st.error("Could not find that child in the database.")
@@ -2233,4 +2114,3 @@ elif menu == "14. TECHO Entry Queue":  # <--- Make sure this matches your variab
                 
         except Exception as e:
             st.error(f"❌ Connection Error: {e}")
-
