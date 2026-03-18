@@ -995,6 +995,9 @@ elif menu == "3. 4D Defect Registry":
         if not df_working.empty:
             search_query = st.text_input("🔍 Search by Name, Village, or Disease:")
             if search_query:
+                # 🚀 FIX: We just needed to import numpy right here!
+                import numpy as np 
+                
                 mask = np.column_stack([df_4d[col].astype(str).str.contains(search_query, case=False, na=False) for col in df_4d.columns])
                 df_display = df_4d.loc[mask.any(axis=1)]
             else:
