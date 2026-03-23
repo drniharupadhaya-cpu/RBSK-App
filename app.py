@@ -438,10 +438,17 @@ if menu == "1. Daily Tour Plan":
                     st.info("No referral conditions to map yet. Great job MHT-1!")
 
 # ==========================================
-# MODULE 2: EMR SCREENING (Zero-Bleed Edition)
+# MODULE 2: EMR SCREENING (Ultimate Edition)
 # ==========================================
 elif menu == "2. Child Screening":
     render_header("Child Screening & EMR", "Record vitals and auto-calculate SAM/MAM", "🩺", "#10b981")
+
+    # 🚀 BULLETPROOF NUMBER FIX
+    def safe_float(val):
+        if not val: return 0.0
+        clean_str = ''.join(c for c in str(val).replace(',', '.') if c.isdigit() or c == '.')
+        try: return float(clean_str) if clean_str else 0.0
+        except: return 0.0
 
     def get_whz_status(gender, height_cm, weight_kg):
         who_table = {
@@ -501,6 +508,12 @@ elif menu == "2. Child Screening":
             st.error("No School Student data found.")
 
     if selected_inst != "-- Select --":
+        class_column = None
+        if category != "👶 Anganwadi":
+            for col in filtered_children.columns:
+                if any(w in str(col).lower() for w in ['class', 'std', 'grade', 'ધોરણ']):
+                    class_column = col; break
+
         with st.expander("🚀 Bulk Absentee Entry"):
             st.write("Mark multiple children as absent instantly.")
             absent_names = st.multiselect("Select Absent Children:", actual_children)
@@ -513,24 +526,21 @@ elif menu == "2. Child Screening":
                     for name in absent_names:
                         match = filtered_children[filtered_children['Beneficiary Name' if category=="👶 Anganwadi" else 'StudentName'].str.strip() == name].iloc[0]
                         
+                        bulk_class = ""
+                        if category != "👶 Anganwadi" and class_column:
+                            bulk_class = str(match.get(class_column, ''))
+                            if bulk_class.endswith('.0'): bulk_class = bulk_class[:-2]
+                            if bulk_class == 'nan': bulk_class = ""
+
                         if category == "👶 Anganwadi":
-                            # 🚀 FIX: Disease is now "None", Status is "ABSENT"
-                            rows_to_push.append([str(bulk_date), selected_inst, name, str(match.get('DoB','')), str(match.get('Gender','')), 0, 0, 0, 0, "None", "", str(match.get('TechoID','')), "ABSENT", "Pending"])
+                            rows_to_push.append([str(bulk_date), selected_inst, name, str(match.get('DoB','')), str(match.get('Gender','')), 0, 0, 0, 0, "None", "", str(match.get('TechoID','')), "ABSENT", "Pending", bulk_class])
                         else:
-                            # 🚀 FIX: Disease is now "None", Online/Source is "ABSENT"
-                            rows_to_push.append([str(bulk_date), selected_inst, name, str(match.get('DOB','')), str(match.get('Gender','')), 0, 0, 0, "None", str(match.get('CONTACT NUMBER','')), "ABSENT", "Pending"])
-                            
+                            rows_to_push.append([str(bulk_date), selected_inst, name, str(match.get('DOB','')), str(match.get('Gender','')), 0, 0, 0, "None", str(match.get('CONTACT NUMBER','')), "ABSENT", "Pending", bulk_class])
                     ws_bulk.append_rows(rows_to_push)
                     st.toast("Bulk absences recorded!", icon="✅")
                     import time
                     time.sleep(0.5)
                     st.rerun()
-
-        class_column = None
-        if category != "👶 Anganwadi":
-            for col in filtered_children.columns:
-                if any(w in str(col).lower() for w in ['class', 'std', 'grade', 'ધોરણ']):
-                    class_column = col; break
         
         child_display = {}
         for idx, name in enumerate(actual_children):
@@ -549,7 +559,6 @@ elif menu == "2. Child Screening":
                 st.subheader("🆕 Register & Screen New Child")
                 st.info("Fill out the details below to add a new walk-in or enrolled child and record their first screening.")
                 
-                # 🚀 FIX 1: Added clear_on_submit=True to wipe the form instantly after saving!
                 with st.form("new_child_form", clear_on_submit=True):
                     c1, c2 = st.columns(2)
                     with c1: new_name = st.text_input("Child Full Name *")
@@ -559,10 +568,12 @@ elif menu == "2. Child Screening":
                     with c3: new_gender = st.selectbox("Gender *", ["M", "F"])
                     with c4: new_parent = st.text_input("Parent's Name")
                     
-                    c5, c6 = st.columns(2)
+                    # 🚀 NEW: Class Text Box added to registration!
+                    c5, c6, c7 = st.columns(3)
                     with c5: new_contact = st.text_input("📞 Contact Number", max_chars=10)
+                    with c6: new_class = st.text_input("🏫 Class / Std")
                     if category == "👶 Anganwadi":
-                        with c6: new_techo = st.text_input("🆔 Techo ID (Optional)")
+                        with c7: new_techo = st.text_input("🆔 Techo ID (Optional)")
                     else:
                         new_techo = "N/A"
                     
@@ -583,19 +594,19 @@ elif menu == "2. Child Screening":
                     else:
                         import datetime
                         screening_date = datetime.date.today().strftime('%Y-%m-%d')
-                        height_val = float(h_str) if h_str else 0.0
-                        weight_val = float(w_str) if w_str else 0.0
-                        muac_val = float(m_str) if m_str else 0.0
-                        hb_val = float(hb_str) if hb_str else 0.0
+                        height_val = safe_float(h_str)
+                        weight_val = safe_float(w_str)
+                        muac_val = safe_float(m_str)
+                        hb_val = safe_float(hb_str)
                         
                         final_status = get_whz_status(new_gender, height_val, weight_val) if category == "👶 Anganwadi" else "Normal"
                         
                         ws = spreadsheet.worksheet("daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools")
                         
                         if category == "👶 Anganwadi":
-                            new_row = [screening_date, selected_inst, new_name, str(new_dob), new_gender, height_val, weight_val, muac_val, hb_val, disease, new_contact, new_techo, final_status, "Pending"]
+                            new_row = [screening_date, selected_inst, new_name, str(new_dob), new_gender, height_val, weight_val, muac_val, hb_val, disease, new_contact, new_techo, final_status, "Pending", new_class]
                         else:
-                            new_row = [screening_date, selected_inst, new_name, str(new_dob), new_gender, height_val, weight_val, hb_val, disease, new_contact, "Online Entry", "Pending"]
+                            new_row = [screening_date, selected_inst, new_name, str(new_dob), new_gender, height_val, weight_val, hb_val, disease, new_contact, "Online Entry", "Pending", new_class]
                             
                         ws.append_row(new_row)
                         
@@ -614,6 +625,7 @@ elif menu == "2. Child Screening":
                 name_col = 'Beneficiary Name' if category == "👶 Anganwadi" else 'StudentName'
                 matched_rows = filtered_children[filtered_children[name_col].astype(str).str.strip() == selected_child]
                 
+                existing_class = ""
                 if not matched_rows.empty:
                     match = matched_rows.iloc[0]
                     dob = match.get('DoB' if category == "👶 Anganwadi" else 'DOB', 'N/A')
@@ -626,6 +638,11 @@ elif menu == "2. Child Screening":
                     hist_hb = match.get('Hb', 'N/A')
                     contact_val = match.get('CONTACT NUMBER', '')
                     existing_contact = str(contact_val) if str(contact_val) != "nan" else ""
+
+                    if category != "👶 Anganwadi" and class_column:
+                        existing_class = str(match.get(class_column, ''))
+                        if existing_class.endswith('.0'): existing_class = existing_class[:-2]
+                        if existing_class == 'nan': existing_class = ""
 
                     p_col1, p_col2, p_col3 = st.columns(3)
                     with p_col1: st.info(f"**DOB:** {dob}")
@@ -649,14 +666,10 @@ elif menu == "2. Child Screening":
                                 import datetime
                                 today_str = datetime.date.today().strftime('%Y-%m-%d')
                                 ws = spreadsheet.worksheet("daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools")
-                                
                                 if category == "👶 Anganwadi":
-                                    # 🚀 FIX: Disease is now "None", Status is "ABSENT"
-                                    row = [today_str, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, 0, "None", existing_contact, str(match.get('TechoID','')), "ABSENT", "Pending"]
+                                    row = [today_str, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, 0, "None", existing_contact, str(match.get('TechoID','')), "ABSENT", "Pending", existing_class]
                                 else:
-                                    # 🚀 FIX: Disease is now "None", Online/Source is "ABSENT"
-                                    row = [today_str, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, "None", existing_contact, "ABSENT", "Pending"]
-                                    
+                                    row = [today_str, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, "None", existing_contact, "ABSENT", "Pending", existing_class]
                                 ws.append_row(row)
                                 st.toast("Recorded absence!", icon="✅")
                                 import time
@@ -668,17 +681,16 @@ elif menu == "2. Child Screening":
                         st.divider()
                         st.subheader("🩺 Enter New Screening Vitals")
                         
-                        # 🚀 FIX 2: We create a unique "form ID" for every child and add clear_on_submit!
-                        # This guarantees that changing the dropdown completely wipes out the old form state.
                         safe_key = str(selected_child).replace(" ", "_")
                         with st.form(f"vitals_form_{safe_key}", clear_on_submit=True):
                             screening_date = st.date_input("Date of Screening")
-                            sc1, sc2 = st.columns(2)
                             
-                            # Notice how this still pulls the existing contact, but height/weight start fresh!
+                            # 🚀 NEW: Class text box added to regular screenings!
+                            sc1, sc2, sc3 = st.columns(3)
                             with sc1: updated_contact = st.text_input("📞 Contact Number", value=existing_contact, max_chars=10)
+                            with sc2: updated_class = st.text_input("🏫 Class / Std", value=existing_class)
+                            with sc3: techo_id = st.text_input("🆔 Techo ID") if category == "👶 Anganwadi" else "N/A"
                             
-                            with sc2: techo_id = st.text_input("🆔 Techo ID") if category == "👶 Anganwadi" else "N/A"
                             v1, v2, v3, v4 = st.columns(4)
                             with v1: h_str = st.text_input("Height (cm)")
                             with v2: w_str = st.text_input("Weight (kg)")
@@ -688,10 +700,10 @@ elif menu == "2. Child Screening":
                             save_btn = st.form_submit_button("💾 Save Screening Data")
 
                         if save_btn:
-                            height_val = float(h_str) if h_str else 0.0
-                            weight_val = float(w_str) if w_str else 0.0
-                            muac_val = float(m_str) if m_str else 0.0
-                            hb_val = float(hb_str) if hb_str else 0.0
+                            height_val = safe_float(h_str)
+                            weight_val = safe_float(w_str)
+                            muac_val = safe_float(m_str)
+                            hb_val = safe_float(hb_str)
                             final_status = get_whz_status(gender, height_val, weight_val) if category == "👶 Anganwadi" else "Normal"
                             
                             ws = spreadsheet.worksheet("daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools")
@@ -703,9 +715,9 @@ elif menu == "2. Child Screening":
                                     row_to_update = idx + 1; break
 
                             if category == "👶 Anganwadi":
-                                new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, muac_val, hb_val, disease, updated_contact, techo_id, final_status, "Pending"]
+                                new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, muac_val, hb_val, disease, updated_contact, techo_id, final_status, "Pending", updated_class]
                             else:
-                                new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, hb_val, disease, updated_contact, "Online Entry", "Pending"]
+                                new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, hb_val, disease, updated_contact, "Online Entry", "Pending", updated_class]
 
                             if row_to_update: 
                                 ws.update(range_name=f"A{row_to_update}", values=[new_row])
@@ -720,7 +732,6 @@ elif menu == "2. Child Screening":
                             import time
                             time.sleep(0.5) 
                             st.rerun()
-
 # ==========================================
 # MODULE 3: 4D DEFECT REGISTRY & CASE MANAGEMENT (Vectorized Zero-Lag)
 # ==========================================
