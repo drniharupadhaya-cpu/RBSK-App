@@ -436,7 +436,7 @@ if menu == "1. Daily Tour Plan":
                     st.info("No referral conditions to map yet. Great job MHT-1!")
 
 # ==========================================
-# MODULE 2: EMR SCREENING
+# MODULE 2: EMR SCREENING (Zero-Bleed Edition)
 # ==========================================
 elif menu == "2. Child Screening":
     render_header("Child Screening & EMR", "Record vitals and auto-calculate SAM/MAM", "🩺", "#10b981")
@@ -485,16 +485,13 @@ elif menu == "2. Child Screening":
             selected_inst = st.selectbox("Select School:", options=["-- Select --"] + actual_institutes, format_func=lambda x: inst_display.get(x, x))
             
             if selected_inst != "-- Select --":
-                # 🚀 THE SMART SORT INTEGRATION IS HERE!
                 filtered_children = df_students[df_students['School'] == selected_inst].copy()
-                
                 class_column = next((col for col in filtered_children.columns if any(w in str(col).lower() for w in ['class', 'std', 'grade', 'ધોરણ'])), None)
                 
                 if class_column:
                     filtered_children['_sort_val'] = filtered_children[class_column].astype(str).str.extract(r'(\d+)', expand=False).astype(float).fillna(999)
                     filtered_children = filtered_children.sort_values(by=['_sort_val', 'StudentName'])
                 else:
-                    # Fallback to simple alphabetical if no class column exists
                     filtered_children = filtered_children.sort_values(by=['StudentName'])
                 
                 actual_children = [str(c).strip() for c in filtered_children['StudentName'].tolist() if str(c).strip() != '']
@@ -519,6 +516,7 @@ elif menu == "2. Child Screening":
                             rows_to_push.append([str(bulk_date), selected_inst, name, str(match.get('DOB','')), str(match.get('Gender','')), 0, 0, 0, "ABSENT", str(match.get('CONTACT NUMBER','')), "Online Bulk", "Pending"])
                     ws_bulk.append_rows(rows_to_push)
                     st.toast("Bulk absences recorded!", icon="✅")
+                    import time
                     time.sleep(0.5)
                     st.rerun()
 
@@ -545,7 +543,8 @@ elif menu == "2. Child Screening":
                 st.subheader("🆕 Register & Screen New Child")
                 st.info("Fill out the details below to add a new walk-in or enrolled child and record their first screening.")
                 
-                with st.form("new_child_form"):
+                # 🚀 FIX 1: Added clear_on_submit=True to wipe the form instantly after saving!
+                with st.form("new_child_form", clear_on_submit=True):
                     c1, c2 = st.columns(2)
                     with c1: new_name = st.text_input("Child Full Name *")
                     with c2: new_dob = st.date_input("Date of Birth")
@@ -598,6 +597,7 @@ elif menu == "2. Child Screening":
                             spreadsheet.worksheet("cmtc_referral").append_row([screening_date, selected_inst, new_name, str(new_dob), new_contact, weight_val, height_val, muac_val, final_status, "Pending"])
                         
                         st.toast(f"✅ Successfully registered and screened {new_name}!", icon="🎉")
+                        import time
                         time.sleep(0.5)
                         st.rerun()
 
@@ -649,6 +649,7 @@ elif menu == "2. Child Screening":
                                     row = [today_str, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, "ABSENT", existing_contact, "Online Single", "Pending"]
                                 ws.append_row(row)
                                 st.toast("Recorded absence!", icon="✅")
+                                import time
                                 time.sleep(0.5) 
                                 st.rerun()
                             except Exception as e: st.error(f"Error: {e}")
@@ -656,10 +657,15 @@ elif menu == "2. Child Screening":
                     if not is_absent:
                         st.divider()
                         st.subheader("🩺 Enter New Screening Vitals")
-                        with st.form("vitals_form"):
+                        
+                        # 🚀 FIX 2: We create a unique "form ID" for every child and add clear_on_submit!
+                        # This guarantees that changing the dropdown completely wipes out the old form state.
+                        safe_key = str(selected_child).replace(" ", "_")
+                        with st.form(f"vitals_form_{safe_key}", clear_on_submit=True):
                             screening_date = st.date_input("Date of Screening")
                             sc1, sc2 = st.columns(2)
                             
+                            # Notice how this still pulls the existing contact, but height/weight start fresh!
                             with sc1: updated_contact = st.text_input("📞 Contact Number", value=existing_contact, max_chars=10)
                             
                             with sc2: techo_id = st.text_input("🆔 Techo ID") if category == "👶 Anganwadi" else "N/A"
@@ -701,6 +707,7 @@ elif menu == "2. Child Screening":
                             if category == "👶 Anganwadi" and final_status in ["SAM", "MAM"]:
                                 spreadsheet.worksheet("cmtc_referral").append_row([str(screening_date), selected_inst, final_child_name, str(dob), updated_contact, weight_val, height_val, muac_val, final_status, "Pending"])
                             
+                            import time
                             time.sleep(0.5) 
                             st.rerun()
 
