@@ -2110,7 +2110,7 @@ elif menu == "14. TECHO Entry Queue":
     else:
         target_sheet_name = "daily_screenings_schools"
         name_col = "Student Name" 
-        inst_col = "School"      
+        inst_col = "Institution"      
 
     st.write("---")
 
