@@ -190,6 +190,8 @@ def generate_refer_card(data):
 # ==========================================
 # DATABASE CONNECTION (Zero-Lag Optimized)
 # ==========================================
+# 🚀 THE FIX: This keeps the Google Connection "awake" in the server's background for 30 minutes!
+@st.cache_resource(ttl=1800)
 def get_spreadsheet():
     creds_dict = json.loads(st.secrets["gcp_service_account"])
     client = gspread.service_account_from_dict(creds_dict)
