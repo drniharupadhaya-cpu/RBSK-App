@@ -1120,7 +1120,6 @@ elif menu == "5. HBNC Newborn Visit":
             with c2: child_name = st.text_input("Child's Name *")
             with c3: techo_id = st.text_input("Techo ID")
                 
-            # 🚀 NEW: Changed to 3 columns to beautifully fit the Village Name!
             c4, c5, c6 = st.columns(3)
             with c4: parent_name = st.text_input("Parent's Name *")
             with c5: contact_number = st.text_input("Contact Number", max_chars=10)
@@ -1132,7 +1131,9 @@ elif menu == "5. HBNC Newborn Visit":
             with b1: dob = st.date_input("Date of Birth")
             with b2: birth_weight = st.number_input("Birth Weight (kg)", min_value=0.0, step=0.1)
             with b3: delivery_type = st.selectbox("Delivery Type", ["Normal Delivery (ND)", "C-Section (LSCS)", "Instrumental"])
-            with b4: delivery_point = st.selectbox("Delivery Point", ["Vatsalya Hospital", "SDH Visavadar", "Jay Ambe Hospital", "CHC/PHC", "Home Delivery", "Other Private Hospital"])
+            
+            # 🚀 NEW: Added "Junagadh Civil Hospital" right here!
+            with b4: delivery_point = st.selectbox("Delivery Point", ["Vatsalya Hospital", "SDH Visavadar", "Jay Ambe Hospital", "Junagadh Civil Hospital", "CHC/PHC", "Home Delivery", "Other Private Hospital"])
 
             st.divider()
             disease = st.text_input("🦠 Disease / Defect Identified?", placeholder="e.g., Cleft lip, None")
@@ -1143,7 +1144,6 @@ elif menu == "5. HBNC Newborn Visit":
                     st.error("🚨 Enter Child and Parent Name.")
                 else:
                     try:
-                        # 🚀 NEW: Added village_name to the VERY END of the save array!
                         spreadsheet.worksheet("hbnc_screenings").append_row([str(visit_date), child_name, parent_name, contact_number, str(dob), birth_weight, delivery_type, delivery_point, techo_id, disease, observations, village_name])
                         st.toast(f"✅ Recorded Visit for {child_name}.", icon="🎉")
                         
