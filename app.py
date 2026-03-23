@@ -510,10 +510,14 @@ elif menu == "2. Child Screening":
                     rows_to_push = []
                     for name in absent_names:
                         match = filtered_children[filtered_children['Beneficiary Name' if category=="👶 Anganwadi" else 'StudentName'].str.strip() == name].iloc[0]
+                        
                         if category == "👶 Anganwadi":
-                            rows_to_push.append([str(bulk_date), selected_inst, name, str(match.get('DoB','')), str(match.get('Gender','')), 0, 0, 0, 0, "ABSENT", "", str(match.get('TechoID','')), "N/A", "Pending"])
+                            # 🚀 FIX: Disease is now "None", Status is "ABSENT"
+                            rows_to_push.append([str(bulk_date), selected_inst, name, str(match.get('DoB','')), str(match.get('Gender','')), 0, 0, 0, 0, "None", "", str(match.get('TechoID','')), "ABSENT", "Pending"])
                         else:
-                            rows_to_push.append([str(bulk_date), selected_inst, name, str(match.get('DOB','')), str(match.get('Gender','')), 0, 0, 0, "ABSENT", str(match.get('CONTACT NUMBER','')), "Online Bulk", "Pending"])
+                            # 🚀 FIX: Disease is now "None", Online/Source is "ABSENT"
+                            rows_to_push.append([str(bulk_date), selected_inst, name, str(match.get('DOB','')), str(match.get('Gender','')), 0, 0, 0, "None", str(match.get('CONTACT NUMBER','')), "ABSENT", "Pending"])
+                            
                     ws_bulk.append_rows(rows_to_push)
                     st.toast("Bulk absences recorded!", icon="✅")
                     import time
@@ -643,10 +647,14 @@ elif menu == "2. Child Screening":
                                 import datetime
                                 today_str = datetime.date.today().strftime('%Y-%m-%d')
                                 ws = spreadsheet.worksheet("daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools")
+                                
                                 if category == "👶 Anganwadi":
-                                    row = [today_str, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, 0, "ABSENT", existing_contact, str(match.get('TechoID','')), "N/A", "Pending"]
+                                    # 🚀 FIX: Disease is now "None", Status is "ABSENT"
+                                    row = [today_str, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, 0, "None", existing_contact, str(match.get('TechoID','')), "ABSENT", "Pending"]
                                 else:
-                                    row = [today_str, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, "ABSENT", existing_contact, "Online Single", "Pending"]
+                                    # 🚀 FIX: Disease is now "None", Online/Source is "ABSENT"
+                                    row = [today_str, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, "None", existing_contact, "ABSENT", "Pending"]
+                                    
                                 ws.append_row(row)
                                 st.toast("Recorded absence!", icon="✅")
                                 import time
@@ -729,7 +737,8 @@ elif menu == "3. 4D Defect Registry":
 
     def is_real_defect(val):
         v = str(val).strip().lower()
-        return v not in ['', 'nan', 'none', 'no', 'null', 'na', 'false', 'normal', '-', 'absent', 'out of bounds']
+        # 🚀 FIX: Added 'n/a' to ensure old absent entries are completely ignored!
+        return v not in ['', 'nan', 'none', 'no', 'null', 'na', 'n/a', 'false', 'normal', '-', 'absent', 'out of bounds']
 
     # 🚀 VECTORIZED SPEED UPGRADE: Processes thousands of rows instantly!
     for df_type, df in [("Anganwadi", aw_logs), ("School", sch_logs)]:
