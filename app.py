@@ -2097,61 +2097,92 @@ elif menu == "13. Offline Batch Sync":
 # MODULE 14: 💻 TECHO PORTAL ENTRY QUEUE
 # ==========================================
 elif menu == "14. TECHO Entry Queue":  
-        st.header("💻 TECHO Portal Pending Queue")
-        st.info("🔒 Safe Mode: View pending children and mark them as entered.")
+    st.header("💻 TECHO Portal Pending Queue")
+    st.info("🔒 Safe Mode: View pending children and mark them as entered.")
 
-        queue_type = st.radio("Select which queue to work on:", ["👶 Anganwadi Queue", "🏫 School Queue"])
+    queue_type = st.radio("Select which queue to work on:", ["👶 Anganwadi Queue", "🏫 School Queue"])
+    
+    if queue_type == "👶 Anganwadi Queue":
+        target_sheet_name = "daily_screenings_aw"
+        name_col = "Child Name"  
+        # Let's dynamically find the column name for the institute to use as our "Team" filter
+        inst_col = "AWC Name" 
+    else:
+        target_sheet_name = "daily_screenings_schools"
+        name_col = "Student Name" 
+        inst_col = "School Name"
+
+    st.write("---")
+
+    try:
+        active_sheet = spreadsheet.worksheet(target_sheet_name)
+        data = active_sheet.get_all_records()
         
-        if queue_type == "👶 Anganwadi Queue":
-            target_sheet_name = "daily_screenings_aw"
-            name_col = "Child Name"  
-        else:
-            target_sheet_name = "daily_screenings_schools"
-            name_col = "Student Name" 
-
-        st.write("---")
-
-        try:
-            active_sheet = spreadsheet.worksheet(target_sheet_name)
-            data = active_sheet.get_all_records()
+        if data:
+            df = pd.DataFrame(data)
             
-            if data:
-                df = pd.DataFrame(data)
-                
-                if 'TECHO_Status' not in df.columns:
-                    st.error(f"❌ Please add the 'TECHO_Status' column to the {target_sheet_name} sheet!")
-                else:
-                    pending_df = df[df['TECHO_Status'] == 'Pending']
-                    
-                    if pending_df.empty:
-                        st.success(f"🎉 Awesome! The {queue_type} is completely empty!")
-                    else:
-                        st.write(f"### 📋 Pending Entries ({len(pending_df)} Children)")
-                        st.dataframe(pending_df, use_container_width=True)
-
-                        st.write("---")
-                        st.subheader("✅ Update TECHO Status")
-                        
-                        if name_col in pending_df.columns:
-                            child_to_update = st.selectbox(f"Select the child you just entered into TECHO:", pending_df[name_col].tolist())
-                            
-                            if st.button(f"🚀 Mark {child_to_update} as 'Done'"):
-                                with st.spinner("Updating database..."):
-                                    cell = active_sheet.find(child_to_update)
-                                    
-                                    if cell:
-                                        status_col_index = df.columns.get_loc('TECHO_Status') + 1 
-                                        active_sheet.update_cell(cell.row, status_col_index, "Done")
-                                        
-                                        st.toast("✅ Status updated!", icon="🎉")
-                                        time.sleep(0.5)
-                                        st.rerun() 
-                                    else:
-                                        st.error("Could not find that child in the database.")
-                        else:
-                            st.error(f"❌ Could not find the '{name_col}' column in the {target_sheet_name} sheet.")
+            if 'TECHO_Status' not in df.columns:
+                st.error(f"❌ Please add the 'TECHO_Status' column to the {target_sheet_name} sheet!")
             else:
-                st.info(f"The {target_sheet_name} sheet is currently empty.")
+                # 1. First, we isolate ONLY the pending rows
+                pending_df = df[df['TECHO_Status'] == 'Pending']
                 
-        except Exception as e:
-            st.error(f"❌ Connection Error: {e}")
+                if pending_df.empty:
+                    st.success(f"🎉 Awesome! The {queue_type} is completely empty!")
+                else:
+                    # 🚀 THE NEW BIFURCATION UPGRADE
+                    st.subheader("🎯 Filter by Location / Team")
+                    
+                    # Try to find the correct column for the Institute/School name
+                    actual_inst_col = next((col for col in pending_df.columns if 'school' in str(col).lower() or 'awc' in str(col).lower() or 'anganwadi' in str(col).lower()), None)
+                    
+                    if actual_inst_col:
+                        # Extract the unique list of pending locations
+                        available_locations = sorted(pending_df[actual_inst_col].dropna().unique().tolist())
+                        
+                        selected_location = st.selectbox(
+                            f"Filter queue by {actual_inst_col}:", 
+                            ["-- Show All Pending --"] + available_locations
+                        )
+                        
+                        # Apply the filter if they selected a specific location
+                        if selected_location != "-- Show All Pending --":
+                            pending_df = pending_df[pending_df[actual_inst_col] == selected_location]
+                    else:
+                        st.warning("Could not automatically detect the Location/School column to filter by.")
+
+                    # 2. Now display the dynamically filtered dataframe
+                    st.write(f"### 📋 Pending Entries ({len(pending_df)} Children)")
+                    st.dataframe(pending_df, use_container_width=True)
+
+                    st.write("---")
+                    st.subheader("✅ Update TECHO Status")
+                    
+                    # We need to make sure we find the right Name column since headers can sometimes have hidden spaces
+                    actual_name_col = next((col for col in pending_df.columns if 'name' in str(col).lower() and 'awc' not in str(col).lower() and 'school' not in str(col).lower()), None)
+
+                    if actual_name_col:
+                        # 3. The dropdown ONLY shows the children from the filtered list above!
+                        child_to_update = st.selectbox(f"Select the child you just entered into TECHO:", pending_df[actual_name_col].tolist())
+                        
+                        if st.button(f"🚀 Mark {child_to_update} as 'Done'"):
+                            with st.spinner("Updating database..."):
+                                cell = active_sheet.find(str(child_to_update))
+                                
+                                if cell:
+                                    status_col_index = df.columns.get_loc('TECHO_Status') + 1 
+                                    active_sheet.update_cell(cell.row, status_col_index, "Done")
+                                    
+                                    st.toast("✅ Status updated!", icon="🎉")
+                                    import time
+                                    time.sleep(0.5)
+                                    st.rerun() 
+                                else:
+                                    st.error("Could not find that child in the database.")
+                    else:
+                        st.error(f"❌ Could not automatically detect the Child Name column in the {target_sheet_name} sheet.")
+        else:
+            st.info(f"The {target_sheet_name} sheet is currently empty.")
+            
+    except Exception as e:
+        st.error(f"❌ Connection Error: {e}")
