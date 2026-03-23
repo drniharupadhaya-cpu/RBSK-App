@@ -483,8 +483,20 @@ elif menu == "2. Child Screening":
             actual_institutes = sorted([str(i).strip() for i in raw_list if str(i).strip() != ''])
             inst_display = {name: f"{idx+1}. {name}" for idx, name in enumerate(actual_institutes)}
             selected_inst = st.selectbox("Select School:", options=["-- Select --"] + actual_institutes, format_func=lambda x: inst_display.get(x, x))
+            
             if selected_inst != "-- Select --":
-                filtered_children = df_students[df_students['School'] == selected_inst]
+                # 🚀 THE SMART SORT INTEGRATION IS HERE!
+                filtered_children = df_students[df_students['School'] == selected_inst].copy()
+                
+                class_column = next((col for col in filtered_children.columns if any(w in str(col).lower() for w in ['class', 'std', 'grade', 'ધોરણ'])), None)
+                
+                if class_column:
+                    filtered_children['_sort_val'] = filtered_children[class_column].astype(str).str.extract(r'(\d+)', expand=False).astype(float).fillna(999)
+                    filtered_children = filtered_children.sort_values(by=['_sort_val', 'StudentName'])
+                else:
+                    # Fallback to simple alphabetical if no class column exists
+                    filtered_children = filtered_children.sort_values(by=['StudentName'])
+                
                 actual_children = [str(c).strip() for c in filtered_children['StudentName'].tolist() if str(c).strip() != '']
         else:
             st.error("No School Student data found.")
