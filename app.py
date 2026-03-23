@@ -2106,7 +2106,7 @@ elif menu == "14. TECHO Entry Queue":
     if queue_type == "👶 Anganwadi Queue":
         target_sheet_name = "daily_screenings_aw"
         name_col = "Child Name"  
-        inst_col = "AWC Name"    
+        inst_col = "Institute"    
     else:
         target_sheet_name = "daily_screenings_schools"
         name_col = "Student Name" 
