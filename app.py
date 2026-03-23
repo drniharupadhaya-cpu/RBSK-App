@@ -1102,7 +1102,6 @@ elif menu == "4. Visual Analysis":
 elif menu == "5. HBNC Newborn Visit":
     render_header("HBNC Newborn Visit", "Track physical visits and telephonic Techo consultations", "👶", "#f472b6")
     
-    # 🚀 THE FIX: A dedicated micro-memory just for the HBNC table!
     @st.cache_data(ttl=600)
     def get_hbnc_logs():
         try: return pd.DataFrame(spreadsheet.worksheet("hbnc_screenings").get_all_records())
@@ -1114,16 +1113,18 @@ elif menu == "5. HBNC Newborn Visit":
     
     with tab_physical:
         st.subheader("📝 Log Physical Visit")
-        with st.form("hbnc_form"):
+        with st.form("hbnc_form", clear_on_submit=True):
             st.markdown("#### 👶 Details")
             c1, c2, c3 = st.columns(3)
             with c1: visit_date = st.date_input("Date of Visit")
-            with c2: child_name = st.text_input("Child's Name")
+            with c2: child_name = st.text_input("Child's Name *")
             with c3: techo_id = st.text_input("Techo ID")
                 
-            c4, c5 = st.columns(2)
-            with c4: parent_name = st.text_input("Parent's Name")
-            with c5: contact_number = st.text_input("Contact Number")
+            # 🚀 NEW: Changed to 3 columns to beautifully fit the Village Name!
+            c4, c5, c6 = st.columns(3)
+            with c4: parent_name = st.text_input("Parent's Name *")
+            with c5: contact_number = st.text_input("Contact Number", max_chars=10)
+            with c6: village_name = st.text_input("Village Name") 
 
             st.divider()
             st.markdown("#### 🏥 Birth History")
@@ -1142,12 +1143,13 @@ elif menu == "5. HBNC Newborn Visit":
                     st.error("🚨 Enter Child and Parent Name.")
                 else:
                     try:
-                        spreadsheet.worksheet("hbnc_screenings").append_row([str(visit_date), child_name, parent_name, contact_number, str(dob), birth_weight, delivery_type, delivery_point, techo_id, disease, observations])
+                        # 🚀 NEW: Added village_name to the VERY END of the save array!
+                        spreadsheet.worksheet("hbnc_screenings").append_row([str(visit_date), child_name, parent_name, contact_number, str(dob), birth_weight, delivery_type, delivery_point, techo_id, disease, observations, village_name])
                         st.toast(f"✅ Recorded Visit for {child_name}.", icon="🎉")
                         
-                        # 🚀 THE FIX: We only clear the HBNC micro-memory, keeping the 11-tab database completely safe!
                         get_hbnc_logs.clear() 
                         
+                        import time
                         time.sleep(0.5)
                         st.rerun()
                     except Exception as e:
@@ -1206,7 +1208,7 @@ elif menu == "5. HBNC Newborn Visit":
                         
                         st.info(f"**📞 Calling:** {selected_target}  |  **📱 Number:** {phone_num}")
 
-                        with st.form("telephonic_form"):
+                        with st.form("telephonic_form", clear_on_submit=True):
                             call_status = st.radio("Call Outcome:", ["✅ Successfully Consulted", "❌ Did Not Answer", "📵 Wrong/Invalid Number"], horizontal=True)
                             remarks = st.text_input("Remarks / Advice Given (Can type in Gujarati or English)")
                             save_call = st.form_submit_button("💾 Save Call Log")
@@ -1223,6 +1225,8 @@ elif menu == "5. HBNC Newborn Visit":
                             
                             ws_tele.append_row([today_str, selected_target, phone_num, call_status, remarks])
                             st.toast(f"Successfully logged call for {selected_target}!", icon="📞")
+                            
+                            import time
                             time.sleep(0.5)
                             st.rerun()
 
