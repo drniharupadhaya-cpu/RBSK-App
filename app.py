@@ -699,35 +699,90 @@ elif menu == "2. Child Screening":
                             disease = st.text_input("🦠 Disease Identified (4D)", value="None")
                             save_btn = st.form_submit_button("💾 Save Screening Data")
 
+                        # 🚀 SMART MERGE ENGINE IS HERE
                         if save_btn:
-                            height_val = safe_float(h_str)
-                            weight_val = safe_float(w_str)
-                            muac_val = safe_float(m_str)
-                            hb_val = safe_float(hb_str)
-                            final_status = get_whz_status(gender, height_val, weight_val) if category == "👶 Anganwadi" else "Normal"
-                            
                             ws = spreadsheet.worksheet("daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools")
                             all_recs = ws.get_all_values()
-                            row_to_update = None
                             
+                            row_to_update = None
+                            existing_row = []
+                            
+                            # 1. FIND THE EXISTING ROW IN MASTER DATABASE
                             for idx, r in enumerate(all_recs):
                                 if len(r) > 2 and r[0] == str(screening_date) and str(r[2]).strip() == final_child_name.strip():
-                                    row_to_update = idx + 1; break
+                                    row_to_update = idx + 1
+                                    existing_row = r + [""] * 15  # Grab existing data and pad safely
+                                    break
 
-                            if category == "👶 Anganwadi":
-                                new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, muac_val, hb_val, disease, updated_contact, techo_id, final_status, "Pending", updated_class]
-                            else:
-                                new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, hb_val, disease, updated_contact, "Online Entry", "Pending", updated_class]
+                            has_new_h = str(h_str).strip() != ""
+                            has_new_w = str(w_str).strip() != ""
+                            has_new_m = str(m_str).strip() != "" if category == "👶 Anganwadi" else False
+                            has_new_hb = str(hb_str).strip() != ""
+                            has_new_disease = str(disease).strip().lower() not in ["", "none"]
 
-                            if row_to_update: 
+                            if row_to_update:
+                                # 🤝 2. MERGE EXISTING DATA WITH NEW DATA
+                                merged_h = safe_float(h_str) if has_new_h else safe_float(existing_row[5])
+                                merged_w = safe_float(w_str) if has_new_w else safe_float(existing_row[6])
+                                
+                                if category == "👶 Anganwadi":
+                                    merged_m = safe_float(m_str) if has_new_m else safe_float(existing_row[7])
+                                    merged_hb = safe_float(hb_str) if has_new_hb else safe_float(existing_row[8])
+                                    merged_disease = disease if has_new_disease else (existing_row[9] if str(existing_row[9]).strip() != "" else "None")
+                                    merged_contact = updated_contact if str(updated_contact).strip() != "" else existing_row[10]
+                                    merged_techo = techo_id if str(techo_id).strip() not in ["", "N/A"] else existing_row[11]
+                                    
+                                    merged_status = get_whz_status(gender, merged_h, merged_w)
+                                    merged_class = updated_class if str(updated_class).strip() != "" else existing_row[14]
+                                    
+                                    new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), merged_h, merged_w, merged_m, merged_hb, merged_disease, merged_contact, merged_techo, merged_status, "Pending", merged_class]
+                                else:
+                                    merged_hb = safe_float(hb_str) if has_new_hb else safe_float(existing_row[7])
+                                    merged_disease = disease if has_new_disease else (existing_row[8] if str(existing_row[8]).strip() != "" else "None")
+                                    merged_contact = updated_contact if str(updated_contact).strip() != "" else existing_row[9]
+                                    merged_class = updated_class if str(updated_class).strip() != "" else existing_row[12]
+                                    
+                                    new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), merged_h, merged_w, merged_hb, merged_disease, merged_contact, "Online Entry", "Pending", merged_class]
+                                    
+                                # 🎯 3. OVERWRITE THE EXACT ROW (No Duplicates!)
                                 ws.update(range_name=f"A{row_to_update}", values=[new_row])
-                                st.toast(f"✅ Collaborative Update: Added {disease} to {final_child_name}'s record!", icon="🎉")
-                            else: 
-                                ws.append_row(new_row)
+                                st.toast(f"✅ Safely merged records for {final_child_name}!", icon="🤝")
+                                
+                                # 🎯 4. CMTC DUPLICATE PREVENTION
+                                if category == "👶 Anganwadi" and merged_status in ["SAM", "MAM"]:
+                                    cmtc_ws = spreadsheet.worksheet("cmtc_referral")
+                                    cmtc_recs = cmtc_ws.get_all_values()
+                                    cmtc_row = None
+                                    # Check if they are already in the CMTC tab today
+                                    for i, r in enumerate(cmtc_recs):
+                                        if len(r) > 2 and r[0] == str(screening_date) and str(r[2]).strip() == final_child_name.strip():
+                                            cmtc_row = i + 1; break
+                                            
+                                    cmtc_data = [str(screening_date), selected_inst, final_child_name, str(dob), merged_contact, merged_w, merged_h, merged_m, merged_status, "Pending"]
+                                    
+                                    if cmtc_row:
+                                        cmtc_ws.update(range_name=f"A{cmtc_row}", values=[cmtc_data]) # Overwrite CMTC
+                                    else:
+                                        cmtc_ws.append_row(cmtc_data) # Add new to CMTC
+                                    
+                            else:
+                                # 🆕 5. BRAND NEW ROW (First time being saved today)
+                                height_val = safe_float(h_str)
+                                weight_val = safe_float(w_str)
+                                muac_val = safe_float(m_str)
+                                hb_val = safe_float(hb_str)
+                                final_status = get_whz_status(gender, height_val, weight_val) if category == "👶 Anganwadi" else "Normal"
+                                
+                                if category == "👶 Anganwadi":
+                                    new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, muac_val, hb_val, disease, updated_contact, techo_id, final_status, "Pending", updated_class]
+                                else:
+                                    new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, hb_val, disease, updated_contact, "Online Entry", "Pending", updated_class]
+
+                                ws.append_row(new_row) # Add new to Master
                                 st.toast(f"✅ New screening saved for {final_child_name}!", icon="🎉")
-                            
-                            if category == "👶 Anganwadi" and final_status in ["SAM", "MAM"]:
-                                spreadsheet.worksheet("cmtc_referral").append_row([str(screening_date), selected_inst, final_child_name, str(dob), updated_contact, weight_val, height_val, muac_val, final_status, "Pending"])
+                                
+                                if category == "👶 Anganwadi" and final_status in ["SAM", "MAM"]:
+                                    spreadsheet.worksheet("cmtc_referral").append_row([str(screening_date), selected_inst, final_child_name, str(dob), updated_contact, weight_val, height_val, muac_val, final_status, "Pending"])
                             
                             import time
                             time.sleep(0.5) 
