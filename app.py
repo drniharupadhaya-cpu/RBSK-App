@@ -958,55 +958,67 @@ elif menu == "3. 4D Defect Registry":
                 selected_kid_str = st.selectbox("Select Child for Follow-up:", ["-- Select --"] + sorted(kid_options))
 
                 if selected_kid_str != "-- Select --":
-                    exact_name = selected_kid_str.split(" (")[0]
-                    exact_disease = selected_kid_str.split("(")[1].split(")")[0]
+                    # 🚀 ZERO-CRASH FIX: Stripping the hidden spaces from the selection!
+                    exact_name = selected_kid_str.split(" (")[0].strip()
+                    exact_disease = selected_kid_str.split("(")[1].split(")")[0].strip()
                     
-                    target_row = df_working[(df_working['NAME'] == exact_name) & (df_working['4D'] == exact_disease)].iloc[0]
-                    st.info(f"**Current Status:** {target_row.get('Current Status', 'None')} | **Last Scheduled:** {target_row.get('Next Follow-Up Date', 'None')}")
+                    # 🚀 ZERO-CRASH FIX: Robust filtering that ignores spaces on BOTH sides
+                    matched_rows = df_working[
+                        (df_working['NAME'].astype(str).str.strip() == exact_name) & 
+                        (df_working['4D'].astype(str).str.strip() == exact_disease)
+                    ]
+                    
+                    if not matched_rows.empty:
+                        target_row = matched_rows.iloc[0]
+                        st.info(f"**Current Status:** {target_row.get('Current Status', 'None')} | **Last Scheduled:** {target_row.get('Next Follow-Up Date', 'None')}")
 
-                    with st.form("followup_form"):
-                        st.write("### Update Case File")
-                        f_col1, f_col2 = st.columns(2)
-                        with f_col1: contact_method = st.radio("Contact Method:", ["📞 Telephonic", "🏠 Physical Visit"], horizontal=True)
-                        with f_col2: new_status = st.selectbox("New Case Status:", ["Pending Assessment", "Under Treatment", "Referred to CHC", "Surgery Scheduled", "Cured/Resolved"], index=1)
-                        
-                        remarks = st.text_input("Doctor/Staff Remarks & Advice given today:")
-                        new_date = st.date_input("Schedule NEXT Follow-Up Date (Leave as today if Cured)")
-                        submit_followup = st.form_submit_button("💾 Save to Master Database")
-
-                    if submit_followup:
-                        try:
-                            ws_4d = spreadsheet.worksheet("4d_list")
-                            all_recs = ws_4d.get_all_values()
-                            headers = all_recs[0]
+                        with st.form("followup_form"):
+                            st.write("### Update Case File")
+                            f_col1, f_col2 = st.columns(2)
+                            with f_col1: contact_method = st.radio("Contact Method:", ["📞 Telephonic", "🏠 Physical Visit"], horizontal=True)
+                            with f_col2: new_status = st.selectbox("New Case Status:", ["Pending Assessment", "Under Treatment", "Referred to CHC", "Surgery Scheduled", "Cured/Resolved"], index=1)
                             
-                            status_idx = headers.index("Current Status") if "Current Status" in headers else None
-                            date_idx = headers.index("Next Follow-Up Date") if "Next Follow-Up Date" in headers else None
-                            remarks_idx = headers.index("Remarks") if "Remarks" in headers else None
-                            
-                            if status_idx is None or date_idx is None:
-                                st.error("⚠️ Ensure your Google Sheet has exact columns named 'Current Status' and 'Next Follow-Up Date'")
-                                st.stop()
+                            remarks = st.text_input("Doctor/Staff Remarks & Advice given today:")
+                            new_date = st.date_input("Schedule NEXT Follow-Up Date (Leave as today if Cured)")
+                            submit_followup = st.form_submit_button("💾 Save to Master Database")
 
-                            row_to_update = None
-                            for i, r in enumerate(all_recs):
-                                if len(r) > headers.index("NAME") and r[headers.index("NAME")] == exact_name and r[headers.index("4D")] == exact_disease:
-                                    row_to_update = i + 1; break
-                            
-                            if row_to_update:
-                                ws_4d.update_cell(row_to_update, status_idx + 1, new_status)
-                                final_date = "" if new_status == "Cured/Resolved" else str(new_date)
-                                ws_4d.update_cell(row_to_update, date_idx + 1, final_date)
-                                if remarks_idx is not None:
-                                    ws_4d.update_cell(row_to_update, remarks_idx + 1, f"[{today}] {contact_method}: {remarks}")
+                        if submit_followup:
+                            try:
+                                ws_4d = spreadsheet.worksheet("4d_list")
+                                all_recs = ws_4d.get_all_values()
+                                headers = all_recs[0]
+                                
+                                status_idx = headers.index("Current Status") if "Current Status" in headers else None
+                                date_idx = headers.index("Next Follow-Up Date") if "Next Follow-Up Date" in headers else None
+                                remarks_idx = headers.index("Remarks") if "Remarks" in headers else None
+                                
+                                if status_idx is None or date_idx is None:
+                                    st.error("⚠️ Ensure your Google Sheet has exact columns named 'Current Status' and 'Next Follow-Up Date'")
+                                    st.stop()
 
-                                st.toast(f"✅ Successfully updated Case File for {exact_name}!", icon="🎉")
-                                st.cache_data.clear()
-                                time.sleep(0.5)
-                                st.rerun()
-                            else:
-                                st.error("Could not find this specific child in the Google Sheet.")
-                        except Exception as e: st.error(f"Error saving to Google Sheets: {e}")
+                                row_to_update = None
+                                for i, r in enumerate(all_recs):
+                                    # 🚀 ZERO-CRASH FIX: Stripping spaces during the save loop too!
+                                    if len(r) > headers.index("NAME") and str(r[headers.index("NAME")]).strip() == exact_name and str(r[headers.index("4D")]).strip() == exact_disease:
+                                        row_to_update = i + 1; break
+                                
+                                if row_to_update:
+                                    ws_4d.update_cell(row_to_update, status_idx + 1, new_status)
+                                    final_date = "" if new_status == "Cured/Resolved" else str(new_date)
+                                    ws_4d.update_cell(row_to_update, date_idx + 1, final_date)
+                                    if remarks_idx is not None:
+                                        ws_4d.update_cell(row_to_update, remarks_idx + 1, f"[{today}] {contact_method}: {remarks}")
+
+                                    st.toast(f"✅ Successfully updated Case File for {exact_name}!", icon="🎉")
+                                    st.cache_data.clear()
+                                    time.sleep(0.5)
+                                    st.rerun()
+                                else:
+                                    st.error("Could not find this specific child in the Google Sheet.")
+                            except Exception as e: st.error(f"Error saving to Google Sheets: {e}")
+                            
+                    else:
+                        st.error(f"⚠️ Could not find the exact record for '{exact_name}'. The database might have hidden formatting issues.")
             else:
                 st.success("No active cases found! Everyone is cured.")
 
