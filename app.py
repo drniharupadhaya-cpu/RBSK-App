@@ -2212,7 +2212,7 @@ elif menu == "13. Offline Batch Sync":
                 st.error(f"⚠️ Error reading file. Please ensure you are using the exact template. Detail: {e}")
 
 # ==========================================
-# MODULE 14: 💻 TECHO PORTAL ENTRY QUEUE (Location-First Sync Engine)
+# MODULE 14: 💻 TECHO PORTAL ENTRY QUEUE (Panoramic Sync Engine)
 # ==========================================
 elif menu == "14. TECHO Entry Queue":  
     st.header("💻 TECHO Portal Pending Queue")
@@ -2284,10 +2284,7 @@ elif menu == "14. TECHO Entry Queue":
                                     if 'Member Name' in techo_df.columns and 'Date Of Birth' in techo_df.columns:
                                         
                                         # 🚀 ROBUST PARSING ENGINE
-                                        # Parse TECHO Date (DD/MM/YYYY) into universal datetime object
                                         techo_df['Parsed_DOB'] = pd.to_datetime(techo_df['Date Of Birth'].astype(str).str.strip(), format='%d/%m/%Y', errors='coerce')
-                                        
-                                        # Parse TECHO Gender ("AAYUSH / Male" -> "M", "Aarav / M" -> "M")
                                         techo_df['Parsed_Gender'] = techo_df['Member Name'].apply(
                                             lambda x: str(x).split('/')[-1].strip().upper()[0] if '/' in str(x) and len(str(x).split('/')[-1].strip()) > 0 else ''
                                         )
@@ -2296,46 +2293,44 @@ elif menu == "14. TECHO Entry Queue":
                                         matched_techo_indices = []
                                         match_display_data = []
                                         
-                                        # Duplicate protection pool
                                         available_techo_df = techo_df.copy()
                                         
                                         # 🚀 UNIVERSAL MATCHING ALGORITHM
                                         for idx, emr_row in loc_pending_df.iterrows():
                                             emr_name = str(emr_row[name_col])
                                             
-                                            # Parse EMR DOB into universal datetime object
                                             raw_emr_dob = str(emr_row[emr_dob_col]) if emr_dob_col else ""
                                             emr_parsed_dob = pd.to_datetime(raw_emr_dob, errors='coerce')
                                             
-                                            # Parse EMR Gender
                                             raw_emr_gender = str(emr_row[emr_gender_col]).strip().upper() if emr_gender_col else ""
                                             emr_parsed_gender = raw_emr_gender[0] if raw_emr_gender else ""
                                             
                                             if pd.notnull(emr_parsed_dob):
-                                                # 1. Try Strict Match (Exact DOB + Exact Gender)
                                                 matches = available_techo_df[
                                                     (available_techo_df['Parsed_DOB'] == emr_parsed_dob) & 
                                                     (available_techo_df['Parsed_Gender'] == emr_parsed_gender)
                                                 ]
                                                 
-                                                # 2. If no strict match, fallback to just DOB (Safeguard for missing genders)
                                                 if matches.empty:
                                                     matches = available_techo_df[available_techo_df['Parsed_DOB'] == emr_parsed_dob]
                                                 
-                                                # If we found a match!
                                                 if not matches.empty:
                                                     matched_emr_indices.append(idx)
                                                     t_match = matches.iloc[0] 
                                                     matched_techo_indices.append(t_match.name)
                                                     
-                                                    match_display_data.append({
-                                                        "EMR Name (English)": emr_name,
-                                                        "TECHO Name (Gujarati)": t_match['Member Name'],
-                                                        "DOB": str(t_match['Date Of Birth']),
-                                                        "Gender": t_match['Parsed_Gender']
-                                                    })
+                                                    # 🚀 NEW: PANORAMIC DATA EXTRACTION
+                                                    row_data = {
+                                                        "✅ TECHO Name (Gujarati)": t_match['Member Name'],
+                                                        "TECHO DOB": str(t_match['Date Of Birth'])
+                                                    }
                                                     
-                                                    # Remove from available pool to prevent twins sharing a match
+                                                    # Dynamically add EVERY column from the EMR so staff has all vitals
+                                                    for col_name in loc_pending_df.columns:
+                                                        if col_name not in ['TECHO_Status', '_sort_val']:
+                                                            row_data[f"📋 EMR: {col_name}"] = emr_row[col_name]
+                                                    
+                                                    match_display_data.append(row_data)
                                                     available_techo_df = available_techo_df.drop(index=t_match.name)
                                                     
                                         emr_only_df = loc_pending_df.drop(index=matched_emr_indices)
@@ -2376,19 +2371,25 @@ elif menu == "14. TECHO Entry Queue":
                                         with sync_t2:
                                             st.warning("These children are pending in your EMR for this location, but weren't found in the uploaded TECHO file.")
                                             if not emr_only_df.empty:
-                                                st.dataframe(emr_only_df[[name_col, emr_dob_col] if emr_dob_col else [name_col]], use_container_width=True)
+                                                # Show ALL EMR data for missing kids
+                                                display_emr_only = emr_only_df.drop(columns=['TECHO_Status', '_sort_val'], errors='ignore')
+                                                st.dataframe(display_emr_only, use_container_width=True)
                                                 
                                         with sync_t3:
                                             st.error("These children are pending in TECHO, but are NOT in your EMR pending queue.")
                                             if not techo_only_df.empty:
-                                                st.dataframe(techo_only_df[['Member Name', 'Date Of Birth', 'Contact Details']], use_container_width=True)
+                                                # Clean up parser columns before displaying TECHO data
+                                                display_techo_only = techo_only_df.drop(columns=['Parsed_DOB', 'Parsed_Gender', 'Clean_DOB', 'Extracted_Gender'], errors='ignore')
+                                                st.dataframe(display_techo_only, use_container_width=True)
 
                                     else:
                                         st.error("❌ The uploaded file does not appear to be a standard TECHO export. Missing 'Member Name' or 'Date Of Birth' columns.")
                             
                             with tab_manual:
                                 st.write(f"### 📋 Pending Entries for {selected_location} ({len(loc_pending_df)} Children)")
-                                st.dataframe(loc_pending_df, use_container_width=True)
+                                # Show ALL panoramic EMR data in the manual table
+                                display_manual_df = loc_pending_df.drop(columns=['TECHO_Status', '_sort_val'], errors='ignore')
+                                st.dataframe(display_manual_df, use_container_width=True)
                                 
                                 st.write("---")
                                 children_to_update = st.multiselect(f"Select multiple children to mark as 'Done':", loc_pending_df[name_col].tolist())
