@@ -2255,7 +2255,6 @@ elif menu == "14. TECHO Entry Queue":
                     selected_location = st.selectbox(f"Filter queue by {inst_col}:", ["-- Select Location --"] + available_locations)
                     
                     if selected_location != "-- Select Location --":
-                        # 🚀 CRITICAL FIX: Filter the pending list down to JUST this location first!
                         if inst_col in df.columns:
                             loc_pending_df = pending_df[pending_df[inst_col].astype(str) == selected_location]
                         else:
@@ -2267,7 +2266,6 @@ elif menu == "14. TECHO Entry Queue":
                             st.write("---")
                             st.subheader("⚡ Step 2: Choose Data Entry Method")
                             
-                            # Elegant tabs to keep the UI clean
                             tab_auto, tab_manual = st.tabs(["🚀 Auto-Sync (TECHO File)", "✍️ Manual Multi-Select"])
                             
                             with tab_auto:
@@ -2284,38 +2282,62 @@ elif menu == "14. TECHO Entry Queue":
                                         techo_df = pd.read_excel(techo_file)
                                         
                                     if 'Member Name' in techo_df.columns and 'Date Of Birth' in techo_df.columns:
-                                        # Extract Gender from the Gujarati string (e.g., "... / M" -> "M")
-                                        techo_df['Extracted_Gender'] = techo_df['Member Name'].apply(lambda x: str(x).split('/')[-1].strip().upper() if '/' in str(x) else '')
-                                        # Standardize DOB from DD/MM/YYYY to YYYY-MM-DD to match EMR
-                                        techo_df['Clean_DOB'] = pd.to_datetime(techo_df['Date Of Birth'], format='%d/%m/%Y', errors='coerce').dt.strftime('%Y-%m-%d')
+                                        
+                                        # 🚀 ROBUST PARSING ENGINE
+                                        # Parse TECHO Date (DD/MM/YYYY) into universal datetime object
+                                        techo_df['Parsed_DOB'] = pd.to_datetime(techo_df['Date Of Birth'].astype(str).str.strip(), format='%d/%m/%Y', errors='coerce')
+                                        
+                                        # Parse TECHO Gender ("AAYUSH / Male" -> "M", "Aarav / M" -> "M")
+                                        techo_df['Parsed_Gender'] = techo_df['Member Name'].apply(
+                                            lambda x: str(x).split('/')[-1].strip().upper()[0] if '/' in str(x) and len(str(x).split('/')[-1].strip()) > 0 else ''
+                                        )
                                         
                                         matched_emr_indices = []
                                         matched_techo_indices = []
                                         match_display_data = []
                                         
-                                        # 🚀 MATCHING ENGINE: Now only triangulates against loc_pending_df!
+                                        # Duplicate protection pool
+                                        available_techo_df = techo_df.copy()
+                                        
+                                        # 🚀 UNIVERSAL MATCHING ALGORITHM
                                         for idx, emr_row in loc_pending_df.iterrows():
                                             emr_name = str(emr_row[name_col])
-                                            emr_dob = str(emr_row[emr_dob_col]) if emr_dob_col else ""
-                                            emr_gender = str(emr_row[emr_gender_col]).strip().upper() if emr_gender_col else ""
                                             
-                                            potential_matches = techo_df[
-                                                (techo_df['Clean_DOB'] == emr_dob) & 
-                                                (techo_df['Extracted_Gender'].str.startswith(emr_gender) if emr_gender else True)
-                                            ]
+                                            # Parse EMR DOB into universal datetime object
+                                            raw_emr_dob = str(emr_row[emr_dob_col]) if emr_dob_col else ""
+                                            emr_parsed_dob = pd.to_datetime(raw_emr_dob, errors='coerce')
                                             
-                                            if not potential_matches.empty:
-                                                matched_emr_indices.append(idx)
-                                                t_match = potential_matches.iloc[0] 
-                                                matched_techo_indices.append(t_match.name)
+                                            # Parse EMR Gender
+                                            raw_emr_gender = str(emr_row[emr_gender_col]).strip().upper() if emr_gender_col else ""
+                                            emr_parsed_gender = raw_emr_gender[0] if raw_emr_gender else ""
+                                            
+                                            if pd.notnull(emr_parsed_dob):
+                                                # 1. Try Strict Match (Exact DOB + Exact Gender)
+                                                matches = available_techo_df[
+                                                    (available_techo_df['Parsed_DOB'] == emr_parsed_dob) & 
+                                                    (available_techo_df['Parsed_Gender'] == emr_parsed_gender)
+                                                ]
                                                 
-                                                match_display_data.append({
-                                                    "EMR Name (English)": emr_name,
-                                                    "TECHO Name (Gujarati)": t_match['Member Name'],
-                                                    "DOB": emr_dob,
-                                                    "Gender": emr_gender
-                                                })
+                                                # 2. If no strict match, fallback to just DOB (Safeguard for missing genders)
+                                                if matches.empty:
+                                                    matches = available_techo_df[available_techo_df['Parsed_DOB'] == emr_parsed_dob]
                                                 
+                                                # If we found a match!
+                                                if not matches.empty:
+                                                    matched_emr_indices.append(idx)
+                                                    t_match = matches.iloc[0] 
+                                                    matched_techo_indices.append(t_match.name)
+                                                    
+                                                    match_display_data.append({
+                                                        "EMR Name (English)": emr_name,
+                                                        "TECHO Name (Gujarati)": t_match['Member Name'],
+                                                        "DOB": str(t_match['Date Of Birth']),
+                                                        "Gender": t_match['Parsed_Gender']
+                                                    })
+                                                    
+                                                    # Remove from available pool to prevent twins sharing a match
+                                                    available_techo_df = available_techo_df.drop(index=t_match.name)
+                                                    
                                         emr_only_df = loc_pending_df.drop(index=matched_emr_indices)
                                         techo_only_df = techo_df.drop(index=matched_techo_indices)
                                         
@@ -2329,7 +2351,7 @@ elif menu == "14. TECHO Entry Queue":
                                         
                                         with sync_t1:
                                             if match_display_data:
-                                                st.success(f"Found {len(match_display_data)} perfect matches for {selected_location}!")
+                                                st.success(f"Found {len(match_display_data)} perfect matches triangulated by DOB and Gender!")
                                                 st.dataframe(pd.DataFrame(match_display_data), use_container_width=True)
                                                 
                                                 if st.button(f"🚀 Mark all {len(match_display_data)} Matches as 'Done'", type="primary"):
@@ -2349,7 +2371,7 @@ elif menu == "14. TECHO Entry Queue":
                                                     time.sleep(1)
                                                     st.rerun()
                                             else:
-                                                st.info("No perfect matches found. Ensure your EMR dates are formatted correctly.")
+                                                st.info("No perfect matches found. Please ensure the DOBs in your Google Sheet match the TECHO file.")
                                                 
                                         with sync_t2:
                                             st.warning("These children are pending in your EMR for this location, but weren't found in the uploaded TECHO file.")
