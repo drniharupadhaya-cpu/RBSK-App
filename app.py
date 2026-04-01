@@ -836,7 +836,7 @@ elif menu == "2. Child Screening":
                             time.sleep(0.5) 
                             st.rerun()
 # ==========================================
-# MODULE 3: 4D DEFECT REGISTRY & CASE MANAGEMENT (Vectorized Zero-Lag)
+# MODULE 3: 4D DEFECT REGISTRY & CASE MANAGEMENT (Emoji-Anchor Edition)
 # ==========================================
 elif menu == "3. 4D Defect Registry":
     render_header("4D Defect Command Center", "Track live referrals, manage 5-year case history, and generate official print cards", "📋", "#8b5cf6")
@@ -853,10 +853,9 @@ elif menu == "3. 4D Defect Registry":
 
     def is_real_defect(val):
         v = str(val).strip().lower()
-        # 🚀 FIX: Added 'n/a' to ensure old absent entries are completely ignored!
         return v not in ['', 'nan', 'none', 'no', 'null', 'na', 'n/a', 'false', 'normal', '-', 'absent', 'out of bounds']
 
-    # 🚀 VECTORIZED SPEED UPGRADE: Processes thousands of rows instantly!
+    # 🚀 VECTORIZED SPEED UPGRADE
     for df_type, df in [("Anganwadi", aw_logs), ("School", sch_logs)]:
         if not df.empty:
             df.columns = [str(c).strip() for c in df.columns]
@@ -953,16 +952,16 @@ elif menu == "3. 4D Defect Registry":
             if not active_kids.empty:
                 kid_options = []
                 for _, r in active_kids.iterrows():
-                    kid_options.append(f"{r.get('NAME', 'Unknown')} ({r.get('4D', 'Unknown')}) - {r.get('VILLAGE', 'Unknown')} | Ph: {r.get('MOBILE NO', 'N/A')}")
+                    # 🚀 EMOJI ANCHOR FIX: Bulletproof string building!
+                    kid_options.append(f"{r.get('NAME', 'Unknown')} 🩺 {r.get('4D', 'Unknown')} 📍 {r.get('VILLAGE', 'Unknown')} 📞 Ph: {r.get('MOBILE NO', 'N/A')}")
                 
                 selected_kid_str = st.selectbox("Select Child for Follow-up:", ["-- Select --"] + sorted(kid_options))
 
                 if selected_kid_str != "-- Select --":
-                    # 🚀 ZERO-CRASH FIX: Stripping the hidden spaces from the selection!
-                    exact_name = selected_kid_str.split(" (")[0].strip()
-                    exact_disease = selected_kid_str.split("(")[1].split(")")[0].strip()
+                    # 🚀 EMOJI ANCHOR PARSING: It will never get confused by parenthesis again!
+                    exact_name = selected_kid_str.split(" 🩺 ")[0].strip()
+                    exact_disease = selected_kid_str.split(" 🩺 ")[1].split(" 📍 ")[0].strip()
                     
-                    # 🚀 ZERO-CRASH FIX: Robust filtering that ignores spaces on BOTH sides
                     matched_rows = df_working[
                         (df_working['NAME'].astype(str).str.strip() == exact_name) & 
                         (df_working['4D'].astype(str).str.strip() == exact_disease)
@@ -998,7 +997,6 @@ elif menu == "3. 4D Defect Registry":
 
                                 row_to_update = None
                                 for i, r in enumerate(all_recs):
-                                    # 🚀 ZERO-CRASH FIX: Stripping spaces during the save loop too!
                                     if len(r) > headers.index("NAME") and str(r[headers.index("NAME")]).strip() == exact_name and str(r[headers.index("4D")]).strip() == exact_disease:
                                         row_to_update = i + 1; break
                                 
