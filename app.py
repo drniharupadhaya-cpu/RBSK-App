@@ -438,7 +438,7 @@ if menu == "1. Daily Tour Plan":
                     st.info("No referral conditions to map yet. Great job MHT-1!")
 
 # ==========================================
-# MODULE 2: EMR SCREENING (Ultimate Edition)
+# MODULE 2: EMR SCREENING (Ultimate Edition + Smart Roster)
 # ==========================================
 elif menu == "2. Child Screening":
     render_header("Child Screening & EMR", "Record vitals and auto-calculate SAM/MAM", "🩺", "#10b981")
@@ -470,6 +470,17 @@ elif menu == "2. Child Screening":
         if weight_kg < sam_cutoff: return "SAM"
         elif weight_kg < mam_cutoff: return "MAM"
         else: return "Normal"
+
+    # 🚀 NEW: Super-fast background checker for today's entries!
+    @st.cache_data(ttl=60)
+    def get_todays_screenings(sheet_name, inst_name, today_date):
+        try:
+            records = spreadsheet.worksheet(sheet_name).get_all_values()
+            return [r for r in records if len(r) > 2 and r[0] == today_date and r[1] == inst_name]
+        except: return []
+
+    import datetime
+    today_string = datetime.date.today().strftime('%Y-%m-%d')
 
     category = st.radio("Select Visit Type:", ["🏫 Schools", "👶 Anganwadi"], horizontal=True)
     st.divider()
@@ -514,16 +525,37 @@ elif menu == "2. Child Screening":
                 if any(w in str(col).lower() for w in ['class', 'std', 'grade', 'ધોરણ']):
                     class_column = col; break
 
+        # 🚀 SMART ROSTER LOGIC: Fetch today's records and identify who is done/absent
+        target_sheet = "daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools"
+        todays_rows = get_todays_screenings(target_sheet, selected_inst, today_string)
+        
+        screened_names = []
+        absent_names = []
+        
+        for r in todays_rows:
+            if len(r) > 2:
+                c_name = str(r[2]).strip()
+                if category == "👶 Anganwadi":
+                    status = str(r[12]).strip() if len(r) > 12 else ""
+                    if status == "ABSENT": absent_names.append(c_name)
+                    else: screened_names.append(c_name)
+                else:
+                    status = str(r[10]).strip() if len(r) > 10 else ""
+                    if status == "ABSENT": absent_names.append(c_name)
+                    else: screened_names.append(c_name)
+
         with st.expander("🚀 Bulk Absentee Entry"):
             st.write("Mark multiple children as absent instantly.")
-            absent_names = st.multiselect("Select Absent Children:", actual_children)
+            # 🚀 Filter so they only see pending kids in the bulk list!
+            pending_only = [n for n in actual_children if n not in screened_names and n not in absent_names]
+            absent_selection = st.multiselect("Select Absent Children:", pending_only)
+            
             bulk_date = st.date_input("Date of Absence", key="bulk_abs_date")
             if st.button("📤 Mark All Selected as Absent"):
-                if absent_names:
-                    sheet_name = "daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools"
-                    ws_bulk = spreadsheet.worksheet(sheet_name)
+                if absent_selection:
+                    ws_bulk = spreadsheet.worksheet(target_sheet)
                     rows_to_push = []
-                    for name in absent_names:
+                    for name in absent_selection:
                         match = filtered_children[filtered_children['Beneficiary Name' if category=="👶 Anganwadi" else 'StudentName'].str.strip() == name].iloc[0]
                         
                         bulk_class = ""
@@ -538,11 +570,15 @@ elif menu == "2. Child Screening":
                             rows_to_push.append([str(bulk_date), selected_inst, name, str(match.get('DOB','')), str(match.get('Gender','')), 0, 0, 0, "None", str(match.get('CONTACT NUMBER','')), "ABSENT", "Pending", bulk_class])
                     ws_bulk.append_rows(rows_to_push)
                     st.toast("Bulk absences recorded!", icon="✅")
+                    get_todays_screenings.clear() # Clear cache to instantly update tags
                     import time
                     time.sleep(0.5)
                     st.rerun()
         
         child_display = {}
+        pending_list = []
+        done_list = []
+        
         for idx, name in enumerate(actual_children):
             display_str = f"{idx+1}. {name}"
             if category != "👶 Anganwadi" and class_column:
@@ -550,9 +586,23 @@ elif menu == "2. Child Screening":
                 if not student_row.empty:
                     raw_class = str(student_row.iloc[0][class_column]).strip()
                     display_str += f" [Class: {raw_class[:-2] if raw_class.endswith('.0') else raw_class}]"
+            
+            # 🚀 NEW: Apply Visual Tags and split the lists!
+            if name in absent_names:
+                display_str += " 🛑 [ABSENT]"
+                done_list.append(name)
+            elif name in screened_names:
+                display_str += " ✅ [SCREENED]"
+                done_list.append(name)
+            else:
+                pending_list.append(name)
+
             child_display[name] = display_str
 
-        selected_child = st.selectbox(f"Select Child:", options=["-- Select Child --", "➕ Register New Child"] + actual_children, format_func=lambda x: child_display.get(x, x))
+        # 🚀 SMART SORT: Pending kids at the top, Finished kids at the bottom!
+        sorted_actual_children = pending_list + done_list
+
+        selected_child = st.selectbox(f"Select Child:", options=["-- Select Child --", "➕ Register New Child"] + sorted_actual_children, format_func=lambda x: child_display.get(x, x))
         
         if selected_child != "-- Select Child --":
             if selected_child == "➕ Register New Child":
@@ -568,7 +618,6 @@ elif menu == "2. Child Screening":
                     with c3: new_gender = st.selectbox("Gender *", ["M", "F"])
                     with c4: new_parent = st.text_input("Parent's Name")
                     
-                    # 🚀 NEW: Class Text Box added to registration!
                     c5, c6, c7 = st.columns(3)
                     with c5: new_contact = st.text_input("📞 Contact Number", max_chars=10)
                     with c6: new_class = st.text_input("🏫 Class / Std")
@@ -592,8 +641,7 @@ elif menu == "2. Child Screening":
                     if not new_name or not h_str or not w_str:
                         st.error("⚠️ Name, Height, and Weight are mandatory fields!")
                     else:
-                        import datetime
-                        screening_date = datetime.date.today().strftime('%Y-%m-%d')
+                        screening_date = today_string
                         height_val = safe_float(h_str)
                         weight_val = safe_float(w_str)
                         muac_val = safe_float(m_str)
@@ -601,7 +649,7 @@ elif menu == "2. Child Screening":
                         
                         final_status = get_whz_status(new_gender, height_val, weight_val) if category == "👶 Anganwadi" else "Normal"
                         
-                        ws = spreadsheet.worksheet("daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools")
+                        ws = spreadsheet.worksheet(target_sheet)
                         
                         if category == "👶 Anganwadi":
                             new_row = [screening_date, selected_inst, new_name, str(new_dob), new_gender, height_val, weight_val, muac_val, hb_val, disease, new_contact, new_techo, final_status, "Pending", new_class]
@@ -614,6 +662,7 @@ elif menu == "2. Child Screening":
                             spreadsheet.worksheet("cmtc_referral").append_row([screening_date, selected_inst, new_name, str(new_dob), new_contact, weight_val, height_val, muac_val, final_status, "Pending"])
                         
                         st.toast(f"✅ Successfully registered and screened {new_name}!", icon="🎉")
+                        get_todays_screenings.clear() # Clear cache to instantly update tags
                         import time
                         time.sleep(0.5)
                         st.rerun()
@@ -663,15 +712,14 @@ elif menu == "2. Child Screening":
                     if is_absent:
                         if st.button("🚩 Confirm Single Absence"):
                             try:
-                                import datetime
-                                today_str = datetime.date.today().strftime('%Y-%m-%d')
-                                ws = spreadsheet.worksheet("daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools")
+                                ws = spreadsheet.worksheet(target_sheet)
                                 if category == "👶 Anganwadi":
-                                    row = [today_str, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, 0, "None", existing_contact, str(match.get('TechoID','')), "ABSENT", "Pending", existing_class]
+                                    row = [today_string, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, 0, "None", existing_contact, str(match.get('TechoID','')), "ABSENT", "Pending", existing_class]
                                 else:
-                                    row = [today_str, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, "None", existing_contact, "ABSENT", "Pending", existing_class]
+                                    row = [today_string, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, "None", existing_contact, "ABSENT", "Pending", existing_class]
                                 ws.append_row(row)
                                 st.toast("Recorded absence!", icon="✅")
+                                get_todays_screenings.clear() # Clear cache to instantly update tags
                                 import time
                                 time.sleep(0.5) 
                                 st.rerun()
@@ -685,7 +733,6 @@ elif menu == "2. Child Screening":
                         with st.form(f"vitals_form_{safe_key}", clear_on_submit=True):
                             screening_date = st.date_input("Date of Screening")
                             
-                            # 🚀 NEW: Class text box added to regular screenings!
                             sc1, sc2, sc3 = st.columns(3)
                             with sc1: updated_contact = st.text_input("📞 Contact Number", value=existing_contact, max_chars=10)
                             with sc2: updated_class = st.text_input("🏫 Class / Std", value=existing_class)
@@ -701,7 +748,7 @@ elif menu == "2. Child Screening":
 
                         # 🚀 SMART MERGE ENGINE IS HERE
                         if save_btn:
-                            ws = spreadsheet.worksheet("daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools")
+                            ws = spreadsheet.worksheet(target_sheet)
                             all_recs = ws.get_all_values()
                             
                             row_to_update = None
@@ -784,6 +831,7 @@ elif menu == "2. Child Screening":
                                 if category == "👶 Anganwadi" and final_status in ["SAM", "MAM"]:
                                     spreadsheet.worksheet("cmtc_referral").append_row([str(screening_date), selected_inst, final_child_name, str(dob), updated_contact, weight_val, height_val, muac_val, final_status, "Pending"])
                             
+                            get_todays_screenings.clear() # Clear cache to instantly update tags
                             import time
                             time.sleep(0.5) 
                             st.rerun()
