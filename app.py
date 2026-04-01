@@ -1704,17 +1704,33 @@ elif menu == "8. School Directory":
 # ==========================================
 elif menu == "9. Anganwadi Directory":
     render_header("Anganvadi Information", "All Anganvadi details at your fingertips", "⚙️", "#64748b")
-    st.write("Instantly look up Anganwadi Workers and their contact numbers.")
+    st.write("Instantly look up Anganwadi Workers, their contact numbers, and live enrollment data.")
 
     if not df_aw_contacts.empty:
+        # Find the main column for AWC Names in the contact directory
         awc_col = df_aw_contacts.columns[0] 
         for col in df_aw_contacts.columns:
             if 'AWC' in col.upper() or 'NAME' in col.upper():
                 awc_col = col
                 break
                 
+        # 🚀 NEW: Pre-calculate enrollment numbers from the 'aw new data' sheet (df_aw)
+        aw_summary = {}
+        if not df_aw.empty and 'AWC Name' in df_aw.columns:
+            aw_summary = df_aw['AWC Name'].value_counts().to_dict()
+
+        # Custom format function for the dropdown
+        def format_awc_dropdown(awc_name):
+            if awc_name == "-- Select Center --":
+                return awc_name
+            # Grab the count, default to 0 if not found in the master list
+            count = aw_summary.get(awc_name, 0)
+            return f"{awc_name}  👶 ({count} Enrolled)"
+                
         awc_options = sorted([str(x) for x in df_aw_contacts[awc_col].unique() if str(x) != 'nan' and str(x).strip() != ''])
-        selected_awc = st.selectbox("Select an Anganwadi Center:", ["-- Select Center --"] + awc_options)
+        
+        # Apply the custom formatting to the selectbox
+        selected_awc = st.selectbox("Select an Anganwadi Center:", ["-- Select Center --"] + awc_options, format_func=format_awc_dropdown)
         
         if selected_awc != "-- Select Center --":
             contact_info = df_aw_contacts[df_aw_contacts[awc_col] == selected_awc].iloc[0]
@@ -1722,6 +1738,28 @@ elif menu == "9. Anganwadi Directory":
             st.divider()
             st.subheader(f"🏠 {selected_awc}")
             
+            # 🚀 NEW: Generate a Live Enrollment Dashboard!
+            if not df_aw.empty and 'AWC Name' in df_aw.columns:
+                aw_data = df_aw[df_aw['AWC Name'] == selected_awc]
+                total_kids = len(aw_data)
+                
+                # Safely count Boys and Girls
+                gender_col = next((c for c in aw_data.columns if str(c).lower() == 'gender'), None)
+                if gender_col:
+                    boys = len(aw_data[aw_data[gender_col].astype(str).str.upper().str.startswith('M')])
+                    girls = len(aw_data[aw_data[gender_col].astype(str).str.upper().str.startswith('F')])
+                else:
+                    boys, girls = 0, 0
+                
+                st.markdown("#### 📊 Live Enrollment Summary")
+                c1, c2, c3 = st.columns(3)
+                c1.metric("👶 Total Children", total_kids)
+                c2.metric("👦 Boys", boys)
+                c3.metric("👧 Girls", girls)
+                st.write("---")
+            
+            # Display Contact Info
+            st.markdown("#### 📞 Contact Information")
             for col in df_aw_contacts.columns:
                 if col != awc_col:  
                     val = str(contact_info[col]).strip()
