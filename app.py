@@ -2212,7 +2212,7 @@ elif menu == "13. Offline Batch Sync":
                 st.error(f"⚠️ Error reading file. Please ensure you are using the exact template. Detail: {e}")
 
 # ==========================================
-# MODULE 14: 💻 TECHO PORTAL ENTRY QUEUE (Multi-Tier Triangulation Engine)
+# MODULE 14: 💻 TECHO PORTAL ENTRY QUEUE (Multi-Tier + Alphabetical Sort)
 # ==========================================
 elif menu == "14. TECHO Entry Queue":  
     st.header("💻 TECHO Portal Pending Queue")
@@ -2285,15 +2285,12 @@ elif menu == "14. TECHO Entry Queue":
                                     if 'Member Name' in techo_df.columns and 'Date Of Birth' in techo_df.columns:
                                         
                                         # 🚀 1. ROBUST TECHO DATA PARSING
-                                        # Clean Names (Removes the ' / Male' part)
                                         techo_df['Parsed_Name'] = techo_df['Member Name'].apply(lambda x: str(x).split('/')[0].strip().upper())
                                         
-                                        # Extract Gender securely
                                         techo_df['Parsed_Gender'] = techo_df['Member Name'].apply(
                                             lambda x: str(x).split('/')[-1].strip().upper()[0] if '/' in str(x) and len(str(x).split('/')[-1].strip()) > 0 else ''
                                         )
                                         
-                                        # Force Dates to YYYY-MM-DD Text Strings to prevent Timezone mismatches
                                         def force_techo_date(val):
                                             try: return pd.to_datetime(str(val).strip(), format='%d/%m/%Y').strftime('%Y-%m-%d')
                                             except: 
@@ -2301,7 +2298,6 @@ elif menu == "14. TECHO Entry Queue":
                                                 except: return ""
                                         techo_df['Parsed_DOB'] = techo_df['Date Of Birth'].apply(force_techo_date)
                                         
-                                        # Clean Contact Numbers (digits only)
                                         techo_df['Parsed_Contact'] = techo_df.get('Contact Details', pd.Series(dtype=str)).apply(lambda x: ''.join(filter(str.isdigit, str(x))))
                                         
                                         matched_emr_indices = []
@@ -2326,33 +2322,28 @@ elif menu == "14. TECHO Entry Queue":
                                             best_match_idx = None
                                             match_logic = ""
 
-                                            # TIER 1: Exact Name Match (Best for Schools)
                                             t1_matches = available_techo_df[available_techo_df['Parsed_Name'] == emr_name]
                                             if not t1_matches.empty:
                                                 best_match_idx = t1_matches.index[0]
                                                 match_logic = "🟢 By Name"
                                             else:
-                                                # TIER 2: DOB + Contact Match (Best for Anganwadi)
                                                 if emr_parsed_dob and emr_parsed_contact:
                                                     t2_matches = available_techo_df[(available_techo_df['Parsed_DOB'] == emr_parsed_dob) & (available_techo_df['Parsed_Contact'] == emr_parsed_contact)]
                                                     if not t2_matches.empty:
                                                         best_match_idx = t2_matches.index[0]
                                                         match_logic = "🟡 By DOB+Phone"
                                                 
-                                                # TIER 3: DOB + Gender Match (Fallback)
                                                 if best_match_idx is None and emr_parsed_dob and emr_parsed_gender:
                                                     t3_matches = available_techo_df[(available_techo_df['Parsed_DOB'] == emr_parsed_dob) & (available_techo_df['Parsed_Gender'] == emr_parsed_gender)]
                                                     if not t3_matches.empty:
                                                         best_match_idx = t3_matches.index[0]
                                                         match_logic = "🟠 By DOB+Gender"
 
-                                            # IF A MATCH WAS FOUND IN ANY TIER
                                             if best_match_idx is not None:
                                                 matched_emr_indices.append(idx)
                                                 t_match = available_techo_df.loc[best_match_idx]
                                                 matched_techo_indices.append(best_match_idx)
                                                 
-                                                # Compile Panoramic Data
                                                 row_data = {
                                                     "Match Quality": match_logic,
                                                     "✅ TECHO Name (Gujarati)": t_match['Member Name'],
@@ -2382,6 +2373,12 @@ elif menu == "14. TECHO Entry Queue":
                                                 st.success(f"Found {len(match_display_data)} perfect matches triangulated by our Multi-Tier Engine!")
                                                 
                                                 match_df = pd.DataFrame(match_display_data)
+                                                
+                                                # 🚀 ALPHABETICAL SORTING (Matches Tab)
+                                                sort_col_name = f"📋 EMR: {name_col}"
+                                                if sort_col_name in match_df.columns:
+                                                    match_df = match_df.sort_values(by=sort_col_name, ascending=True)
+                                                
                                                 match_df.insert(0, "✅ Select", True) 
                                                 
                                                 st.write("**Uncheck any students you do NOT want to sync right now:**")
@@ -2392,7 +2389,7 @@ elif menu == "14. TECHO Entry Queue":
                                                     disabled=[col for col in match_df.columns if col != "✅ Select"] 
                                                 )
                                                 
-                                                selected_matches = edited_match_df[edited_match_df["✅ Select"] == True]["📋 EMR: " + name_col].tolist()
+                                                selected_matches = edited_match_df[edited_match_df["✅ Select"] == True][f"📋 EMR: {name_col}"].tolist()
                                                 
                                                 if st.button(f"🚀 Mark Selected ({len(selected_matches)}) Matches as 'Done'", type="primary"):
                                                     if selected_matches:
@@ -2421,6 +2418,11 @@ elif menu == "14. TECHO Entry Queue":
                                             st.warning("These children are pending in your EMR for this location, but weren't found in the uploaded TECHO file.")
                                             if not emr_only_df.empty:
                                                 display_emr_only = emr_only_df.drop(columns=['TECHO_Status', '_sort_val'], errors='ignore')
+                                                
+                                                # 🚀 ALPHABETICAL SORTING (Missing in TECHO Tab)
+                                                if name_col in display_emr_only.columns:
+                                                    display_emr_only = display_emr_only.sort_values(by=name_col, ascending=True)
+                                                    
                                                 display_emr_only.insert(0, "✅ Select", False) 
                                                 
                                                 st.write("**Select the students you want to manually mark as Done:**")
@@ -2459,6 +2461,11 @@ elif menu == "14. TECHO Entry Queue":
                                             st.info("💡 Data Guardrail: You must register these children in Module 2 first. Marking them 'Done' here would cause database corruption.")
                                             if not techo_only_df.empty:
                                                 display_techo_only = techo_only_df.drop(columns=['Parsed_DOB', 'Parsed_Gender', 'Clean_DOB', 'Extracted_Gender', 'Parsed_Name', 'Parsed_Contact'], errors='ignore')
+                                                
+                                                # 🚀 ALPHABETICAL SORTING (Extra in TECHO Tab)
+                                                if 'Member Name' in display_techo_only.columns:
+                                                    display_techo_only = display_techo_only.sort_values(by='Member Name', ascending=True)
+                                                    
                                                 st.dataframe(display_techo_only, use_container_width=True)
 
                                     else:
@@ -2467,10 +2474,15 @@ elif menu == "14. TECHO Entry Queue":
                             with tab_manual:
                                 st.write(f"### 📋 Pending Entries for {selected_location} ({len(loc_pending_df)} Children)")
                                 display_manual_df = loc_pending_df.drop(columns=['TECHO_Status', '_sort_val'], errors='ignore')
+                                
+                                # 🚀 ALPHABETICAL SORTING (Manual Fallback Tab)
+                                if name_col in display_manual_df.columns:
+                                    display_manual_df = display_manual_df.sort_values(by=name_col, ascending=True)
+                                    
                                 st.dataframe(display_manual_df, use_container_width=True)
                                 
                                 st.write("---")
-                                children_to_update = st.multiselect(f"Select multiple children to mark as 'Done':", loc_pending_df[name_col].tolist())
+                                children_to_update = st.multiselect(f"Select multiple children to mark as 'Done':", display_manual_df[name_col].tolist())
                                 
                                 if st.button(f"🚀 Mark Selected ({len(children_to_update)}) as 'Done'"):
                                     if children_to_update:
