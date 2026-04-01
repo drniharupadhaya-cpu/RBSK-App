@@ -438,10 +438,19 @@ if menu == "1. Daily Tour Plan":
                     st.info("No referral conditions to map yet. Great job MHT-1!")
 
 # ==========================================
-# MODULE 2: EMR SCREENING (Ultimate Edition + Smart Roster)
+# MODULE 2: EMR SCREENING (180-Day Roster & Manual Sync)
 # ==========================================
 elif menu == "2. Child Screening":
     render_header("Child Screening & EMR", "Record vitals and auto-calculate SAM/MAM", "🩺", "#10b981")
+
+    # 🚀 NEW: The Manual Override Sync Button!
+    if st.button("🔄 Sync & Refresh Roster"):
+        try: get_recent_screenings.clear()
+        except: st.cache_data.clear()
+        st.toast("Roster synchronized with Master Database!", icon="✅")
+        import time
+        time.sleep(0.5)
+        st.rerun()
 
     # 🚀 BULLETPROOF NUMBER FIX
     def safe_float(val):
@@ -471,16 +480,18 @@ elif menu == "2. Child Screening":
         elif weight_kg < mam_cutoff: return "MAM"
         else: return "Normal"
 
-    # 🚀 NEW: Super-fast background checker for today's entries!
+    # 🚀 NEW: 180-Day Bi-Annual Background Checker
     @st.cache_data(ttl=60)
-    def get_todays_screenings(sheet_name, inst_name, today_date):
+    def get_recent_screenings(sheet_name, inst_name):
         try:
             records = spreadsheet.worksheet(sheet_name).get_all_values()
-            return [r for r in records if len(r) > 2 and r[0] == today_date and r[1] == inst_name]
+            return [r for r in records if len(r) > 2 and r[1] == inst_name]
         except: return []
 
     import datetime
-    today_string = datetime.date.today().strftime('%Y-%m-%d')
+    today_date = datetime.date.today()
+    today_string = today_date.strftime('%Y-%m-%d')
+    cutoff_date = today_date - datetime.timedelta(days=180) # The 6-Month Mark!
 
     category = st.radio("Select Visit Type:", ["🏫 Schools", "👶 Anganwadi"], horizontal=True)
     st.divider()
@@ -525,28 +536,30 @@ elif menu == "2. Child Screening":
                 if any(w in str(col).lower() for w in ['class', 'std', 'grade', 'ધોરણ']):
                     class_column = col; break
 
-        # 🚀 SMART ROSTER LOGIC: Fetch today's records and identify who is done/absent
+        # 🚀 180-DAY ROSTER LOGIC: Scan the last 6 months to see who is already done!
         target_sheet = "daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools"
-        todays_rows = get_todays_screenings(target_sheet, selected_inst, today_string)
+        inst_records = get_recent_screenings(target_sheet, selected_inst)
         
-        screened_names = []
-        absent_names = []
+        recent_status = {} # Keeps track of the most recent status for each child
         
-        for r in todays_rows:
-            if len(r) > 2:
-                c_name = str(r[2]).strip()
-                if category == "👶 Anganwadi":
-                    status = str(r[12]).strip() if len(r) > 12 else ""
-                    if status == "ABSENT": absent_names.append(c_name)
-                    else: screened_names.append(c_name)
-                else:
-                    status = str(r[10]).strip() if len(r) > 10 else ""
-                    if status == "ABSENT": absent_names.append(c_name)
-                    else: screened_names.append(c_name)
+        for r in inst_records:
+            try:
+                rec_date = datetime.datetime.strptime(r[0], '%Y-%m-%d').date()
+                if rec_date >= cutoff_date:
+                    c_name = str(r[2]).strip()
+                    status_col = 12 if category == "👶 Anganwadi" else 10
+                    status = str(r[status_col]).strip() if len(r) > status_col else ""
+                    
+                    # Updates dictionary (Google Sheets appending means the latest record overwrites older ones here)
+                    recent_status[c_name] = "ABSENT" if status == "ABSENT" else "SCREENED"
+            except:
+                pass
+                
+        screened_names = [name for name, stat in recent_status.items() if stat == "SCREENED"]
+        absent_names = [name for name, stat in recent_status.items() if stat == "ABSENT"]
 
         with st.expander("🚀 Bulk Absentee Entry"):
             st.write("Mark multiple children as absent instantly.")
-            # 🚀 Filter so they only see pending kids in the bulk list!
             pending_only = [n for n in actual_children if n not in screened_names and n not in absent_names]
             absent_selection = st.multiselect("Select Absent Children:", pending_only)
             
@@ -570,7 +583,7 @@ elif menu == "2. Child Screening":
                             rows_to_push.append([str(bulk_date), selected_inst, name, str(match.get('DOB','')), str(match.get('Gender','')), 0, 0, 0, "None", str(match.get('CONTACT NUMBER','')), "ABSENT", "Pending", bulk_class])
                     ws_bulk.append_rows(rows_to_push)
                     st.toast("Bulk absences recorded!", icon="✅")
-                    get_todays_screenings.clear() # Clear cache to instantly update tags
+                    get_recent_screenings.clear() # Clear cache to instantly update tags
                     import time
                     time.sleep(0.5)
                     st.rerun()
@@ -587,7 +600,7 @@ elif menu == "2. Child Screening":
                     raw_class = str(student_row.iloc[0][class_column]).strip()
                     display_str += f" [Class: {raw_class[:-2] if raw_class.endswith('.0') else raw_class}]"
             
-            # 🚀 NEW: Apply Visual Tags and split the lists!
+            # Apply Visual Tags based on 180-day history
             if name in absent_names:
                 display_str += " 🛑 [ABSENT]"
                 done_list.append(name)
@@ -599,7 +612,7 @@ elif menu == "2. Child Screening":
 
             child_display[name] = display_str
 
-        # 🚀 SMART SORT: Pending kids at the top, Finished kids at the bottom!
+        # Smart Sort: Pending kids top, Finished kids bottom!
         sorted_actual_children = pending_list + done_list
 
         selected_child = st.selectbox(f"Select Child:", options=["-- Select Child --", "➕ Register New Child"] + sorted_actual_children, format_func=lambda x: child_display.get(x, x))
@@ -662,7 +675,7 @@ elif menu == "2. Child Screening":
                             spreadsheet.worksheet("cmtc_referral").append_row([screening_date, selected_inst, new_name, str(new_dob), new_contact, weight_val, height_val, muac_val, final_status, "Pending"])
                         
                         st.toast(f"✅ Successfully registered and screened {new_name}!", icon="🎉")
-                        get_todays_screenings.clear() # Clear cache to instantly update tags
+                        get_recent_screenings.clear() # Clear cache to instantly update tags
                         import time
                         time.sleep(0.5)
                         st.rerun()
@@ -719,7 +732,7 @@ elif menu == "2. Child Screening":
                                     row = [today_string, selected_inst, final_child_name, str(dob), str(gender), 0, 0, 0, "None", existing_contact, "ABSENT", "Pending", existing_class]
                                 ws.append_row(row)
                                 st.toast("Recorded absence!", icon="✅")
-                                get_todays_screenings.clear() # Clear cache to instantly update tags
+                                get_recent_screenings.clear() 
                                 import time
                                 time.sleep(0.5) 
                                 st.rerun()
@@ -746,7 +759,7 @@ elif menu == "2. Child Screening":
                             disease = st.text_input("🦠 Disease Identified (4D)", value="None")
                             save_btn = st.form_submit_button("💾 Save Screening Data")
 
-                        # 🚀 SMART MERGE ENGINE IS HERE
+                        # 🚀 SMART MERGE ENGINE (Continues to look only at TODAY's date to prevent historical overwrite!)
                         if save_btn:
                             ws = spreadsheet.worksheet(target_sheet)
                             all_recs = ws.get_all_values()
@@ -754,11 +767,11 @@ elif menu == "2. Child Screening":
                             row_to_update = None
                             existing_row = []
                             
-                            # 1. FIND THE EXISTING ROW IN MASTER DATABASE
+                            # 1. FIND THE EXISTING ROW FOR TODAY ONLY
                             for idx, r in enumerate(all_recs):
                                 if len(r) > 2 and r[0] == str(screening_date) and str(r[2]).strip() == final_child_name.strip():
                                     row_to_update = idx + 1
-                                    existing_row = r + [""] * 15  # Grab existing data and pad safely
+                                    existing_row = r + [""] * 15  
                                     break
 
                             has_new_h = str(h_str).strip() != ""
@@ -768,7 +781,6 @@ elif menu == "2. Child Screening":
                             has_new_disease = str(disease).strip().lower() not in ["", "none"]
 
                             if row_to_update:
-                                # 🤝 2. MERGE EXISTING DATA WITH NEW DATA
                                 merged_h = safe_float(h_str) if has_new_h else safe_float(existing_row[5])
                                 merged_w = safe_float(w_str) if has_new_w else safe_float(existing_row[6])
                                 
@@ -791,16 +803,13 @@ elif menu == "2. Child Screening":
                                     
                                     new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), merged_h, merged_w, merged_hb, merged_disease, merged_contact, "Online Entry", "Pending", merged_class]
                                     
-                                # 🎯 3. OVERWRITE THE EXACT ROW (No Duplicates!)
                                 ws.update(range_name=f"A{row_to_update}", values=[new_row])
                                 st.toast(f"✅ Safely merged records for {final_child_name}!", icon="🤝")
                                 
-                                # 🎯 4. CMTC DUPLICATE PREVENTION
                                 if category == "👶 Anganwadi" and merged_status in ["SAM", "MAM"]:
                                     cmtc_ws = spreadsheet.worksheet("cmtc_referral")
                                     cmtc_recs = cmtc_ws.get_all_values()
                                     cmtc_row = None
-                                    # Check if they are already in the CMTC tab today
                                     for i, r in enumerate(cmtc_recs):
                                         if len(r) > 2 and r[0] == str(screening_date) and str(r[2]).strip() == final_child_name.strip():
                                             cmtc_row = i + 1; break
@@ -808,12 +817,11 @@ elif menu == "2. Child Screening":
                                     cmtc_data = [str(screening_date), selected_inst, final_child_name, str(dob), merged_contact, merged_w, merged_h, merged_m, merged_status, "Pending"]
                                     
                                     if cmtc_row:
-                                        cmtc_ws.update(range_name=f"A{cmtc_row}", values=[cmtc_data]) # Overwrite CMTC
+                                        cmtc_ws.update(range_name=f"A{cmtc_row}", values=[cmtc_data]) 
                                     else:
-                                        cmtc_ws.append_row(cmtc_data) # Add new to CMTC
+                                        cmtc_ws.append_row(cmtc_data) 
                                     
                             else:
-                                # 🆕 5. BRAND NEW ROW (First time being saved today)
                                 height_val = safe_float(h_str)
                                 weight_val = safe_float(w_str)
                                 muac_val = safe_float(m_str)
@@ -825,13 +833,13 @@ elif menu == "2. Child Screening":
                                 else:
                                     new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, hb_val, disease, updated_contact, "Online Entry", "Pending", updated_class]
 
-                                ws.append_row(new_row) # Add new to Master
+                                ws.append_row(new_row) 
                                 st.toast(f"✅ New screening saved for {final_child_name}!", icon="🎉")
                                 
                                 if category == "👶 Anganwadi" and final_status in ["SAM", "MAM"]:
                                     spreadsheet.worksheet("cmtc_referral").append_row([str(screening_date), selected_inst, final_child_name, str(dob), updated_contact, weight_val, height_val, muac_val, final_status, "Pending"])
                             
-                            get_todays_screenings.clear() # Clear cache to instantly update tags
+                            get_recent_screenings.clear() 
                             import time
                             time.sleep(0.5) 
                             st.rerun()
