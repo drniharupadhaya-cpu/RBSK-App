@@ -2212,7 +2212,7 @@ elif menu == "13. Offline Batch Sync":
                 st.error(f"⚠️ Error reading file. Please ensure you are using the exact template. Detail: {e}")
 
 # ==========================================
-# MODULE 14: 💻 TECHO PORTAL ENTRY QUEUE (Panoramic Sync Engine)
+# MODULE 14: 💻 TECHO PORTAL ENTRY QUEUE (Interactive Checklist Sync)
 # ==========================================
 elif menu == "14. TECHO Entry Queue":  
     st.header("💻 TECHO Portal Pending Queue")
@@ -2319,13 +2319,12 @@ elif menu == "14. TECHO Entry Queue":
                                                     t_match = matches.iloc[0] 
                                                     matched_techo_indices.append(t_match.name)
                                                     
-                                                    # 🚀 NEW: PANORAMIC DATA EXTRACTION
+                                                    # PANORAMIC DATA EXTRACTION
                                                     row_data = {
                                                         "✅ TECHO Name (Gujarati)": t_match['Member Name'],
                                                         "TECHO DOB": str(t_match['Date Of Birth'])
                                                     }
                                                     
-                                                    # Dynamically add EVERY column from the EMR so staff has all vitals
                                                     for col_name in loc_pending_df.columns:
                                                         if col_name not in ['TECHO_Status', '_sort_val']:
                                                             row_data[f"📋 EMR: {col_name}"] = emr_row[col_name]
@@ -2347,38 +2346,88 @@ elif menu == "14. TECHO Entry Queue":
                                         with sync_t1:
                                             if match_display_data:
                                                 st.success(f"Found {len(match_display_data)} perfect matches triangulated by DOB and Gender!")
-                                                st.dataframe(pd.DataFrame(match_display_data), use_container_width=True)
                                                 
-                                                if st.button(f"🚀 Mark all {len(match_display_data)} Matches as 'Done'", type="primary"):
-                                                    status_col_index = df.columns.get_loc('TECHO_Status') + 1 
-                                                    progress_bar = st.progress(0)
-                                                    status_text = st.empty()
-                                                    total = len(matched_emr_indices)
-                                                    
-                                                    for i, emr_idx in enumerate(matched_emr_indices):
-                                                        sheet_row = emr_idx + 2 
-                                                        active_sheet.update_cell(sheet_row, status_col_index, "Done")
-                                                        progress_bar.progress((i + 1) / total)
-                                                        status_text.text(f"Syncing record {i + 1} of {total}...")
+                                                # 🚀 INTERACTIVE CHECKLIST FOR TAB 1
+                                                match_df = pd.DataFrame(match_display_data)
+                                                match_df.insert(0, "✅ Select", True) # Pre-checked by default!
+                                                
+                                                st.write("**Uncheck any students you do NOT want to sync right now:**")
+                                                edited_match_df = st.data_editor(
+                                                    match_df, 
+                                                    hide_index=True, 
+                                                    use_container_width=True,
+                                                    disabled=[col for col in match_df.columns if col != "✅ Select"] # Locks all columns except the checkbox!
+                                                )
+                                                
+                                                # Grab only the names that remained checked
+                                                selected_matches = edited_match_df[edited_match_df["✅ Select"] == True]["📋 EMR: " + name_col].tolist()
+                                                
+                                                if st.button(f"🚀 Mark Selected ({len(selected_matches)}) Matches as 'Done'", type="primary"):
+                                                    if selected_matches:
+                                                        status_col_index = df.columns.get_loc('TECHO_Status') + 1 
+                                                        progress_bar = st.progress(0)
+                                                        status_text = st.empty()
+                                                        total = len(selected_matches)
                                                         
-                                                    st.toast(f"✅ Successfully synced {total} records!", icon="🎉")
-                                                    import time
-                                                    time.sleep(1)
-                                                    st.rerun()
+                                                        for i, child_name in enumerate(selected_matches):
+                                                            cell = active_sheet.find(str(child_name))
+                                                            if cell:
+                                                                active_sheet.update_cell(cell.row, status_col_index, "Done")
+                                                            progress_bar.progress((i + 1) / total)
+                                                            status_text.text(f"Syncing record {i + 1} of {total}...")
+                                                            
+                                                        st.toast(f"✅ Successfully synced {total} records!", icon="🎉")
+                                                        import time
+                                                        time.sleep(1)
+                                                        st.rerun()
+                                                    else:
+                                                        st.warning("Please select at least one child.")
                                             else:
                                                 st.info("No perfect matches found. Please ensure the DOBs in your Google Sheet match the TECHO file.")
                                                 
                                         with sync_t2:
                                             st.warning("These children are pending in your EMR for this location, but weren't found in the uploaded TECHO file.")
                                             if not emr_only_df.empty:
-                                                # Show ALL EMR data for missing kids
+                                                
+                                                # 🚀 INTERACTIVE CHECKLIST FOR TAB 2
                                                 display_emr_only = emr_only_df.drop(columns=['TECHO_Status', '_sort_val'], errors='ignore')
-                                                st.dataframe(display_emr_only, use_container_width=True)
+                                                display_emr_only.insert(0, "✅ Select", False) # Unchecked by default
+                                                
+                                                st.write("**Select the students you want to manually mark as Done:**")
+                                                edited_emr_only = st.data_editor(
+                                                    display_emr_only, 
+                                                    hide_index=True, 
+                                                    use_container_width=True,
+                                                    disabled=[col for col in display_emr_only.columns if col != "✅ Select"] # Locks all columns except the checkbox!
+                                                )
+                                                
+                                                selected_emr_missing = edited_emr_only[edited_emr_only["✅ Select"] == True][name_col].tolist()
+                                                
+                                                if st.button(f"🚀 Mark Selected ({len(selected_emr_missing)}) Missing Kids as 'Done'"):
+                                                    if selected_emr_missing:
+                                                        status_col_index = df.columns.get_loc('TECHO_Status') + 1 
+                                                        progress_bar = st.progress(0)
+                                                        status_text = st.empty()
+                                                        total = len(selected_emr_missing)
+                                                        
+                                                        for i, child_name in enumerate(selected_emr_missing):
+                                                            cell = active_sheet.find(str(child_name))
+                                                            if cell:
+                                                                active_sheet.update_cell(cell.row, status_col_index, "Done")
+                                                            progress_bar.progress((i + 1) / total)
+                                                            status_text.text(f"Syncing record {i + 1} of {total}...")
+                                                            
+                                                        st.toast(f"✅ Successfully synced {total} records!", icon="🎉")
+                                                        import time
+                                                        time.sleep(1)
+                                                        st.rerun()
+                                                    else:
+                                                        st.warning("Please select at least one child.")
                                                 
                                         with sync_t3:
                                             st.error("These children are pending in TECHO, but are NOT in your EMR pending queue.")
+                                            st.info("💡 Data Guardrail: Because these children only exist in the TECHO file (Gujarati) and not in your EMR queue, they cannot be checked off here. You must register them in Module 2 first to avoid database corruption!")
                                             if not techo_only_df.empty:
-                                                # Clean up parser columns before displaying TECHO data
                                                 display_techo_only = techo_only_df.drop(columns=['Parsed_DOB', 'Parsed_Gender', 'Clean_DOB', 'Extracted_Gender'], errors='ignore')
                                                 st.dataframe(display_techo_only, use_container_width=True)
 
@@ -2387,7 +2436,6 @@ elif menu == "14. TECHO Entry Queue":
                             
                             with tab_manual:
                                 st.write(f"### 📋 Pending Entries for {selected_location} ({len(loc_pending_df)} Children)")
-                                # Show ALL panoramic EMR data in the manual table
                                 display_manual_df = loc_pending_df.drop(columns=['TECHO_Status', '_sort_val'], errors='ignore')
                                 st.dataframe(display_manual_df, use_container_width=True)
                                 
