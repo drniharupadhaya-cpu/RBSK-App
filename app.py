@@ -2182,7 +2182,7 @@ elif menu == "12. Automated State Report":
         # Define separate targets for each team
         team_configs = {
             "MHT-1240315": {"target": 12794, "doctor": "Dr. Nihar"},
-            "MHT-1240316": {"target": 12794, "doctor": "Team B"} # You can update the doctor name here
+            "MHT-1240309": {"target": 12794, "doctor": "Team B"} # You can update the doctor name here
         }
         
         if not df_combined.empty:
