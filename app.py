@@ -2001,10 +2001,10 @@ elif menu == "12. Automated State Report":
 
     df_aw_daily, df_sch_daily, df_combined = get_daily_logs()
 
-    # --- SHARED DATA PROCESSING (DO NOT DELETE) ---
     if not df_aw_daily.empty or not df_sch_daily.empty:
         if not df_aw_daily.empty: df_aw_daily['Source'] = 'Anganwadi'
         if not df_sch_daily.empty: df_sch_daily['Source'] = 'School'
+        
         df_combined = pd.concat([df_aw_daily, df_sch_daily], ignore_index=True)
         
         def find_col(df, keywords):
@@ -2017,113 +2017,224 @@ elif menu == "12. Automated State Report":
         gender_col = find_col(df_combined, ['gender', 'sex'])
         disease_col = find_col(df_combined, ['disease', '4d', 'defect'])
         status_col = find_col(df_combined, ['status', 'sam', 'mam'])
+        # Necessary for the Scoreboard Backtracking
         inst_col_daily = find_col(df_combined, ['inst', 'school', 'center', 'awc'])
 
         if date_col and dob_col:
-            df_combined[date_col] = pd.to_datetime(df_combined[date_col].astype(str).str.replace('/', '-'), dayfirst=True, errors='coerce')
-            df_combined[dob_col] = pd.to_datetime(df_combined[dob_col].astype(str).str.replace('/', '-'), dayfirst=True, errors='coerce')
+            df_combined[date_col] = df_combined[date_col].astype(str).str.strip()
+            df_combined[dob_col] = df_combined[dob_col].astype(str).str.strip()
+            
+            df_combined[date_col] = df_combined[date_col].str.replace('/', '-').str.replace('.', '-', regex=False)
+            df_combined[dob_col] = df_combined[dob_col].str.replace('/', '-').str.replace('.', '-', regex=False)
+            
+            df_combined[date_col] = pd.to_datetime(df_combined[date_col], dayfirst=True, errors='coerce')
+            df_combined[dob_col] = pd.to_datetime(df_combined[dob_col], dayfirst=True, errors='coerce')
+            
             df_combined = df_combined.dropna(subset=[date_col])
 
     # ==========================================
-    # 📄 TAB 1: FORM III (ALL FEATURES PRESERVED)
+    # 📄 TAB 1: FORM III (ORIGINAL CODE - UNTOUCHED)
     # ==========================================
     with tab_form3:
         if not df_combined.empty and date_col and dob_col:
-            # ... [Form III Logic: Year/Month selectors, Buckets, SAM/MAM, 4D preview, and Download button]
-            # (Keeping your original logic here exactly as it was)
             st.write("### 🗓️ Report Timeframe")
+            
             col_y, col_m = st.columns(2)
-            with col_y: selected_year = st.selectbox("📅 Select Year", ["2024", "2025", "2026", "2027"], index=2)
+            with col_y:
+                selected_year = st.selectbox("📅 Select Year", ["2024", "2025", "2026", "2027"], index=2)
             with col_m:
                 months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
-                selected_month = st.selectbox("🗓️ Select Month", months, index=datetime.datetime.now().month - 1)
+                import datetime
+                current_month_index = datetime.datetime.now().month - 1
+                selected_month = st.selectbox("🗓️ Select Month", months, index=current_month_index)
             
             st.divider()
-            month_num = months.index(selected_month) + 1
-            report_df = df_combined[(df_combined[date_col].dt.year == int(selected_year)) & (df_combined[date_col].dt.month == month_num)].copy()
 
-            if not report_df.empty:
-                st.markdown(f"### 📊 Official Form III Output: **{selected_month} {selected_year}**")
-                # (Render stats... download button...)
-                csv = report_df.to_csv(index=False).encode('utf-8-sig')
-                st.download_button("⬇️ Download Form III CSV", data=csv, file_name=f"RBSK_Form_III_{selected_month}.csv")
+            month_num = months.index(selected_month) + 1
+            report_df = df_combined[
+                (df_combined[date_col].dt.year == int(selected_year)) & 
+                (df_combined[date_col].dt.month == month_num)
+            ].copy()
+
+            if report_df.empty:
+                st.info(f"No screenings found for {selected_month} {selected_year}.")
             else:
-                st.info(f"No screenings found for {selected_month}.")
+                child_name_cols = [c for c in report_df.columns if any(k in str(c).lower() for k in ['name', 'child', 'student', 'beneficiary'])]
+                if child_name_cols:
+                    report_df['Official_Child_Name'] = report_df[child_name_cols[0]]
+                    for col in child_name_cols[1:]:
+                        report_df['Official_Child_Name'] = report_df['Official_Child_Name'].combine_first(report_df[col])
+                else:
+                    report_df['Official_Child_Name'] = "Unknown"
+
+                inst_name_cols = [c for c in report_df.columns if any(k in str(c).lower() for k in ['inst', 'school', 'awc', 'center', 'aw name'])]
+                if inst_name_cols:
+                    report_df['Official_Institution'] = report_df[inst_name_cols[0]]
+                    for col in inst_name_cols[1:]:
+                        report_df['Official_Institution'] = report_df['Official_Institution'].combine_first(report_df[col])
+                else:
+                    report_df['Official_Institution'] = "Unknown"
+
+                report_df['Age_Years'] = (report_df[date_col] - report_df[dob_col]).dt.days / 365.25
+                
+                def bucket_age(age):
+                    if pd.isna(age): return "Unknown"
+                    if age <= 3.0: return "0-3 Years"
+                    elif age <= 6.0: return "3-6 Years"
+                    else: return "6-18 Years"
+                
+                report_df['Govt_Age_Bucket'] = report_df['Age_Years'].apply(bucket_age)
+                
+                if gender_col:
+                    report_df['Clean_Gender'] = report_df[gender_col].astype(str).str.upper().str[0]
+                else:
+                    report_df['Clean_Gender'] = "U"
+
+                st.markdown(f"### 📊 Official Form III Output: **{selected_month} {selected_year}**")
+                st.write(f"Total Children Screened this month: **{len(report_df)}**")
+
+                col_0_3, col_3_6, col_6_18 = st.columns(3)
+                
+                def render_bucket_stats(bucket_name, column_ui):
+                    bucket_data = report_df[report_df['Govt_Age_Bucket'] == bucket_name]
+                    boys = len(bucket_data[bucket_data['Clean_Gender'] == 'M'])
+                    girls = len(bucket_data[bucket_data['Clean_Gender'] == 'F'])
+                    
+                    with column_ui:
+                        st.info(f"**{bucket_name}**")
+                        st.metric("Total", len(bucket_data))
+                        st.write(f"👦 Boys: **{boys}**")
+                        st.write(f"👧 Girls: **{girls}**")
+                
+                render_bucket_stats("0-3 Years", col_0_3)
+                render_bucket_stats("3-6 Years", col_3_6)
+                render_bucket_stats("6-18 Years", col_6_18)
+
+                unknown_count = len(report_df[report_df['Govt_Age_Bucket'] == 'Unknown'])
+                if unknown_count > 0:
+                    st.warning(f"⚠️ **DATA ALERT:** There are **{unknown_count} children** with a missing or invalid Date of Birth. They cannot be sorted into the age buckets.")
+
+                st.divider()
+                st.markdown("### 🚨 Disease & Malnutrition Referrals")
+                
+                m1, m2 = st.columns(2)
+                with m1:
+                    st.write("**Nutritional Triage**")
+                    if status_col:
+                        sam_count = len(report_df[report_df[status_col].astype(str).str.upper() == 'SAM'])
+                        mam_count = len(report_df[report_df[status_col].astype(str).str.upper() == 'MAM'])
+                        st.error(f"🔴 SAM Cases: **{sam_count}**")
+                        st.warning(f"🟡 MAM Cases: **{mam_count}**")
+                    else:
+                        st.write("No nutrition status column found.")
+                        
+                with m2:
+                    st.write("**4D Conditions Found**")
+                    if disease_col:
+                        def is_real_disease(val):
+                            clean = str(val).strip().lower()
+                            return clean not in ['', 'nan', 'none', 'no', 'null', 'na', 'false']
+                            
+                        diseases = report_df[report_df[disease_col].apply(is_real_disease)]
+                        if not diseases.empty:
+                            disease_counts = diseases[disease_col].value_counts().reset_index()
+                            disease_counts.columns = ['Condition', 'Count']
+                            st.dataframe(disease_counts, use_container_width=True, hide_index=True)
+                        else:
+                            st.success("No 4D diseases logged this month!")
+                            
+                st.divider()
+                st.markdown("### 📥 Download Cleaned Report")
+                
+                export_df = pd.DataFrame()
+                export_df['Screening Date'] = report_df[date_col].dt.strftime('%d-%m-%Y')
+                export_df['Source'] = report_df['Source']
+                export_df['Institution'] = report_df['Official_Institution'] 
+                export_df['Child Name'] = report_df['Official_Child_Name']    
+                export_df['DOB'] = report_df[dob_col].dt.strftime('%d-%m-%Y')
+                export_df['Calculated Age (Yrs)'] = report_df['Age_Years'].round(2)
+                export_df['Govt Age Bucket'] = report_df['Govt_Age_Bucket']
+                export_df['Gender'] = report_df['Clean_Gender']
+                
+                if status_col: export_df['Nutrition (SAM/MAM)'] = report_df[status_col]
+                if disease_col: export_df['4D Condition Found'] = report_df[disease_col]
+
+                with st.expander("👁️ Preview Streamlined CSV Data"):
+                    st.dataframe(export_df, use_container_width=True, hide_index=True)
+
+                csv = export_df.to_csv(index=False).encode('utf-8-sig')
+                st.download_button(
+                    label=f"⬇️ Download Streamlined {selected_month} Data (CSV)",
+                    data=csv,
+                    file_name=f"RBSK_Form_III_{selected_month}_{selected_year}.csv",
+                    mime="text/csv",
+                )
         else:
-            st.info("No valid daily screening data found.")
+            st.info("No valid daily screening data found yet to generate Form III. Start screening in Module 2!")
 
     # ==========================================
-    # 🎯 TAB 2: LIVE SCOREBOARD (ROBUST BACKTRACKING)
+    # 🎯 TAB 2: LIVE SCOREBOARD (RE-CODED WITH BACKTRACKING + AUTO-TARGET)
     # ==========================================
     with tab_scoreboard:
         st.subheader("🏆 Team-wise Performance Scoreboard")
-        
+        st.markdown("**Block:** Visavadar | **District:** Junagadh")
+
         try:
-            with st.spinner("Calculating targets and backtracking achievements..."):
-                # 1. FETCH MASTER PLAN DATA
+            with st.spinner("Calculating Targets and Backtracking Achievements..."):
+                # 1. FETCH MASTER PLAN TO BUILD THE "BACKTRACKING MAP"
                 master_aw = pd.DataFrame(spreadsheet.worksheet("aw new data").get_all_records())
                 master_sch = pd.DataFrame(spreadsheet.worksheet("1240315 ALL STUDENTS NAMES").get_all_records())
 
-                # 2. DYNAMICALLY FIND MASTER COLUMNS (This prevents the 'LOC_KEY' error)
+                # Search for correct columns in Master Sheets
                 def find_m_col(df, keys):
                     return next((c for c in df.columns if any(k in str(c).upper() for k in keys)), None)
 
-                # Search for columns in AW Sheet
-                aw_loc_name = find_m_col(master_aw, ["INSTITUTE", "AWC", "CENTER"])
-                aw_team_name = find_m_col(master_aw, ["TEAM"])
-                
-                # Search for columns in School Sheet
-                sch_loc_name = find_m_col(master_sch, ["INSTITUTION", "SCHOOL"])
-                sch_team_name = find_m_col(master_sch, ["TEAM"])
+                aw_loc_key = find_m_col(master_aw, ["INSTITUTE", "AWC", "CENTER"])
+                aw_team_key = find_m_col(master_aw, ["TEAM"])
+                sch_loc_key = find_m_col(master_sch, ["INSTITUTION", "SCHOOL"])
+                sch_team_key = find_m_col(master_sch, ["TEAM"])
 
-                # 3. BUILD THE GLOBAL TEAM MAP
-                # Map logic: { 'AWC Name': 'TEAM-1240315', 'School Name': 'TEAM-1240309' }
+                # Create the Lookup Dictionary
                 team_lookup = {}
-                
-                if aw_loc_name and aw_team_name:
-                    aw_map = dict(zip(master_aw[aw_loc_name].astype(str).str.strip(), master_aw[aw_team_name].astype(str).str.strip()))
-                    team_lookup.update(aw_map)
-                
-                if sch_loc_name and sch_team_name:
-                    sch_map = dict(zip(master_sch[sch_loc_name].astype(str).str.strip(), master_sch[sch_team_name].astype(str).str.strip()))
-                    team_lookup.update(sch_map)
+                if aw_loc_key and aw_team_key:
+                    team_lookup.update(dict(zip(master_aw[aw_loc_key].astype(str).str.strip(), master_aw[aw_team_key].astype(str).str.strip())))
+                if sch_loc_key and sch_team_key:
+                    team_lookup.update(dict(zip(master_sch[sch_loc_key].astype(str).str.strip(), master_sch[sch_team_key].astype(str).str.strip())))
 
-                # 4. CALCULATE TARGETS
-                target_counts = {}
-                for team_id in ["TEAM-1240315", "TEAM-1240309"]:
+                # Calculate Targets
+                targets = {}
+                for t_id in ["TEAM-1240315", "TEAM-1240309"]:
                     count = 0
-                    if aw_team_name: count += len(master_aw[master_aw[aw_team_name].astype(str).str.strip() == team_id])
-                    if sch_team_name: count += len(master_sch[master_sch[sch_team_name].astype(str).str.strip() == team_id])
-                    target_counts[team_id] = count
+                    if aw_team_key: count += len(master_aw[master_aw[aw_team_key].astype(str).str.strip() == t_id])
+                    if sch_team_key: count += len(master_sch[master_sch[sch_team_key].astype(str).str.strip() == t_id])
+                    targets[t_id] = count
 
-            # 5. CALCULATE ACHIEVEMENT BY BACKTRACKING DAILY LOGS
+            # 2. RENDER PERFORMANCE FOR BOTH TEAMS
             if not df_combined.empty and inst_col_daily:
-                # Map the daily screening row to a Team ID using the Institute Name
+                # The Magic: Map daily rows to Teams via Institute Name
                 df_combined['Mapped_Team'] = df_combined[inst_col_daily].astype(str).str.strip().map(team_lookup)
                 
                 for t_id in ["TEAM-1240315", "TEAM-1240309"]:
-                    target = target_counts.get(t_id, 0)
-                    achieved = len(df_combined[df_combined['Mapped_Team'] == t_id])
-                    
-                    pct = (achieved / target * 100) if target > 0 else 0
-                    
-                    # UI RENDERING
+                    t_target = targets.get(t_id, 0)
+                    t_achieved = len(df_combined[df_combined['Mapped_Team'] == t_id])
+                    t_pct = (t_achieved / t_target * 100) if t_target > 0 else 0
+
                     st.markdown(f"#### 🏥 Team: {t_id}")
-                    c1, c2, c3 = st.columns(3)
-                    c1.metric("Annual Target", f"{target:,}")
-                    c2.metric("Total Achieved", f"{achieved:,}", delta=f"{achieved - target} Remaining")
-                    c3.metric("Achievement %", f"{pct:.2f}%")
+                    sc1, sc2, sc3 = st.columns(3)
+                    sc1.metric("Annual Target", f"{t_target:,}")
+                    sc2.metric("Total Achieved", f"{t_achieved:,}", delta=f"{t_achieved - t_target} Remaining")
+                    sc3.metric("Achievement %", f"{t_pct:.2f}%")
                     
-                    st.progress(min(pct / 100.0, 1.0))
+                    st.progress(min(t_pct / 100.0, 1.0))
                     st.divider()
 
-                # Preserve Breakdown feature
+                # KEEPING YOUR ORIGINAL BREAKDOWN FEATURE
                 st.markdown("### 🏢 Screening Breakdown by Source")
                 source_counts = df_combined['Source'].value_counts().reset_index()
                 source_counts.columns = ['Location Type', 'Children Screened']
                 st.dataframe(source_counts, use_container_width=True, hide_index=True)
             else:
-                st.info("Start screening kids to see live achievements!")
+                st.info("No screenings logged yet. Your scoreboard will update automatically.")
 
         except Exception as e:
             st.error(f"❌ Scoreboard Error: {e}")
