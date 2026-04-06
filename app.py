@@ -2017,6 +2017,8 @@ elif menu == "12. Automated State Report":
         gender_col = find_col(df_combined, ['gender', 'sex'])
         disease_col = find_col(df_combined, ['disease', '4d', 'defect'])
         status_col = find_col(df_combined, ['status', 'sam', 'mam'])
+        # New: Find the Team column to separate scoreboard
+        team_col = find_col(df_combined, ['mht', 'team', 'code'])
 
         if date_col and dob_col:
             df_combined[date_col] = df_combined[date_col].astype(str).str.strip()
@@ -2148,7 +2150,7 @@ elif menu == "12. Automated State Report":
                 export_df['Screening Date'] = report_df[date_col].dt.strftime('%d-%m-%Y')
                 export_df['Source'] = report_df['Source']
                 export_df['Institution'] = report_df['Official_Institution'] 
-                export_df['Child Name'] = report_df['Official_Child_Name']   
+                export_df['Child Name'] = report_df['Official_Child_Name']    
                 export_df['DOB'] = report_df[dob_col].dt.strftime('%d-%m-%Y')
                 export_df['Calculated Age (Yrs)'] = report_df['Age_Years'].round(2)
                 export_df['Govt Age Bucket'] = report_df['Govt_Age_Bucket']
@@ -2171,30 +2173,44 @@ elif menu == "12. Automated State Report":
             st.info("No valid daily screening data found yet to generate Form III. Start screening in Module 2!")
 
     # ==========================================
-    # 🎯 TAB 2: LIVE SCOREBOARD (UNTOUCHED)
+    # 🎯 TAB 2: LIVE SCOREBOARD (UPDATED FOR DUAL TEAMS)
     # ==========================================
     with tab_scoreboard:
         st.subheader("🏆 Live Performance Scoreboard")
-        st.markdown("**Team:** Dr. Nihar (MHT-1240315) | **Block:** Visavadar")
+        st.markdown("**Block:** Visavadar | **District:** Junagadh")
         
-        annual_target = 12794
+        # Define separate targets for each team
+        team_configs = {
+            "MHT-1240315": {"target": 12794, "doctor": "Dr. Nihar"},
+            "MHT-1240316": {"target": 12794, "doctor": "Team B"} # You can update the doctor name here
+        }
         
         if not df_combined.empty:
-            total_achieved = len(df_combined)
-            achievement_pct = (total_achieved / annual_target) * 100
-            progress_bar_val = min(achievement_pct / 100.0, 1.0)
-            
-            st.markdown("### 📈 FY Cumulative Progress")
-            
-            s1, s2, s3 = st.columns(3)
-            s1.metric("Annual Target", f"{annual_target:,}")
-            s2.metric("Total Achieved", f"{total_achieved:,}", delta="Children Screened")
-            s3.metric("Achievement %", f"{achievement_pct:.2f}%")
-            
-            st.progress(progress_bar_val)
-            st.divider()
-            
-            st.markdown("### 🏢 Screening Breakdown by Source")
+            # 🚀 Loop through each team to show individual progress
+            for team_code, config in team_configs.items():
+                # Filter data for this specific team
+                if team_col:
+                    team_data = df_combined[df_combined[team_col].astype(str).str.contains(team_code.split('-')[-1])]
+                else:
+                    # Fallback if team_col isn't detected: show 0 for second team to alert manager
+                    team_data = df_combined if team_code == "MHT-1240315" else pd.DataFrame()
+                
+                achieved = len(team_data)
+                target = config['target']
+                pct = (achieved / target) * 100 if target > 0 else 0
+                
+                st.markdown(f"#### 🏥 Team: {team_code} ({config['doctor']})")
+                
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Annual Target", f"{target:,}")
+                c2.metric("Total Achieved", f"{achieved:,}", delta="Screenings Done")
+                c3.metric("Achievement %", f"{pct:.2f}%")
+                
+                st.progress(min(pct / 100.0, 1.0))
+                st.divider()
+
+            # Cumulative Summary
+            st.markdown("### 🏢 Total Block Breakdown by Source")
             source_counts = df_combined['Source'].value_counts().reset_index()
             source_counts.columns = ['Location Type', 'Children Screened']
             st.dataframe(source_counts, use_container_width=True, hide_index=True)
