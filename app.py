@@ -2313,11 +2313,13 @@ elif menu == "13. Offline Batch Sync":
                 st.error(f"⚠️ Error reading file. Please ensure you are using the exact template. Detail: {e}")
 
 # ==========================================
-# MODULE 14: 💻 TECHO PORTAL ENTRY QUEUE (Multi-Tier + Alphabetical Sort)
+# MODULE 14: 💻 TECHO PORTAL ENTRY QUEUE (Phonetic Match + Date Harmonizer)
 # ==========================================
 elif menu == "14. TECHO Entry Queue":  
+    import difflib  # Built-in python library for fuzzy matching
+    
     st.header("💻 TECHO Portal Pending Queue")
-    st.info("⚡ Auto-Sync Engine: Select your location first, then upload your TECHO export file to match and clear!")
+    st.info("🎯 Advanced Engine: Matching English Screening Data with Gujarati TECHO Exports via Phonetic Transliteration.")
 
     queue_type = st.radio("Select which queue to work on:", ["👶 Anganwadi Queue", "🏫 School Queue"])
     
@@ -2330,8 +2332,44 @@ elif menu == "14. TECHO Entry Queue":
         name_col = "Student Name" 
         inst_col = "Institution"     
 
-    st.write("---")
-    
+    # ------------------------------------------
+    # INTERNAL HELPER FUNCTIONS
+    # ------------------------------------------
+    def gujarati_to_english(text):
+        """Simple phonetic mapping to bridge the language gap."""
+        if not text or pd.isna(text): return ""
+        text = str(text).split('/')[0].strip() # Remove codes
+        
+        # Basic mapping of Gujarati sounds to English letters
+        char_map = {
+            'અ': 'A', 'આ': 'A', 'ઇ': 'I', 'ઈ': 'I', 'ઉ': 'U', 'ઊ': 'U', 'એ': 'E', 'ઐ': 'AI', 'ઓ': 'O', 'ઔ': 'AU',
+            'ક': 'K', 'ખ': 'KH', 'ગ': 'G', 'ઘ': 'GH', 'ચ': 'CH', 'છ': 'CH', 'જ': 'J', 'ઝ': 'Z', 'ટ': 'T', 'ઠ': 'TH',
+            'ડ': 'D', 'ઢ': 'DH', 'ણ': 'N', 'ત': 'T', 'થ': 'TH', 'દ': 'D', 'ધ': 'DH', 'ન': 'N', 'પ': 'P', 'ફ': 'F',
+            'બ': 'B', 'ભ': 'BH', 'મ': 'M', 'ય': 'Y', 'ર': 'R', 'લ': 'L', 'વ': 'V', 'શ': 'SH', 'ષ': 'SH', 'સ': 'S',
+            'હ': 'H', 'ળ': 'L', 'ક્ષ': 'KSH', 'જ્ઞ': 'GN',
+            'ા': 'A', 'િ': 'I', 'ી': 'I', 'ુ': 'U', 'ૂ': 'U', 'ે': 'E', 'ૈ': 'AI', 'ો': 'O', 'ૌ': 'AU', 'ં': 'N'
+        }
+        
+        translated = ""
+        for char in text:
+            translated += char_map.get(char, "") # Skip if char not in map (like numbers/punctuation)
+        return translated
+
+    def normalize_date(val):
+        """Converts any date format (DD/MM or DD-MM) to a standard YYYY-MM-DD string."""
+        try:
+            # dayfirst=True is CRITICAL for Indian date formats
+            return pd.to_datetime(str(val).strip().replace('-', '/'), dayfirst=True).strftime('%Y-%m-%d')
+        except:
+            return ""
+
+    def get_similarity(s1, s2):
+        """Returns a score between 0 and 1 for how similar two strings are."""
+        return difflib.SequenceMatcher(None, s1.upper(), s2.upper()).ratio()
+
+    # ------------------------------------------
+    # MAIN LOGIC
+    # ------------------------------------------
     try:
         active_sheet = spreadsheet.worksheet(target_sheet_name)
         data = active_sheet.get_all_records()
@@ -2340,271 +2378,97 @@ elif menu == "14. TECHO Entry Queue":
             df = pd.DataFrame(data)
             
             if 'TECHO_Status' not in df.columns:
-                st.error(f"❌ Please add the 'TECHO_Status' column to the {target_sheet_name} sheet!")
-            elif name_col not in df.columns:
-                st.error(f"❌ Could not find the '{name_col}' column in your Google Sheet!")
+                st.error(f"❌ Missing 'TECHO_Status' column in {target_sheet_name}!")
             else:
-                pending_df = df[df['TECHO_Status'] == 'Pending']
+                pending_df = df[df['TECHO_Status'] == 'Pending'].copy()
                 
                 if pending_df.empty:
-                    st.success(f"🎉 Awesome! The {queue_type} is completely empty!")
+                    st.success("🎉 Queue is empty!")
                 else:
-                    st.subheader("🎯 Step 1: Select Location / Team")
-                    available_locations = sorted(pending_df[inst_col].dropna().astype(str).unique().tolist()) if inst_col in df.columns else ["All"]
-                    
-                    selected_location = st.selectbox(f"Filter queue by {inst_col}:", ["-- Select Location --"] + available_locations)
+                    available_locations = sorted(pending_df[inst_col].dropna().astype(str).unique().tolist())
+                    selected_location = st.selectbox(f"Filter by {inst_col}:", ["-- Select Location --"] + available_locations)
                     
                     if selected_location != "-- Select Location --":
-                        if inst_col in df.columns:
-                            loc_pending_df = pending_df[pending_df[inst_col].astype(str) == selected_location]
-                        else:
-                            loc_pending_df = pending_df
+                        loc_pending_df = pending_df[pending_df[inst_col].astype(str) == selected_location].copy()
                         
-                        if loc_pending_df.empty:
-                            st.success(f"🎉 All entries for {selected_location} are completely done!")
-                        else:
-                            st.write("---")
-                            st.subheader("⚡ Step 2: Choose Data Entry Method")
-                            
-                            tab_auto, tab_manual = st.tabs(["🚀 Auto-Sync (TECHO File)", "✍️ Manual Multi-Select"])
-                            
-                            with tab_auto:
-                                st.info(f"Upload the TECHO export file for **{selected_location}** to automatically match and clear children.")
-                                techo_file = st.file_uploader("📥 Upload TECHO Export (Excel/CSV)", type=["csv", "xlsx", "xls"], key="techo_upload")
+                        st.subheader("⚡ Step 2: Upload TECHO Data")
+                        techo_file = st.file_uploader("📥 Upload TECHO Export", type=["csv", "xlsx", "xls"])
+                        
+                        if techo_file:
+                            if techo_file.name.endswith('.csv'): techo_df = pd.read_csv(techo_file)
+                            else: techo_df = pd.read_excel(techo_file)
                                 
-                                if techo_file is not None:
-                                    # Dynamically find EMR columns
-                                    emr_dob_col = next((c for c in df.columns if str(c).lower() in ['dob', 'date of birth']), None)
-                                    emr_gender_col = next((c for c in df.columns if str(c).lower() == 'gender'), None)
-                                    emr_contact_col = next((c for c in df.columns if any(w in str(c).lower() for w in ['contact', 'phone', 'mobile'])), None)
+                            if 'Member Name' in techo_df.columns and 'Date Of Birth' in techo_df.columns:
+                                # Pre-process TECHO dates and translate names
+                                techo_df['Clean_DOB'] = techo_df['Date Of Birth'].apply(normalize_date)
+                                techo_df['Trans_Name'] = techo_df['Member Name'].apply(gujarati_to_english)
+
+                                matched_indices = []
+                                match_results = []
+                                used_techo_indices = set()
+
+                                # Get EMR date column
+                                emr_dob_col = next((c for c in df.columns if str(c).lower() in ['dob', 'date of birth']), None)
+
+                                for idx, emr_row in loc_pending_df.iterrows():
+                                    emr_name = str(emr_row[name_col]).split('/')[0].strip().upper()
+                                    emr_dob = normalize_date(emr_row[emr_dob_col]) if emr_dob_col else ""
                                     
-                                    if techo_file.name.endswith('.csv'):
-                                        techo_df = pd.read_csv(techo_file)
-                                    else:
-                                        techo_df = pd.read_excel(techo_file)
-                                        
-                                    if 'Member Name' in techo_df.columns and 'Date Of Birth' in techo_df.columns:
-                                        
-                                        # 🚀 1. ROBUST TECHO DATA PARSING
-                                        techo_df['Parsed_Name'] = techo_df['Member Name'].apply(lambda x: str(x).split('/')[0].strip().upper())
-                                        
-                                        techo_df['Parsed_Gender'] = techo_df['Member Name'].apply(
-                                            lambda x: str(x).split('/')[-1].strip().upper()[0] if '/' in str(x) and len(str(x).split('/')[-1].strip()) > 0 else ''
-                                        )
-                                        
-                                        def force_techo_date(val):
-                                            try: return pd.to_datetime(str(val).strip(), format='%d/%m/%Y').strftime('%Y-%m-%d')
-                                            except: 
-                                                try: return pd.to_datetime(str(val).strip()).strftime('%Y-%m-%d')
-                                                except: return ""
-                                        techo_df['Parsed_DOB'] = techo_df['Date Of Birth'].apply(force_techo_date)
-                                        
-                                        techo_df['Parsed_Contact'] = techo_df.get('Contact Details', pd.Series(dtype=str)).apply(lambda x: ''.join(filter(str.isdigit, str(x))))
-                                        
-                                        matched_emr_indices = []
-                                        matched_techo_indices = []
-                                        match_display_data = []
-                                        available_techo_df = techo_df.copy()
-                                        
-                                        # 🚀 2. THE MULTI-TIER TRIANGULATION ENGINE
-                                        for idx, emr_row in loc_pending_df.iterrows():
-                                            emr_name = str(emr_row[name_col]).strip().upper()
-                                            
-                                            raw_emr_dob = str(emr_row[emr_dob_col]) if emr_dob_col else ""
-                                            try: emr_parsed_dob = pd.to_datetime(raw_emr_dob).strftime('%Y-%m-%d')
-                                            except: emr_parsed_dob = ""
-                                            
-                                            raw_emr_gender = str(emr_row[emr_gender_col]).strip().upper() if emr_gender_col else ""
-                                            emr_parsed_gender = raw_emr_gender[0] if raw_emr_gender else ""
-                                            
-                                            raw_emr_contact = str(emr_row[emr_contact_col]) if emr_contact_col else ""
-                                            emr_parsed_contact = ''.join(filter(str.isdigit, raw_emr_contact))
-
-                                            best_match_idx = None
-                                            match_logic = ""
-
-                                            t1_matches = available_techo_df[available_techo_df['Parsed_Name'] == emr_name]
-                                            if not t1_matches.empty:
-                                                best_match_idx = t1_matches.index[0]
-                                                match_logic = "🟢 By Name"
-                                            else:
-                                                if emr_parsed_dob and emr_parsed_contact:
-                                                    t2_matches = available_techo_df[(available_techo_df['Parsed_DOB'] == emr_parsed_dob) & (available_techo_df['Parsed_Contact'] == emr_parsed_contact)]
-                                                    if not t2_matches.empty:
-                                                        best_match_idx = t2_matches.index[0]
-                                                        match_logic = "🟡 By DOB+Phone"
-                                                
-                                                if best_match_idx is None and emr_parsed_dob and emr_parsed_gender:
-                                                    t3_matches = available_techo_df[(available_techo_df['Parsed_DOB'] == emr_parsed_dob) & (available_techo_df['Parsed_Gender'] == emr_parsed_gender)]
-                                                    if not t3_matches.empty:
-                                                        best_match_idx = t3_matches.index[0]
-                                                        match_logic = "🟠 By DOB+Gender"
-
-                                            if best_match_idx is not None:
-                                                matched_emr_indices.append(idx)
-                                                t_match = available_techo_df.loc[best_match_idx]
-                                                matched_techo_indices.append(best_match_idx)
-                                                
-                                                row_data = {
-                                                    "Match Quality": match_logic,
-                                                    "✅ TECHO Name (Gujarati)": t_match['Member Name'],
-                                                }
-                                                
-                                                for col_name in loc_pending_df.columns:
-                                                    if col_name not in ['TECHO_Status', '_sort_val']:
-                                                        row_data[f"📋 EMR: {col_name}"] = emr_row[col_name]
-                                                
-                                                match_display_data.append(row_data)
-                                                available_techo_df = available_techo_df.drop(index=best_match_idx)
-                                                    
-                                        emr_only_df = loc_pending_df.drop(index=matched_emr_indices)
-                                        techo_only_df = techo_df.drop(index=matched_techo_indices)
-                                        
-                                        # 🚀 3. THE INTERACTIVE UI
-                                        st.markdown("#### ⚙️ Sync Results")
-                                        
-                                        sync_t1, sync_t2, sync_t3 = st.tabs([
-                                            f"✅ Perfect Matches ({len(match_display_data)})", 
-                                            f"⚠️ Missing in TECHO ({len(emr_only_df)})", 
-                                            f"🛑 Extra in TECHO ({len(techo_only_df)})"
-                                        ])
-                                        
-                                        with sync_t1:
-                                            if match_display_data:
-                                                st.success(f"Found {len(match_display_data)} perfect matches triangulated by our Multi-Tier Engine!")
-                                                
-                                                match_df = pd.DataFrame(match_display_data)
-                                                
-                                                # 🚀 ALPHABETICAL SORTING (Matches Tab)
-                                                sort_col_name = f"📋 EMR: {name_col}"
-                                                if sort_col_name in match_df.columns:
-                                                    match_df = match_df.sort_values(by=sort_col_name, ascending=True)
-                                                
-                                                match_df.insert(0, "✅ Select", True) 
-                                                
-                                                st.write("**Uncheck any students you do NOT want to sync right now:**")
-                                                edited_match_df = st.data_editor(
-                                                    match_df, 
-                                                    hide_index=True, 
-                                                    use_container_width=True,
-                                                    disabled=[col for col in match_df.columns if col != "✅ Select"] 
-                                                )
-                                                
-                                                selected_matches = edited_match_df[edited_match_df["✅ Select"] == True][f"📋 EMR: {name_col}"].tolist()
-                                                
-                                                if st.button(f"🚀 Mark Selected ({len(selected_matches)}) Matches as 'Done'", type="primary"):
-                                                    if selected_matches:
-                                                        status_col_index = df.columns.get_loc('TECHO_Status') + 1 
-                                                        progress_bar = st.progress(0)
-                                                        status_text = st.empty()
-                                                        total = len(selected_matches)
-                                                        
-                                                        for i, child_name in enumerate(selected_matches):
-                                                            cell = active_sheet.find(str(child_name))
-                                                            if cell:
-                                                                active_sheet.update_cell(cell.row, status_col_index, "Done")
-                                                            progress_bar.progress((i + 1) / total)
-                                                            status_text.text(f"Syncing record {i + 1} of {total}...")
-                                                            
-                                                        st.toast(f"✅ Successfully synced {total} records!", icon="🎉")
-                                                        import time
-                                                        time.sleep(1)
-                                                        st.rerun()
-                                                    else:
-                                                        st.warning("Please select at least one child.")
-                                            else:
-                                                st.info("No matches found. This usually means the data in your Google Sheet is fundamentally different from TECHO.")
-                                                
-                                        with sync_t2:
-                                            st.warning("These children are pending in your EMR for this location, but weren't found in the uploaded TECHO file.")
-                                            if not emr_only_df.empty:
-                                                display_emr_only = emr_only_df.drop(columns=['TECHO_Status', '_sort_val'], errors='ignore')
-                                                
-                                                # 🚀 ALPHABETICAL SORTING (Missing in TECHO Tab)
-                                                if name_col in display_emr_only.columns:
-                                                    display_emr_only = display_emr_only.sort_values(by=name_col, ascending=True)
-                                                    
-                                                display_emr_only.insert(0, "✅ Select", False) 
-                                                
-                                                st.write("**Select the students you want to manually mark as Done:**")
-                                                edited_emr_only = st.data_editor(
-                                                    display_emr_only, 
-                                                    hide_index=True, 
-                                                    use_container_width=True,
-                                                    disabled=[col for col in display_emr_only.columns if col != "✅ Select"] 
-                                                )
-                                                
-                                                selected_emr_missing = edited_emr_only[edited_emr_only["✅ Select"] == True][name_col].tolist()
-                                                
-                                                if st.button(f"🚀 Mark Selected ({len(selected_emr_missing)}) Missing Kids as 'Done'"):
-                                                    if selected_emr_missing:
-                                                        status_col_index = df.columns.get_loc('TECHO_Status') + 1 
-                                                        progress_bar = st.progress(0)
-                                                        status_text = st.empty()
-                                                        total = len(selected_emr_missing)
-                                                        
-                                                        for i, child_name in enumerate(selected_emr_missing):
-                                                            cell = active_sheet.find(str(child_name))
-                                                            if cell:
-                                                                active_sheet.update_cell(cell.row, status_col_index, "Done")
-                                                            progress_bar.progress((i + 1) / total)
-                                                            status_text.text(f"Syncing record {i + 1} of {total}...")
-                                                            
-                                                        st.toast(f"✅ Successfully synced {total} records!", icon="🎉")
-                                                        import time
-                                                        time.sleep(1)
-                                                        st.rerun()
-                                                    else:
-                                                        st.warning("Please select at least one child.")
-                                                
-                                        with sync_t3:
-                                            st.error("These children are pending in TECHO, but are NOT in your EMR pending queue.")
-                                            st.info("💡 Data Guardrail: You must register these children in Module 2 first. Marking them 'Done' here would cause database corruption.")
-                                            if not techo_only_df.empty:
-                                                display_techo_only = techo_only_df.drop(columns=['Parsed_DOB', 'Parsed_Gender', 'Clean_DOB', 'Extracted_Gender', 'Parsed_Name', 'Parsed_Contact'], errors='ignore')
-                                                
-                                                # 🚀 ALPHABETICAL SORTING (Extra in TECHO Tab)
-                                                if 'Member Name' in display_techo_only.columns:
-                                                    display_techo_only = display_techo_only.sort_values(by='Member Name', ascending=True)
-                                                    
-                                                st.dataframe(display_techo_only, use_container_width=True)
-
-                                    else:
-                                        st.error("❌ The uploaded file does not appear to be a standard TECHO export. Missing 'Member Name' or 'Date Of Birth' columns.")
-                            
-                            with tab_manual:
-                                st.write(f"### 📋 Pending Entries for {selected_location} ({len(loc_pending_df)} Children)")
-                                display_manual_df = loc_pending_df.drop(columns=['TECHO_Status', '_sort_val'], errors='ignore')
-                                
-                                # 🚀 ALPHABETICAL SORTING (Manual Fallback Tab)
-                                if name_col in display_manual_df.columns:
-                                    display_manual_df = display_manual_df.sort_values(by=name_col, ascending=True)
+                                    # 🚀 THE MATCHING CORE
+                                    # Filter TECHO by the same DOB first (Most reliable)
+                                    potential_matches = techo_df[techo_df['Clean_DOB'] == emr_dob]
                                     
-                                st.dataframe(display_manual_df, use_container_width=True)
-                                
-                                st.write("---")
-                                children_to_update = st.multiselect(f"Select multiple children to mark as 'Done':", display_manual_df[name_col].tolist())
-                                
-                                if st.button(f"🚀 Mark Selected ({len(children_to_update)}) as 'Done'"):
-                                    if children_to_update:
-                                        status_col_index = df.columns.get_loc('TECHO_Status') + 1 
-                                        progress_bar = st.progress(0)
-                                        total = len(children_to_update)
+                                    best_score = 0
+                                    best_techo_row = None
+                                    best_techo_idx = None
+
+                                    for t_idx, t_row in potential_matches.iterrows():
+                                        if t_idx in used_techo_indices: continue
                                         
-                                        for i, child_name in enumerate(children_to_update):
-                                            cell = active_sheet.find(str(child_name))
+                                        # Compare English EMR name with Transliterated Gujarati name
+                                        score = get_similarity(emr_name, t_row['Trans_Name'])
+                                        
+                                        if score > best_score:
+                                            best_score = score
+                                            best_techo_row = t_row
+                                            best_techo_idx = t_idx
+
+                                    # Threshold: If DOB matches and name is > 60% similar phonetically
+                                    if best_score > 0.6:
+                                        matched_indices.append(idx)
+                                        used_techo_indices.add(best_techo_idx)
+                                        match_results.append({
+                                            "Match Score": f"{int(best_score*100)}%",
+                                            "✅ TECHO Name (Guj)": best_techo_row['Member Name'],
+                                            "📋 Master Name (Eng)": emr_name,
+                                            "📅 DOB": emr_dob,
+                                            "Original_Name": emr_row[name_col] # For finding in sheet later
+                                        })
+
+                                # UI DISPLAY
+                                st.markdown(f"### Found {len(match_results)} matches")
+                                if match_results:
+                                    match_df = pd.DataFrame(match_results)
+                                    match_df.insert(0, "✅ Sync", True)
+                                    edited_df = st.data_editor(match_df, hide_index=True, use_container_width=True)
+                                    
+                                    if st.button("🚀 Update Selected Records to 'Done'"):
+                                        status_col_idx = df.columns.get_loc('TECHO_Status') + 1
+                                        sync_list = edited_df[edited_df["✅ Sync"] == True]
+                                        
+                                        progress = st.progress(0)
+                                        for i, row in enumerate(sync_list.to_dict('records')):
+                                            # Find the specific row using the FULL original name
+                                            cell = active_sheet.find(str(row['Original_Name']))
                                             if cell:
-                                                active_sheet.update_cell(cell.row, status_col_index, "Done")
-                                            progress_bar.progress((i + 1) / total)
-                                                
-                                        st.toast(f"✅ {total} Statuses updated!", icon="🎉")
-                                        import time
-                                        time.sleep(0.5)
-                                        st.rerun() 
-                                    else:
-                                        st.warning("Please select at least one child.")
+                                                active_sheet.update_cell(cell.row, status_col_idx, "Done")
+                                            progress.progress((i + 1) / len(sync_list))
+                                        
+                                        st.success(f"Updated {len(sync_list)} records!")
+                                        st.rerun()
+                            else:
+                                st.error("TECHO file missing 'Member Name' or 'Date Of Birth' columns.")
         else:
-            st.info(f"The {target_sheet_name} sheet is currently empty.")
-            
+            st.info("Sheet is empty.")
     except Exception as e:
-        st.error(f"❌ Connection Error: {e}")
+        st.error(f"Error: {e}")
