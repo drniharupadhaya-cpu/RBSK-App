@@ -1314,6 +1314,14 @@ elif menu == "5. HBNC Newborn Visit":
                 df_tele = df_tele.fillna("")
                 df_tele = df_tele.replace(['nan', 'NaN', 'NaT', 'None'], "")
 
+                # ✂️ THE TECHO LOCATION TRIMMER
+                if "Location" in df_tele.columns:
+                    # Splits the text at '>' and keeps only the very last part ([-1]), then strips extra spaces
+                    df_tele["Location"] = df_tele["Location"].astype(str).apply(lambda x: x.split('>')[-1].strip() if '>' in x else x.strip())
+
+                # 2. Ensure all required columns exist (Safety Check)
+                required_cols = ["Child Name", "Techo ID", "Contact Number", "Location", "Gender", "Date of Birth", "Call Status", "Staff Remarks"]
+
                 # Ensure Status and Remarks columns exist
                 if "Call Status" not in df_tele.columns: df_tele["Call Status"] = "Pending"
                 if "Staff Remarks" not in df_tele.columns: df_tele["Staff Remarks"] = ""
