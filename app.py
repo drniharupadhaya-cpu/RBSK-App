@@ -2580,13 +2580,11 @@ elif menu == "15. Clinical & IFA Tracker":
     
     tab_cmtc, tab_ifa = st.tabs(["🔴 CMTC Follow-up (SAM/MAM)", "💊 IFA Stock Tracker (Syrups/Tablets)"])
 
-    # --- PRE-FETCH INSTITUTE LISTS FOR DROPDOWNS ---
+    # --- PRE-FETCH INSTITUTE LISTS FOR IFA DROPDOWNS ---
     try:
-        # Fetching master lists to populate the IFA dropdown
         master_aw_data = pd.DataFrame(spreadsheet.worksheet("aw new data").get_all_records())
         master_sch_data = pd.DataFrame(spreadsheet.worksheet("1240315 ALL STUDENTS NAMES").get_all_records())
 
-        # Dynamic column finder for Institute Names
         def get_inst_list(df, keywords):
             col = next((c for c in df.columns if any(k in str(c).upper() for k in keywords)), None)
             return sorted(df[col].astype(str).unique().tolist()) if col else []
@@ -2594,105 +2592,99 @@ elif menu == "15. Clinical & IFA Tracker":
         aw_list = get_inst_list(master_aw_data, ["INSTITUTE", "AWC", "CENTER"])
         school_list = get_inst_list(master_sch_data, ["INSTITUTION", "SCHOOL"])
     except Exception as e:
-        st.error(f"Error loading institute lists: {e}")
         aw_list, school_list = [], []
 
-    # --- 1. CMTC FOLLOW-UP ---
+    # --- 1. CMTC FOLLOW-UP (PULLS FROM EXISTING cmtc_referral) ---
     with tab_cmtc:
         st.subheader("📝 SAM/MAM Treatment Progress")
+        st.info("Directly managing children from the 'cmtc_referral' sheet.")
         
         try:
             referral_sheet = spreadsheet.worksheet("cmtc_referral")
             ref_data = pd.DataFrame(referral_sheet.get_all_records())
 
             if not ref_data.empty:
-                # 1. Ensure the column exists
-                if "Admission Date" not in ref_data.columns:
-                    ref_data["Admission Date"] = ""
+                # Setup necessary columns if missing
+                for col in ["Current Status", "Admission Date", "Follow-up Remarks"]:
+                    if col not in ref_data.columns:
+                        ref_data[col] = "Pending" if col == "Current Status" else ""
 
-                # 🚀 2. THE FIX: Convert String to Python Date objects
-                # 'coerce' handles empty cells by making them 'NaT' (Not a Time)
+                # Convert String dates to Python Date objects for the Calendar Picker
                 ref_data['Admission Date'] = pd.to_datetime(
                     ref_data['Admission Date'].astype(str).str.replace('/', '-'), 
-                    dayfirst=True, 
-                    errors='coerce'
-                ).dt.date  # Convert to date-only for the picker
-
-                # 3. Handle Status column defaults
-                if "Current Status" not in ref_data.columns:
-                    ref_data["Current Status"] = "Pending"
+                    dayfirst=True, errors='coerce'
+                ).dt.date
 
                 status_list = ["Pending", "Counselled", "Admitted", "Discharged", "Recovered", "LAMA/Refused"]
+                read_only_cols = ["Child Name", "Institute", "DOB", "Gender", "Referral Date"]
                 
-                # 4. Show the Editor
+                # THE DATA EDITOR
                 updated_ref_df = st.data_editor(
                     ref_data,
                     column_config={
                         "Current Status": st.column_config.SelectboxColumn("Status", options=status_list, width="medium"),
-                        "Admission Date": st.column_config.DateColumn("Adm Date"), # Now it works!
+                        "Admission Date": st.column_config.DateColumn("Adm Date"),
+                        "Follow-up Remarks": st.column_config.TextColumn("Remarks", width="large"),
                     },
+                    disabled=read_only_cols,
                     hide_index=True,
                     use_container_width=True
                 )
 
                 if st.button("💾 Save Follow-up Progress", type="primary"):
                     with st.spinner("Cleaning data and updating Google Sheets..."):
-                        # 1. Create a copy so we don't mess up the view in the app
                         final_df = updated_ref_df.copy()
                         
-                        # 2. Convert any real Date objects into Strings first
+                        # Convert Dates back to Strings for Google Sheets
                         if "Admission Date" in final_df.columns:
                             final_df['Admission Date'] = final_df['Admission Date'].apply(
                                 lambda x: x.strftime('%d-%m-%Y') if pd.notnull(x) and hasattr(x, 'strftime') else x
                             )
 
-                        # 🚀 3. THE "VACUUM": Clean up all NaNs, NaTs, and Nones
-                        # This converts everything to strings and replaces 'nan' with empty text
+                        # THE "VACUUM" FIX: Clean up all NaNs/JSON errors
                         final_df = final_df.astype(str).replace(['nan', 'NaN', 'NaT', 'None', '<NA>'], "")
-
-                        # 4. Prepare for Google Sheets (List of Lists format)
-                        data_to_save = [final_df.columns.values.tolist()] + final_df.values.tolist()
                         
-                        # 5. Overwrite the sheet
-                        try:
-                            referral_sheet.update(data_to_save)
-                            st.toast("Referral status updated successfully!", icon="✅")
-                            time.sleep(1)
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Failed to write to Google Sheets: {e}")
+                        # Overwrite the sheet
+                        data_to_save = [final_df.columns.values.tolist()] + final_df.values.tolist()
+                        referral_sheet.update(data_to_save)
+                        st.toast("Referral status updated!", icon="✅")
+                        import time
+                        time.sleep(1)
+                        st.rerun()
+            else:
+                st.success("🎉 No SAM/MAM referrals currently pending!")
+        
+        except Exception as e:
+            # THIS IS THE MISSING BLOCK THAT CAUSED YOUR SYNTAX ERROR
+            st.error(f"CMTC Logic Error: {e}")
 
     # --- 2. IFA STOCK TRACKER (WITH SEARCHABLE DROPDOWNS) ---
     with tab_ifa:
         st.subheader("💊 IFA Inventory Control")
         ifa_level = st.radio("Select Level:", ["👶 Anganwadi (Syrups)", "🏫 School (Tablets)"], horizontal=True)
-        
-        # Select the correct list based on the radio button
         current_options = aw_list if "Anganwadi" in ifa_level else school_list
 
         try:
-            # Connect to inventory sheet
-            try: inventory_sheet = spreadsheet.worksheet("ifa_inventory")
+            # Connect to/Create Inventory Sheet
+            try:
+                inventory_sheet = spreadsheet.worksheet("ifa_inventory")
             except: 
                 inventory_sheet = spreadsheet.add_worksheet(title="ifa_inventory", rows="1000", cols="10")
                 inventory_sheet.append_row(["Timestamp", "Level", "Institute Name", "Stock Quantity", "Expiry Date", "Status"])
 
             with st.form("ifa_stock_form", clear_on_submit=True):
                 st.write("### 📝 Log Stock Audit")
-                
                 c1, c2 = st.columns(2)
                 with c1:
-                    # THE SEARCHABLE DROPDOWN
                     selected_inst = st.selectbox("Select Institute Name:", ["-- Select --"] + current_options)
                     stock_qty = st.number_input("Current Stock (Units)", min_value=0)
                 with c2:
                     expiry_date = st.date_input("Batch Expiry Date")
                     stock_status = st.selectbox("Stock Status:", ["Sufficient", "Low (<25%)", "Critical (<10%)", "Stock Out"])
 
-                submit_stock = st.form_submit_button("🚀 Submit Inventory Report")
-
-                if submit_stock:
+                if st.form_submit_button("🚀 Submit Inventory Report"):
                     if selected_inst != "-- Select --":
+                        import datetime
                         new_entry = [
                             datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
                             ifa_level,
@@ -2702,7 +2694,7 @@ elif menu == "15. Clinical & IFA Tracker":
                             stock_status
                         ]
                         inventory_sheet.append_row(new_entry)
-                        st.success(f"Stock record for {selected_inst} saved successfully!")
+                        st.success(f"Stock record for {selected_inst} saved!")
                     else:
                         st.warning("Please select a valid Institute Name.")
 
@@ -2710,7 +2702,6 @@ elif menu == "15. Clinical & IFA Tracker":
             st.write("### 📊 Recent Inventory Updates")
             all_inv = pd.DataFrame(inventory_sheet.get_all_records())
             if not all_inv.empty:
-                # Show only the last 10 entries for the selected level
                 filtered_inv = all_inv[all_inv['Level'] == ifa_level].tail(10)
                 st.dataframe(filtered_inv.sort_index(ascending=False), use_container_width=True, hide_index=True)
 
