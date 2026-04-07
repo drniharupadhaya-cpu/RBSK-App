@@ -2636,16 +2636,31 @@ elif menu == "15. Clinical & IFA Tracker":
                 )
 
                 if st.button("💾 Save Follow-up Progress", type="primary"):
-                    # 🚀 5. CONVERT BACK: Change dates back to strings before saving to Google Sheets
-                    final_df = updated_ref_df.copy()
-                    final_df['Admission Date'] = final_df['Admission Date'].astype(str).replace('NaT', '')
-                    
-                    referral_sheet.update([final_df.columns.values.tolist()] + final_df.values.tolist())
-                    st.toast("Referral status updated!", icon="✅")
-            else:
-                st.success("🎉 No SAM/MAM referrals currently pending!")
-        except Exception as e:
-            st.error(f"CMTC Logic Error: {e}")
+                    with st.spinner("Cleaning data and updating Google Sheets..."):
+                        # 1. Create a copy so we don't mess up the view in the app
+                        final_df = updated_ref_df.copy()
+                        
+                        # 2. Convert any real Date objects into Strings first
+                        if "Admission Date" in final_df.columns:
+                            final_df['Admission Date'] = final_df['Admission Date'].apply(
+                                lambda x: x.strftime('%d-%m-%Y') if pd.notnull(x) and hasattr(x, 'strftime') else x
+                            )
+
+                        # 🚀 3. THE "VACUUM": Clean up all NaNs, NaTs, and Nones
+                        # This converts everything to strings and replaces 'nan' with empty text
+                        final_df = final_df.astype(str).replace(['nan', 'NaN', 'NaT', 'None', '<NA>'], "")
+
+                        # 4. Prepare for Google Sheets (List of Lists format)
+                        data_to_save = [final_df.columns.values.tolist()] + final_df.values.tolist()
+                        
+                        # 5. Overwrite the sheet
+                        try:
+                            referral_sheet.update(data_to_save)
+                            st.toast("Referral status updated successfully!", icon="✅")
+                            time.sleep(1)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Failed to write to Google Sheets: {e}")
 
     # --- 2. IFA STOCK TRACKER (WITH SEARCHABLE DROPDOWNS) ---
     with tab_ifa:
