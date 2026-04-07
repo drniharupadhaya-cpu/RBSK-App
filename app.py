@@ -320,6 +320,7 @@ menu = st.sidebar.radio("Go to:",
         "12. Automated State Report",
         "13. Offline Batch Sync",
         "14. TECHO Entry Queue",
+        "15. Clinical & IFA Tracker",
     ])
 
 st.sidebar.markdown("---")
