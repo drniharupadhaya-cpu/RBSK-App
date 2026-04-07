@@ -2571,3 +2571,116 @@ elif menu == "14. TECHO Entry Queue":
             
     except Exception as e:
         st.error(f"❌ Connection Error: {e}")
+# ==========================================
+# MODULE 15: 🏥 CLINICAL FOLLOW-UP & IFA STOCK TRACKER
+# ==========================================
+elif menu == "15. Clinical & IFA Tracker":
+    render_header("Clinical Operations", "Referrals & Inventory Management", "🏥", "#0ea5e9")
+    
+    tab_cmtc, tab_ifa = st.tabs(["🔴 CMTC Follow-up (SAM/MAM)", "💊 IFA Stock Tracker (Syrups/Tablets)"])
+
+    # --- PRE-FETCH INSTITUTE LISTS FOR DROPDOWNS ---
+    try:
+        # Fetching master lists to populate the IFA dropdown
+        master_aw_data = pd.DataFrame(spreadsheet.worksheet("aw new data").get_all_records())
+        master_sch_data = pd.DataFrame(spreadsheet.worksheet("1240315 ALL STUDENTS NAMES").get_all_records())
+
+        # Dynamic column finder for Institute Names
+        def get_inst_list(df, keywords):
+            col = next((c for c in df.columns if any(k in str(c).upper() for k in keywords)), None)
+            return sorted(df[col].astype(str).unique().tolist()) if col else []
+
+        aw_list = get_inst_list(master_aw_data, ["INSTITUTE", "AWC", "CENTER"])
+        school_list = get_inst_list(master_sch_data, ["INSTITUTION", "SCHOOL"])
+    except Exception as e:
+        st.error(f"Error loading institute lists: {e}")
+        aw_list, school_list = [], []
+
+    # --- 1. CMTC FOLLOW-UP (PULLS FROM EXISTING cmtc_referral) ---
+    with tab_cmtc:
+        st.subheader("📝 SAM/MAM Treatment Progress")
+        st.info("Directly managing children from the 'cmtc_referral' sheet.")
+        
+        try:
+            referral_sheet = spreadsheet.worksheet("cmtc_referral")
+            ref_data = pd.DataFrame(referral_sheet.get_all_records())
+
+            if not ref_data.empty:
+                # Ensure tracking columns exist
+                for col in ["Current Status", "Admission Date", "Follow-up Remarks"]:
+                    if col not in ref_data.columns: ref_data[col] = "Pending" if col == "Current Status" else ""
+
+                status_list = ["Pending", "Counselled", "Admitted", "Discharged", "Recovered", "LAMA/Refused"]
+                
+                updated_ref_df = st.data_editor(
+                    ref_data,
+                    column_config={
+                        "Current Status": st.column_config.SelectboxColumn("Status", options=status_list, width="medium"),
+                        "Admission Date": st.column_config.DateColumn("Adm Date"),
+                    },
+                    hide_index=True,
+                    use_container_width=True
+                )
+
+                if st.button("💾 Save Follow-up Progress", type="primary"):
+                    referral_sheet.update([updated_ref_df.columns.values.tolist()] + updated_ref_df.values.tolist())
+                    st.toast("Referral status updated in the master sheet!", icon="✅")
+            else:
+                st.success("🎉 No SAM/MAM referrals currently pending!")
+        except Exception as e:
+            st.error(f"CMTC Logic Error: {e}")
+
+    # --- 2. IFA STOCK TRACKER (WITH SEARCHABLE DROPDOWNS) ---
+    with tab_ifa:
+        st.subheader("💊 IFA Inventory Control")
+        ifa_level = st.radio("Select Level:", ["👶 Anganwadi (Syrups)", "🏫 School (Tablets)"], horizontal=True)
+        
+        # Select the correct list based on the radio button
+        current_options = aw_list if "Anganwadi" in ifa_level else school_list
+
+        try:
+            # Connect to inventory sheet
+            try: inventory_sheet = spreadsheet.worksheet("ifa_inventory")
+            except: 
+                inventory_sheet = spreadsheet.add_worksheet(title="ifa_inventory", rows="1000", cols="10")
+                inventory_sheet.append_row(["Timestamp", "Level", "Institute Name", "Stock Quantity", "Expiry Date", "Status"])
+
+            with st.form("ifa_stock_form", clear_on_submit=True):
+                st.write("### 📝 Log Stock Audit")
+                
+                c1, c2 = st.columns(2)
+                with c1:
+                    # THE SEARCHABLE DROPDOWN
+                    selected_inst = st.selectbox("Select Institute Name:", ["-- Select --"] + current_options)
+                    stock_qty = st.number_input("Current Stock (Units)", min_value=0)
+                with c2:
+                    expiry_date = st.date_input("Batch Expiry Date")
+                    stock_status = st.selectbox("Stock Status:", ["Sufficient", "Low (<25%)", "Critical (<10%)", "Stock Out"])
+
+                submit_stock = st.form_submit_button("🚀 Submit Inventory Report")
+
+                if submit_stock:
+                    if selected_inst != "-- Select --":
+                        new_entry = [
+                            datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
+                            ifa_level,
+                            selected_inst,
+                            stock_qty,
+                            str(expiry_date),
+                            stock_status
+                        ]
+                        inventory_sheet.append_row(new_entry)
+                        st.success(f"Stock record for {selected_inst} saved successfully!")
+                    else:
+                        st.warning("Please select a valid Institute Name.")
+
+            st.divider()
+            st.write("### 📊 Recent Inventory Updates")
+            all_inv = pd.DataFrame(inventory_sheet.get_all_records())
+            if not all_inv.empty:
+                # Show only the last 10 entries for the selected level
+                filtered_inv = all_inv[all_inv['Level'] == ifa_level].tail(10)
+                st.dataframe(filtered_inv.sort_index(ascending=False), use_container_width=True, hide_index=True)
+
+        except Exception as e:
+            st.error(f"Inventory Error: {e}")
