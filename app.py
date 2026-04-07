@@ -2639,22 +2639,43 @@ elif menu == "15. Clinical & IFA Tracker":
                 )
 
                 if st.button("💾 Save Follow-up Progress", type="primary"):
-                    with st.spinner("Cleaning data and updating Google Sheets..."):
+                    with st.spinner("Scrubbing data and updating Google Sheets..."):
                         final_df = updated_ref_df.copy()
                         
-                        # Convert Dates back to Strings for Google Sheets
+                        # 1. Format Dates safely
                         if "Admission Date" in final_df.columns:
                             final_df['Admission Date'] = final_df['Admission Date'].apply(
                                 lambda x: x.strftime('%d-%m-%Y') if pd.notnull(x) and hasattr(x, 'strftime') else x
                             )
 
-                        # THE "VACUUM" FIX: Clean up all NaNs/JSON errors
-                        final_df = final_df.astype(str).replace(['nan', 'NaN', 'NaT', 'None', '<NA>'], "")
+                        # 🚀 2. THE ULTIMATE NAN KILLER
+                        # Extract the raw list of lists
+                        raw_data_list = final_df.values.tolist()
+                        cleaned_list = []
                         
-                        # Overwrite the sheet
-                        data_to_save = [final_df.columns.values.tolist()] + final_df.values.tolist()
+                        # Inspect every single cell one by one
+                        for row in raw_data_list:
+                            clean_row = []
+                            for cell in row:
+                                # Check if it is a mathematical NaN, NaT, or None
+                                if pd.isna(cell):
+                                    clean_row.append("")
+                                else:
+                                    # Convert to text and do a final check for ghost strings
+                                    str_cell = str(cell).strip()
+                                    if str_cell.lower() in ['nan', 'nat', 'none', '<na>']:
+                                        clean_row.append("")
+                                    else:
+                                        clean_row.append(str_cell)
+                            cleaned_list.append(clean_row)
+
+                        # 3. Add the headers back to the top
+                        data_to_save = [final_df.columns.values.tolist()] + cleaned_list
+                        
+                        # 4. Push safely to Google Sheets
                         referral_sheet.update(data_to_save)
-                        st.toast("Referral status updated!", icon="✅")
+                        
+                        st.toast("Referral status updated successfully!", icon="✅")
                         import time
                         time.sleep(1)
                         st.rerun()
