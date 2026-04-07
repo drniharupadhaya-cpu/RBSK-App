@@ -2597,35 +2597,51 @@ elif menu == "15. Clinical & IFA Tracker":
         st.error(f"Error loading institute lists: {e}")
         aw_list, school_list = [], []
 
-    # --- 1. CMTC FOLLOW-UP (PULLS FROM EXISTING cmtc_referral) ---
+    # --- 1. CMTC FOLLOW-UP ---
     with tab_cmtc:
         st.subheader("📝 SAM/MAM Treatment Progress")
-        st.info("Directly managing children from the 'cmtc_referral' sheet.")
         
         try:
             referral_sheet = spreadsheet.worksheet("cmtc_referral")
             ref_data = pd.DataFrame(referral_sheet.get_all_records())
 
             if not ref_data.empty:
-                # Ensure tracking columns exist
-                for col in ["Current Status", "Admission Date", "Follow-up Remarks"]:
-                    if col not in ref_data.columns: ref_data[col] = "Pending" if col == "Current Status" else ""
+                # 1. Ensure the column exists
+                if "Admission Date" not in ref_data.columns:
+                    ref_data["Admission Date"] = ""
+
+                # 🚀 2. THE FIX: Convert String to Python Date objects
+                # 'coerce' handles empty cells by making them 'NaT' (Not a Time)
+                ref_data['Admission Date'] = pd.to_datetime(
+                    ref_data['Admission Date'].astype(str).str.replace('/', '-'), 
+                    dayfirst=True, 
+                    errors='coerce'
+                ).dt.date  # Convert to date-only for the picker
+
+                # 3. Handle Status column defaults
+                if "Current Status" not in ref_data.columns:
+                    ref_data["Current Status"] = "Pending"
 
                 status_list = ["Pending", "Counselled", "Admitted", "Discharged", "Recovered", "LAMA/Refused"]
                 
+                # 4. Show the Editor
                 updated_ref_df = st.data_editor(
                     ref_data,
                     column_config={
                         "Current Status": st.column_config.SelectboxColumn("Status", options=status_list, width="medium"),
-                        "Admission Date": st.column_config.DateColumn("Adm Date"),
+                        "Admission Date": st.column_config.DateColumn("Adm Date"), # Now it works!
                     },
                     hide_index=True,
                     use_container_width=True
                 )
 
                 if st.button("💾 Save Follow-up Progress", type="primary"):
-                    referral_sheet.update([updated_ref_df.columns.values.tolist()] + updated_ref_df.values.tolist())
-                    st.toast("Referral status updated in the master sheet!", icon="✅")
+                    # 🚀 5. CONVERT BACK: Change dates back to strings before saving to Google Sheets
+                    final_df = updated_ref_df.copy()
+                    final_df['Admission Date'] = final_df['Admission Date'].astype(str).replace('NaT', '')
+                    
+                    referral_sheet.update([final_df.columns.values.tolist()] + final_df.values.tolist())
+                    st.toast("Referral status updated!", icon="✅")
             else:
                 st.success("🎉 No SAM/MAM referrals currently pending!")
         except Exception as e:
