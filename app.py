@@ -1244,6 +1244,7 @@ elif menu == "5. HBNC Newborn Visit":
 
     tab_physical, tab_telephonic = st.tabs(["🏠 1. Physical Field Visits", "📞 2. Telephonic Techo Queue"])
     
+    # --- TAB 1: PHYSICAL FIELD VISITS (UNTOUCHED AS PER REQUEST) ---
     with tab_physical:
         st.subheader("📝 Log Physical Visit")
         with st.form("hbnc_form", clear_on_submit=True):
@@ -1264,8 +1265,6 @@ elif menu == "5. HBNC Newborn Visit":
             with b1: dob = st.date_input("Date of Birth")
             with b2: birth_weight = st.number_input("Birth Weight (kg)", min_value=0.0, step=0.1)
             with b3: delivery_type = st.selectbox("Delivery Type", ["Normal Delivery (ND)", "C-Section (LSCS)", "Instrumental"])
-            
-            # 🚀 NEW: Added "Junagadh Civil Hospital" right here!
             with b4: delivery_point = st.selectbox("Delivery Point", ["Vatsalya Hospital", "SDH Visavadar", "Jay Ambe Hospital", "Junagadh Civil Hospital", "CHC/PHC", "Home Delivery", "Other Private Hospital"])
 
             st.divider()
@@ -1279,9 +1278,7 @@ elif menu == "5. HBNC Newborn Visit":
                     try:
                         spreadsheet.worksheet("hbnc_screenings").append_row([str(visit_date), child_name, parent_name, contact_number, str(dob), birth_weight, delivery_type, delivery_point, techo_id, disease, observations, village_name])
                         st.toast(f"✅ Recorded Visit for {child_name}.", icon="🎉")
-                        
                         get_hbnc_logs.clear() 
-                        
                         import time
                         time.sleep(0.5)
                         st.rerun()
@@ -1290,81 +1287,83 @@ elif menu == "5. HBNC Newborn Visit":
                         
         st.divider()
         st.subheader("📋 Recent Physical HBNC Records")
-        
         try:
             if not df_hbnc_live.empty:
                 st.dataframe(df_hbnc_live, use_container_width=True)
-                
                 csv_hbnc = df_hbnc_live.to_csv(index=False).encode('utf-8-sig')
-                st.download_button(
-                    label="⬇️ Download Physical Visit Data",
-                    data=csv_hbnc,
-                    file_name=f"HBNC_Physical_Visits_{date.today()}.csv",
-                    mime="text/csv"
-                )
+                st.download_button(label="⬇️ Download Physical Visit Data", data=csv_hbnc, file_name=f"HBNC_Physical_Visits.csv", mime="text/csv")
             else:
                 st.info("No physical visit data found yet.")
         except Exception as e:
             st.warning(f"⚠️ Could not load physical data table. Reason: {e}")
 
+    # --- TAB 2: TELEPHONIC TECHO QUEUE (REVAMPED) ---
     with tab_telephonic:
-        st.subheader("📞 Techo Telephonic Consultation")
-        st.info("Upload the Gujarati Techo list here. The team can view the list and log call outcomes directly.")
-
-        techo_file = st.file_uploader("Upload Techo Export (Excel or CSV)", type=["csv", "xlsx", "xls"])
-
-        if techo_file:
-            try:
-                if techo_file.name.endswith('.csv'):
-                    df_techo = pd.read_csv(techo_file, encoding='utf-8-sig')
-                else:
-                    df_techo = pd.read_excel(techo_file)
-
-                df_techo.columns = df_techo.columns.str.strip()
-                st.success(f"✅ Loaded {len(df_techo)} children from Techo Export.")
-                st.dataframe(df_techo, use_container_width=True)
+        st.subheader("📞 Techo Consultation Queue")
+        st.info("Directly managing call list from 'hbnc_telephonic' master sheet. No upload needed.")
+        
+        try:
+            # 1. Fetch data from the persistent sheet
+            tele_sheet = spreadsheet.worksheet("hbnc_telephonic")
+            raw_tele_data = tele_sheet.get_all_records()
+            
+            if raw_tele_data:
+                df_tele = pd.DataFrame(raw_tele_data)
                 
-                st.divider()
-                st.markdown("### 🗣️ Log Telephonic Call")
+                # 🚀 THE SANITIZER (Prevents JSON NaN Errors)
+                df_tele = df_tele.fillna("")
+                df_tele = df_tele.replace(['nan', 'NaN', 'NaT', 'None'], "")
+
+                # Ensure Status and Remarks columns exist
+                if "Call Status" not in df_tele.columns: df_tele["Call Status"] = "Pending"
+                if "Staff Remarks" not in df_tele.columns: df_tele["Staff Remarks"] = ""
+
+                st.write(f"Showing **{len(df_tele)}** children in the Techo Call Queue.")
                 
-                c1, c2 = st.columns(2)
-                with c1: name_col = st.selectbox("Which column contains the Child/Beneficiary Name?", df_techo.columns.tolist())
-                with c2: phone_col = st.selectbox("Which column contains the Phone Number?", df_techo.columns.tolist())
+                # 2. THE DATA EDITOR (Module 15 Style)
+                status_options = ["Pending", "Completed ✅", "Not Reachable 📵", "Call Later ⏳", "Switched Off", "Wrong Number"]
+                
+                # Lock original Techo columns, only allow editing Status and Remarks
+                # Modify these strings to match your actual Google Sheet headers exactly
+                read_only_cols = [col for col in df_tele.columns if col not in ["Call Status", "Staff Remarks"]]
 
-                if name_col and phone_col:
-                    names_list = df_techo[name_col].dropna().astype(str).unique().tolist()
-                    selected_target = st.selectbox("🎯 Select Beneficiary to Call:", ["-- Select --"] + names_list)
+                updated_tele_df = st.data_editor(
+                    df_tele,
+                    column_config={
+                        "Call Status": st.column_config.SelectboxColumn("Call Outcome", options=status_options, width="medium"),
+                        "Staff Remarks": st.column_config.TextColumn("Call Notes/Remarks", width="large"),
+                    },
+                    disabled=read_only_cols,
+                    hide_index=True,
+                    use_container_width=True
+                )
 
-                    if selected_target != "-- Select --":
-                        target_data = df_techo[df_techo[name_col].astype(str) == selected_target].iloc[0]
-                        phone_num = str(target_data.get(phone_col, 'No Number Listed'))
+                # 3. THE BULK SAVE BUTTON
+                if st.button("💾 Save All Call Outcomes", type="primary"):
+                    with st.spinner("Cleaning and syncing call logs..."):
+                        final_tele_df = updated_tele_df.copy()
                         
-                        st.info(f"**📞 Calling:** {selected_target}  |  **📱 Number:** {phone_num}")
-
-                        with st.form("telephonic_form", clear_on_submit=True):
-                            call_status = st.radio("Call Outcome:", ["✅ Successfully Consulted", "❌ Did Not Answer", "📵 Wrong/Invalid Number"], horizontal=True)
-                            remarks = st.text_input("Remarks / Advice Given (Can type in Gujarati or English)")
-                            save_call = st.form_submit_button("💾 Save Call Log")
-
-                        if save_call:
-                            try:
-                                ws_tele = spreadsheet.worksheet("hbnc_telephonic")
-                            except:
-                                st.error("⚠️ Please create a new tab in your Google Sheet called 'hbnc_telephonic' with headers: [Date, Name, Phone, Status, Remarks]")
-                                st.stop()
-
-                            import datetime
-                            today_str = datetime.date.today().strftime("%Y-%m-%d")
-                            
-                            ws_tele.append_row([today_str, selected_target, phone_num, call_status, remarks])
-                            st.toast(f"Successfully logged call for {selected_target}!", icon="📞")
-                            
-                            import time
-                            time.sleep(0.5)
-                            st.rerun()
-
-            except Exception as e:
-                st.error(f"Error reading the Techo file: {e}")
+                        # Add a "Last Updated" timestamp to every row
+                        import datetime
+                        final_tele_df['Last Update'] = datetime.date.today().strftime("%Y-%m-%d")
+                        
+                        # Vacuum cleanup for JSON compatibility
+                        final_tele_df = final_tele_df.astype(str).replace(['nan', 'NaN', 'None'], "")
+                        
+                        # Overwrite sheet
+                        data_to_push = [final_tele_df.columns.values.tolist()] + final_tele_df.values.tolist()
+                        tele_sheet.update(data_to_push)
+                        
+                        st.toast("Call log successfully updated!", icon="📞")
+                        import time
+                        time.sleep(1)
+                        st.rerun()
+            else:
+                st.warning("⚠️ The 'hbnc_telephonic' sheet is empty. Please paste the Techo names into the Google Sheet first.")
+                
+        except Exception as e:
+            st.error(f"❌ Telephonic Module Error: {e}")
+            st.info("💡 Ensure you have a tab named 'hbnc_telephonic' in your Master Google Sheet.")
 # ==========================================
 # MODULE 6: SUCCESS STORY BUILDER
 # ==========================================
