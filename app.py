@@ -2362,6 +2362,7 @@ elif menu == "13. Offline Batch Sync":
 elif menu == "14. TECHO Entry Queue":  
     import difflib
     import time
+    import gspread # Added for the Batch Update feature
     
     st.header("💻 TECHO Portal Pending Queue")
     st.info("⚡ Auto-Sync Engine: Select your location first, then upload your TECHO export file to match and clear!")
@@ -2411,7 +2412,7 @@ elif menu == "14. TECHO Entry Queue":
                             tab_auto, tab_manual = st.tabs(["🚀 Auto-Sync (TECHO File)", "✍️ Manual Multi-Select"])
                             
                             # ==========================================
-                            # 🚀 TAB 1: AUTO-SYNC (IMPROVED MATCHING + ALL COLUMNS)
+                            # 🚀 TAB 1: AUTO-SYNC (BATCH SAVE FIXED)
                             # ==========================================
                             with tab_auto:
                                 st.info(f"Upload the TECHO export file for **{selected_location}** to automatically match and clear children.")
@@ -2428,12 +2429,10 @@ elif menu == "14. TECHO Entry Queue":
                                             'બ': 'B', 'ભ': 'BH', 'મ': 'M', 'ય': 'Y', 'ર': 'R', 'લ': 'L', 'વ': 'V', 'શ': 'SH', 'ષ': 'SH', 'સ': 'S',
                                             'હ': 'H', 'ળ': 'L', 'ક્ષ': 'KSH', 'જ્ઞ': 'GN', 'ા': 'A', 'િ': 'I', 'ી': 'I', 'ુ': 'U', 'ૂ': 'U', 'ે': 'E', 'ૈ': 'AI', 'ો': 'O', 'ૌ': 'AU', 'ં': 'N'
                                         }
-                                        # Remove FAW codes and strip whitespace before transliterating
                                         clean_guj = str(text).split('/')[0].strip()
                                         return "".join([char_map.get(c, "") for c in clean_guj])
 
                                     def normalize_date(val):
-                                        """Bridges the gap between 01/01/2000 and 01-01-2000"""
                                         try: return pd.to_datetime(str(val).strip().replace('-', '/'), dayfirst=True).strftime('%Y-%m-%d')
                                         except: return ""
 
@@ -2441,7 +2440,6 @@ elif menu == "14. TECHO Entry Queue":
                                     else: techo_df = pd.read_excel(techo_file)
 
                                     if 'Member Name' in techo_df.columns and 'Date Of Birth' in techo_df.columns:
-                                        # Parse TECHO Data
                                         techo_df['Clean_DOB'] = techo_df['Date Of Birth'].apply(normalize_date)
                                         techo_df['Trans_Name'] = techo_df['Member Name'].apply(gujarati_to_english)
                                         
@@ -2451,32 +2449,24 @@ elif menu == "14. TECHO Entry Queue":
                                         matched_techo_indices = []
                                         match_display_data = []
 
-                                        # --- THE MULTI-TIER ENGINE ---
                                         for idx, emr_row in loc_pending_df.iterrows():
                                             emr_name_full = str(emr_row[name_col])
                                             emr_name_clean = emr_name_full.split('/')[0].strip().upper()
                                             emr_dob = normalize_date(emr_row[emr_dob_col]) if emr_dob_col else ""
                                             
-                                            # Find TECHO rows with matching DOB
                                             potentials = techo_df[techo_df['Clean_DOB'] == emr_dob]
-                                            
-                                            best_score = 0
-                                            best_row = None
-                                            best_t_idx = None
+                                            best_score, best_row, best_t_idx = 0, None, None
 
                                             for t_idx, t_row in potentials.iterrows():
                                                 if t_idx in matched_techo_indices: continue
-                                                # Use phonetic similarity bridge
                                                 score = difflib.SequenceMatcher(None, emr_name_clean, t_row['Trans_Name']).ratio()
                                                 if score > best_score:
                                                     best_score, best_row, best_t_idx = score, t_row, t_idx
 
-                                            # Threshold: If DOB matches and name is > 60% phonetically similar
                                             if best_score > 0.6:
                                                 matched_emr_indices.append(idx)
                                                 matched_techo_indices.append(best_t_idx)
                                                 
-                                                # RESTORING ALL COLUMNS (Height, Weight, Disease, etc.)
                                                 row_data = {
                                                     "Match Quality": f"{int(best_score*100)}%",
                                                     "✅ TECHO Name (Gujarati)": best_row['Member Name'],
@@ -2484,13 +2474,11 @@ elif menu == "14. TECHO Entry Queue":
                                                 for col_name in loc_pending_df.columns:
                                                     if col_name not in ['TECHO_Status', '_sort_val']:
                                                         row_data[f"📋 EMR: {col_name}"] = emr_row[col_name]
-                                                
                                                 match_display_data.append(row_data)
 
                                         emr_only_df = loc_pending_df.drop(index=matched_emr_indices)
                                         techo_only_df = techo_df.drop(index=matched_techo_indices)
 
-                                        # --- UI RESULTS TABS ---
                                         st.markdown("#### ⚙️ Sync Results")
                                         sync_t1, sync_t2, sync_t3 = st.tabs([
                                             f"✅ Perfect Matches ({len(match_display_data)})", 
@@ -2503,10 +2491,8 @@ elif menu == "14. TECHO Entry Queue":
                                                 st.success(f"Found {len(match_display_data)} matches triangulated by Phonetic Matching!")
                                                 match_df = pd.DataFrame(match_display_data)
                                                 
-                                                # Sort Alphabetically
                                                 sort_key = f"📋 EMR: {name_col}"
-                                                if sort_key in match_df.columns:
-                                                    match_df = match_df.sort_values(by=sort_key)
+                                                if sort_key in match_df.columns: match_df = match_df.sort_values(by=sort_key)
                                                 
                                                 match_df.insert(0, "✅ Select", True)
                                                 edited_match_df = st.data_editor(
@@ -2518,18 +2504,25 @@ elif menu == "14. TECHO Entry Queue":
                                                 
                                                 selected_matches = edited_match_df[edited_match_df["✅ Select"] == True][f"📋 EMR: {name_col}"].tolist()
                                                 
+                                                # 🚀 THE FIX: BULK BATCH UPDATE 
                                                 if st.button(f"🚀 Mark Selected ({len(selected_matches)}) Matches as 'Done'", type="primary"):
-                                                    status_idx = df.columns.get_loc('TECHO_Status') + 1
-                                                    pb = st.progress(0)
-                                                    st_txt = st.empty()
-                                                    for i, c_name in enumerate(selected_matches):
-                                                        cell = active_sheet.find(str(c_name))
-                                                        if cell: active_sheet.update_cell(cell.row, status_idx, "Done")
-                                                        pb.progress((i + 1) / len(selected_matches))
-                                                        st_txt.text(f"Syncing record {i + 1} of {len(selected_matches)}...")
-                                                    st.toast(f"✅ Successfully synced {len(selected_matches)} records!", icon="🎉")
-                                                    time.sleep(1)
-                                                    st.rerun()
+                                                    with st.spinner("Batch updating Google Sheets (1 API Call)..."):
+                                                        status_idx = df.columns.get_loc('TECHO_Status') + 1
+                                                        cells_to_update = []
+                                                        
+                                                        for c_name in selected_matches:
+                                                            # Find the exact row number from the dataframe instantly (No API Call)
+                                                            matching_rows = df.index[df[name_col].astype(str) == str(c_name)].tolist()
+                                                            for row_idx in matching_rows:
+                                                                # Google Sheets rows start at 1, header is 1, so data is index + 2
+                                                                cells_to_update.append(gspread.Cell(row=row_idx + 2, col=status_idx, value="Done"))
+                                                        
+                                                        if cells_to_update:
+                                                            active_sheet.update_cells(cells_to_update) # THIS SENDS ALL 20 UPDATES AT ONCE!
+                                                            
+                                                        st.toast(f"✅ Successfully synced {len(selected_matches)} records!", icon="🎉")
+                                                        time.sleep(1)
+                                                        st.rerun()
                                             else:
                                                 st.info("No matches found. Ensure your TECHO export contains the same children and DOBs.")
 
@@ -2549,10 +2542,9 @@ elif menu == "14. TECHO Entry Queue":
                                         st.error("❌ The uploaded file is missing 'Member Name' or 'Date Of Birth' columns.")
 
                             # ==========================================
-                            # ✍️ TAB 2: MANUAL MULTI-SELECT (RESTORING CHILD COUNT)
+                            # ✍️ TAB 2: MANUAL MULTI-SELECT (BATCH SAVE FIXED)
                             # ==========================================
                             with tab_manual:
-                                # RESTORED HEADER WITH COUNT
                                 st.write(f"### 📋 Pending Entries for {selected_location} ({len(loc_pending_df)} Children)")
                                 
                                 display_manual_df = loc_pending_df.drop(columns=['TECHO_Status', '_sort_val'], errors='ignore').sort_values(by=name_col)
@@ -2561,17 +2553,25 @@ elif menu == "14. TECHO Entry Queue":
                                 st.write("---")
                                 children_to_update = st.multiselect(f"Select multiple children to mark as 'Done':", display_manual_df[name_col].tolist())
                                 
+                                # 🚀 THE FIX: BULK BATCH UPDATE 
                                 if st.button(f"🚀 Mark Selected ({len(children_to_update)}) as 'Done'"):
                                     if children_to_update:
-                                        status_idx = df.columns.get_loc('TECHO_Status') + 1
-                                        pb = st.progress(0)
-                                        for i, c_name in enumerate(children_to_update):
-                                            cell = active_sheet.find(str(c_name))
-                                            if cell: active_sheet.update_cell(cell.row, status_idx, "Done")
-                                            pb.progress((i + 1) / len(children_to_update))
-                                        st.toast(f"✅ {len(children_to_update)} Statuses updated!", icon="🎉")
-                                        time.sleep(0.5)
-                                        st.rerun()
+                                        with st.spinner("Batch updating Google Sheets (1 API Call)..."):
+                                            status_idx = df.columns.get_loc('TECHO_Status') + 1
+                                            cells_to_update = []
+                                            
+                                            for c_name in children_to_update:
+                                                # Find row index natively in Pandas instead of asking Google Sheets to search
+                                                matching_rows = df.index[df[name_col].astype(str) == str(c_name)].tolist()
+                                                for row_idx in matching_rows:
+                                                    cells_to_update.append(gspread.Cell(row=row_idx + 2, col=status_idx, value="Done"))
+                                            
+                                            if cells_to_update:
+                                                active_sheet.update_cells(cells_to_update) # 1 API CALL FOR EVERYTHING
+                                                
+                                            st.toast(f"✅ {len(children_to_update)} Statuses updated!", icon="🎉")
+                                            time.sleep(0.5)
+                                            st.rerun()
                                     else:
                                         st.warning("Please select at least one child.")
         else:
