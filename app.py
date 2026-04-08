@@ -2362,10 +2362,18 @@ elif menu == "13. Offline Batch Sync":
 elif menu == "14. TECHO Entry Queue":  
     import difflib
     import time
-    import gspread # Added for the Batch Update feature
+    import gspread
     
     st.header("💻 TECHO Portal Pending Queue")
     st.info("⚡ Auto-Sync Engine: Select your location first, then upload your TECHO export file to match and clear!")
+
+    # 🚀 THE FIX: MEMORY CACHE TO STOP READ ERRORS
+    @st.cache_data(ttl=600)
+    def get_techo_queue_data(sheet_name):
+        try:
+            return spreadsheet.worksheet(sheet_name).get_all_records()
+        except:
+            return []
 
     queue_type = st.radio("Select which queue to work on:", ["👶 Anganwadi Queue", "🏫 School Queue"])
     
@@ -2381,8 +2389,8 @@ elif menu == "14. TECHO Entry Queue":
     st.write("---")
     
     try:
-        active_sheet = spreadsheet.worksheet(target_sheet_name)
-        data = active_sheet.get_all_records()
+        active_sheet = spreadsheet.worksheet(target_sheet_name) # Keep this open for writing
+        data = get_techo_queue_data(target_sheet_name) # 🚀 Pulls from memory, NOT Google!
         
         if data:
             df = pd.DataFrame(data)
@@ -2412,14 +2420,13 @@ elif menu == "14. TECHO Entry Queue":
                             tab_auto, tab_manual = st.tabs(["🚀 Auto-Sync (TECHO File)", "✍️ Manual Multi-Select"])
                             
                             # ==========================================
-                            # 🚀 TAB 1: AUTO-SYNC (BATCH SAVE FIXED)
+                            # 🚀 TAB 1: AUTO-SYNC
                             # ==========================================
                             with tab_auto:
                                 st.info(f"Upload the TECHO export file for **{selected_location}** to automatically match and clear children.")
                                 techo_file = st.file_uploader("📥 Upload TECHO Export (Excel/CSV)", type=["csv", "xlsx", "xls"], key="techo_upload")
                                 
                                 if techo_file is not None:
-                                    # --- INTERNAL HELPERS ---
                                     def gujarati_to_english(text):
                                         if not text or pd.isna(text): return ""
                                         char_map = {
@@ -2496,31 +2503,27 @@ elif menu == "14. TECHO Entry Queue":
                                                 
                                                 match_df.insert(0, "✅ Select", True)
                                                 edited_match_df = st.data_editor(
-                                                    match_df, 
-                                                    hide_index=True, 
-                                                    use_container_width=True,
+                                                    match_df, hide_index=True, use_container_width=True,
                                                     disabled=[col for col in match_df.columns if col != "✅ Select"]
                                                 )
                                                 
                                                 selected_matches = edited_match_df[edited_match_df["✅ Select"] == True][f"📋 EMR: {name_col}"].tolist()
                                                 
-                                                # 🚀 THE FIX: BULK BATCH UPDATE 
                                                 if st.button(f"🚀 Mark Selected ({len(selected_matches)}) Matches as 'Done'", type="primary"):
-                                                    with st.spinner("Batch updating Google Sheets (1 API Call)..."):
+                                                    with st.spinner("Batch updating Google Sheets (1 Write Call)..."):
                                                         status_idx = df.columns.get_loc('TECHO_Status') + 1
                                                         cells_to_update = []
                                                         
                                                         for c_name in selected_matches:
-                                                            # Find the exact row number from the dataframe instantly (No API Call)
                                                             matching_rows = df.index[df[name_col].astype(str) == str(c_name)].tolist()
                                                             for row_idx in matching_rows:
-                                                                # Google Sheets rows start at 1, header is 1, so data is index + 2
                                                                 cells_to_update.append(gspread.Cell(row=row_idx + 2, col=status_idx, value="Done"))
                                                         
                                                         if cells_to_update:
-                                                            active_sheet.update_cells(cells_to_update) # THIS SENDS ALL 20 UPDATES AT ONCE!
+                                                            active_sheet.update_cells(cells_to_update)
                                                             
                                                         st.toast(f"✅ Successfully synced {len(selected_matches)} records!", icon="🎉")
+                                                        get_techo_queue_data.clear() # 🚀 CLEAR MEMORY SO IT REFRESHES
                                                         time.sleep(1)
                                                         st.rerun()
                                             else:
@@ -2534,7 +2537,6 @@ elif menu == "14. TECHO Entry Queue":
 
                                         with sync_t3:
                                             st.error("These children are pending in TECHO, but are NOT in your EMR pending queue.")
-                                            st.info("💡 Data Guardrail: You must register these children in Module 2 first.")
                                             if not techo_only_df.empty:
                                                 disp_techo = techo_only_df.drop(columns=['Trans_Name', 'Clean_DOB'], errors='ignore').sort_values(by='Member Name')
                                                 st.dataframe(disp_techo, use_container_width=True)
@@ -2542,7 +2544,7 @@ elif menu == "14. TECHO Entry Queue":
                                         st.error("❌ The uploaded file is missing 'Member Name' or 'Date Of Birth' columns.")
 
                             # ==========================================
-                            # ✍️ TAB 2: MANUAL MULTI-SELECT (BATCH SAVE FIXED)
+                            # ✍️ TAB 2: MANUAL MULTI-SELECT
                             # ==========================================
                             with tab_manual:
                                 st.write(f"### 📋 Pending Entries for {selected_location} ({len(loc_pending_df)} Children)")
@@ -2553,24 +2555,23 @@ elif menu == "14. TECHO Entry Queue":
                                 st.write("---")
                                 children_to_update = st.multiselect(f"Select multiple children to mark as 'Done':", display_manual_df[name_col].tolist())
                                 
-                                # 🚀 THE FIX: BULK BATCH UPDATE 
                                 if st.button(f"🚀 Mark Selected ({len(children_to_update)}) as 'Done'"):
                                     if children_to_update:
-                                        with st.spinner("Batch updating Google Sheets (1 API Call)..."):
+                                        with st.spinner("Batch updating Google Sheets (1 Write Call)..."):
                                             status_idx = df.columns.get_loc('TECHO_Status') + 1
                                             cells_to_update = []
                                             
                                             for c_name in children_to_update:
-                                                # Find row index natively in Pandas instead of asking Google Sheets to search
                                                 matching_rows = df.index[df[name_col].astype(str) == str(c_name)].tolist()
                                                 for row_idx in matching_rows:
                                                     cells_to_update.append(gspread.Cell(row=row_idx + 2, col=status_idx, value="Done"))
                                             
                                             if cells_to_update:
-                                                active_sheet.update_cells(cells_to_update) # 1 API CALL FOR EVERYTHING
+                                                active_sheet.update_cells(cells_to_update)
                                                 
                                             st.toast(f"✅ {len(children_to_update)} Statuses updated!", icon="🎉")
-                                            time.sleep(0.5)
+                                            get_techo_queue_data.clear() # 🚀 CLEAR MEMORY SO IT REFRESHES
+                                            time.sleep(1)
                                             st.rerun()
                                     else:
                                         st.warning("Please select at least one child.")
