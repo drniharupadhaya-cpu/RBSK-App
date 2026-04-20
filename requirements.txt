@@ -8,3 +8,4 @@ plotly
 reportlab
 Pillow
 openpyxl
+matplotlib
