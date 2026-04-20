@@ -41,9 +41,9 @@ client = gspread.authorize(credentials)
 @st.cache_data(ttl=600)
 def load_all_defect_data():
     try:
-        sheet = client.open("NEW BIRTH DEFECT TOTAL 2025-26")
+        sheet = client.open("NEW BIRTH DEFECT TOTAL 2025-26 (1)")
         
-        # 1. Load Executive Summary (Using raw values to bypass gspread bugs)
+        # 1. Load Executive Summary
         summary_ws = sheet.worksheet("SUMMRY SHEET report")
         raw_summary = summary_ws.get_all_values()
         df_summary = pd.DataFrame(raw_summary)
@@ -65,16 +65,32 @@ def load_all_defect_data():
                 raw_tab = ws.get_all_values()
                 df = pd.DataFrame(raw_tab)
                 
-                # 🚀 SMART HEADER DETECTION: Scans for the real header row
+                # 🚀 SMART HEADER DETECTION
                 if not df.empty:
                     header_idx = 0
                     for i, row in df.iterrows():
-                        # If a row has more than 4 items, it is the header!
                         if sum(1 for x in row if str(x).strip() != "") > 4:
                             header_idx = i
                             break
                     
-                    df.columns = df.iloc[header_idx].astype(str)
+                    raw_columns = df.iloc[header_idx].astype(str).tolist()
+                    
+                    # 🚀 THE DUPLICATE COLUMN FIX
+                    new_cols = []
+                    seen = {}
+                    for c in raw_columns:
+                        c = c.strip()
+                        if c == "": 
+                            c = "Unnamed" # Give blank columns a safe name
+                            
+                        if c in seen:
+                            seen[c] += 1
+                            new_cols.append(f"{c}_{seen[c]}") # Make it unique (e.g., Medical_1)
+                        else:
+                            seen[c] = 0
+                            new_cols.append(c)
+                            
+                    df.columns = new_cols
                     df = df[header_idx+1:]
                     df = df.dropna(how='all')
                     
