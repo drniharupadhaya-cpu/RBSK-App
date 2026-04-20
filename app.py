@@ -1050,23 +1050,24 @@ elif menu == "2. Child Screening":
                 st.write(f"- 📈 **Upgrades to SAM/MAM:** {upgrades} children need to be automatically added to CMTC.")
                 st.write(f"- 📉 **Downgrades to Normal:** {downgrades} children will be marked 'Reclassified Normal'.")
                 
-        # --- EXECUTE THE FIX (BATCH UPDATE METHOD) ---
+        # --- EXECUTE THE FIX (ULTRA-SAFE BATCH METHOD) ---
         if c2.button("⚠️ Step 3: EXECUTE RECALIBRATION"):
-            with st.spinner("Surgically recalibrating database... DO NOT close the app (Estimated time: 5 seconds)..."):
+            with st.spinner("Surgically recalibrating database... DO NOT close the app..."):
+                import time
+                
                 aw_ws = spreadsheet.worksheet("daily_screenings_aw")
                 cmtc_ws = spreadsheet.worksheet("cmtc_referral")
                 
-                # 1. Download the whole sheets into Python Memory (1 API Call)
+                # 1. Download (Read requests don't hurt the Write quota)
                 aw_records = aw_ws.get_all_values()
                 cmtc_records = cmtc_ws.get_all_values()
                 
-                # Map of existing CMTC children to easily find their rows
                 cmtc_dict = {f"{str(r[0]).strip()}_{str(r[2]).strip()}": idx + 1 for idx, r in enumerate(cmtc_records) if len(r) > 2}
                 
                 updates_made = 0
                 new_cmtc_rows = []
                 
-                # 2. Make all 169+ changes instantly inside Python Memory (0 API Calls)
+                # 2. Modify everything inside Python's brain (0 API calls)
                 for idx, r in enumerate(aw_records[1:], start=2):
                     if len(r) > 12:
                         date_str = str(r[0]).strip()
@@ -1087,17 +1088,15 @@ elif menu == "2. Child Screening":
                         new_status = get_whz_status(gender, h, w)
                         
                         if new_status != old_status and new_status != "Out of bounds":
-                            # Update main screening list in memory (Column 13 is index 12)
                             aw_records[idx - 1][12] = new_status
                             updates_made += 1
                             
-                            # Update CMTC list in memory
                             cmtc_key = f"{date_str}_{name}"
                             
                             if new_status in ["SAM", "MAM"]:
                                 if cmtc_key in cmtc_dict:
                                     cmtc_row = cmtc_dict[cmtc_key]
-                                    cmtc_records[cmtc_row - 1][8] = new_status # Column 9 is index 8
+                                    cmtc_records[cmtc_row - 1][8] = new_status 
                                 else:
                                     new_cmtc_rows.append([date_str, inst, name, dob, contact, w, h, muac, new_status, "Pending"])
                             elif new_status == "Normal" and old_status in ["SAM", "MAM"]:
@@ -1105,17 +1104,24 @@ elif menu == "2. Child Screening":
                                     cmtc_row = cmtc_dict[cmtc_key]
                                     cmtc_records[cmtc_row - 1][8] = "Reclassified Normal"
                                     
-                # 3. Push everything back to Google in large, single batches!
+                # 3. Push in 3 massive chunks with safety delays
                 try:
-                    aw_ws.update(range_name="A1", values=aw_records)
+                    st.info("Pushing Main Screening data... (1/3)")
+                    aw_ws.update(values=aw_records, range_name="A1")
+                    
+                    time.sleep(3) # Let Google API breathe
                     
                     if len(cmtc_records) > 0:
-                        cmtc_ws.update(range_name="A1", values=cmtc_records)
+                        st.info("Pushing CMTC adjustments... (2/3)")
+                        cmtc_ws.update(values=cmtc_records, range_name="A1")
+                        
+                    time.sleep(3) # Let Google API breathe
                         
                     if new_cmtc_rows:
+                        st.info("Adding brand new CMTC cases... (3/3)")
                         cmtc_ws.append_rows(new_cmtc_rows)
                         
-                    st.success(f"✅ Recalibration completely successfully! {updates_made} historical records were perfectly converted to the WHO Gold Standard in one batch.")
+                    st.success(f"✅ Recalibration completely successfully! {updates_made} historical records were perfectly converted to the WHO Gold Standard.")
                     st.balloons()
                 except Exception as e:
                     st.error(f"Upload failed: {e}")
