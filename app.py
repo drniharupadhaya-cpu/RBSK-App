@@ -460,26 +460,53 @@ elif menu == "2. Child Screening":
         try: return float(clean_str) if clean_str else 0.0
         except: return 0.0
 
+    # 🚀 THE OFFICIAL WHO GOLD STANDARD ENGINE (Interpolation Method)
     def get_whz_status(gender, height_cm, weight_kg):
-        who_table = {
-            65: [5.9, 6.4, 5.5, 6.0], 70: [6.8, 7.4, 6.4, 7.0],
-            75: [7.6, 8.3, 7.3, 8.0], 80: [8.5, 9.2, 8.2, 9.0],
-            85: [9.3, 10.1, 9.1, 9.9], 90: [10.2, 11.1, 10.0, 10.9],
-            95: [11.2, 12.1, 10.9, 11.9], 100: [12.2, 13.3, 11.9, 13.0],
-            105: [13.3, 14.5, 13.0, 14.3], 110: [14.4, 15.8, 14.1, 15.6],
-            115: [15.5, 17.1, 15.3, 17.0], 120: [16.6, 18.4, 16.5, 18.4]
-        }
-        if height_cm < 65 or height_cm > 120:
+        if not height_cm or not weight_kg or height_cm < 45 or height_cm > 120:
             return "Out of bounds"
-        closest_h = min(who_table.keys(), key=lambda k: abs(k - height_cm))
-        refs = who_table[closest_h]
-        if str(gender).upper().startswith('M'):
-            sam_cutoff, mam_cutoff = refs[0], refs[1]
+
+        # WHO Official Cutoffs [Height in cm: [SAM (-3SD), MAM (-2SD)]]
+        who_boys = {
+            45.0: [1.9, 2.1], 50.0: [2.4, 2.7], 55.0: [3.4, 3.8], 60.0: [4.4, 4.9],
+            65.0: [5.5, 6.0], 70.0: [6.6, 7.1], 75.0: [7.6, 8.2], 80.0: [8.5, 9.2],
+            85.0: [9.4, 10.1], 90.0: [10.3, 11.1], 95.0: [11.3, 12.1], 100.0: [12.2, 13.2],
+            105.0: [13.3, 14.4], 110.0: [14.4, 15.7], 115.0: [15.6, 17.0], 120.0: [16.8, 18.3]
+        }
+        
+        who_girls = {
+            45.0: [1.9, 2.1], 50.0: [2.5, 2.7], 55.0: [3.3, 3.6], 60.0: [4.2, 4.6],
+            65.0: [5.2, 5.6], 70.0: [6.3, 6.8], 75.0: [7.3, 7.9], 80.0: [8.2, 8.9],
+            85.0: [9.1, 9.8], 90.0: [10.0, 10.8], 95.0: [10.9, 11.8], 100.0: [11.9, 12.9],
+            105.0: [13.1, 14.2], 110.0: [14.3, 15.5], 115.0: [15.5, 16.9], 120.0: [16.8, 18.3]
+        }
+
+        # Select the correct gender table
+        table = who_boys if str(gender).strip().upper().startswith('M') else who_girls
+
+        # Exact Match
+        if height_cm in table:
+            sam_cutoff, mam_cutoff = table[height_cm]
         else:
-            sam_cutoff, mam_cutoff = refs[2], refs[3]
-        if weight_kg < sam_cutoff: return "SAM"
-        elif weight_kg < mam_cutoff: return "MAM"
-        else: return "Normal"
+            # 🧠 MEDICAL INTERPOLATION MATH: Calculates exact cutoffs for numbers in between
+            heights = sorted(table.keys())
+            lower_h = max([h for h in heights if h <= height_cm])
+            upper_h = min([h for h in heights if h >= height_cm])
+            
+            lower_sam, lower_mam = table[lower_h]
+            upper_sam, upper_mam = table[upper_h]
+            
+            # Calculate the proportional difference
+            ratio = (height_cm - lower_h) / (upper_h - lower_h)
+            sam_cutoff = lower_sam + (ratio * (upper_sam - lower_sam))
+            mam_cutoff = lower_mam + (ratio * (upper_mam - lower_mam))
+
+        # 🚦 Final Diagnosis
+        if weight_kg < sam_cutoff:
+            return "SAM"
+        elif weight_kg < mam_cutoff:
+            return "MAM"
+        else:
+            return "Normal"
 
     # 🚀 180-Day Bi-Annual Background Checker
     @st.cache_data(ttl=60)
