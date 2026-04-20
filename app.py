@@ -1043,59 +1043,73 @@ elif menu == "3. 4D Defect Registry":
     with tab_card:
         st.subheader("🪪 Print Official Refer Cards")
         if all_defects:
-            display_names = {f"{d['Name']} ({d['Institution']})": d['Name'] for d in all_defects}
-            sel_display = st.selectbox("Select Child for Refer Card:", ["-- Select --"] + list(display_names.keys()))
+            # 🚀 NEW FEATURE: Extract unique institutions for the filter
+            unique_institutions = sorted(list(set([str(d['Institution']).strip() for d in all_defects if str(d['Institution']).strip() != ""])))
             
-            if sel_display != "-- Select --":
-                actual_name = display_names[sel_display]
-                p_data = next(item for item in all_defects if item["Name"] == actual_name)
-                p_data['Age'] = get_age(p_data.get('DOB', ''))
+            # Institution Filter UI
+            selected_inst = st.selectbox("🏢 Filter by Institution (Optional):", ["All Institutions"] + unique_institutions)
+            
+            # Filter the defects list based on selection
+            filtered_defects = all_defects
+            if selected_inst != "All Institutions":
+                filtered_defects = [d for d in all_defects if str(d['Institution']).strip() == selected_inst]
                 
-                st.markdown(f"### 🪪 Preparing Card for: **{actual_name}**")
-                st.info(f"**Child Age:** {p_data['Age']} | **Condition:** {p_data.get('Condition', 'Unknown')}")
+            if not filtered_defects:
+                st.warning(f"No children found in {selected_inst}.")
+            else:
+                display_names = {f"{d['Name']} ({d['Institution']})": d['Name'] for d in filtered_defects}
+                sel_display = st.selectbox("Select Child for Refer Card:", ["-- Select --"] + list(display_names.keys()))
                 
-                with st.form("refer_card_print_form"):
-                    st.write("### 📝 Doctor's Clinical Referral Details")
+                if sel_display != "-- Select --":
+                    actual_name = display_names[sel_display]
+                    p_data = next(item for item in filtered_defects if item["Name"] == actual_name)
+                    p_data['Age'] = get_age(p_data.get('DOB', ''))
                     
-                    c1, c2, c3 = st.columns(3)
-                    with c1: p_data['Parent_Name'] = st.text_input("Father's Name", value=p_data.get('Father', ''))
-                    with c2: p_data['Mother'] = st.text_input("Mother's Name", placeholder="Enter Mother's Name")
-                    with c3: p_data['Contact_Num'] = st.text_input("Contact Number", value=p_data.get('Contact', ''), max_chars=10)
+                    st.markdown(f"### 🪪 Preparing Card for: **{actual_name}**")
+                    st.info(f"**Child Age:** {p_data['Age']} | **Condition:** {p_data.get('Condition', 'Unknown')}")
                     
-                    c4, c5 = st.columns(2)
-                    with c4: p_data['Village'] = st.text_input("Village / City", value=p_data.get('Institution', ''))
-                    with c5: p_data['School_Status'] = st.selectbox("Child Status", ["School Going", "Not School Going", "Anganwadi"])
-                    
-                    st.divider()
-                    
-                    p_data['Clinical_Findings'] = st.text_area("Medical Condition / 4D", value=p_data.get('Condition', ''))
-                    
-                    c6, c7 = st.columns(2)
-                    with c6: p_data['Treatment_Given'] = st.text_input("Primary Treatment Given", value="Counselling and Referral")
-                    with c7: p_data['Referred_To'] = st.text_input("Referred To (Hospital)", value="CIVIL HOSPITAL JUNAGADH")
-                    
-                    c8, c9 = st.columns(2)
-                    with c8: p_data['MO_Name'] = st.text_input("Medical Officer Name", value="Dr. NIHAR UPADHYAY")
-                    with c9: p_data['Date'] = st.date_input("Official Referral Date")
+                    with st.form("refer_card_print_form"):
+                        st.write("### 📝 Doctor's Clinical Referral Details")
                         
-                    prepare_pdf = st.form_submit_button("🖨️ Generate Official Card & Stamp")
-                
-                if prepare_pdf:
-                    pdf_bytes = generate_refer_card(p_data) 
-                    st.success(f"✅ PDF Prepared for {actual_name}!")
+                        c1, c2, c3 = st.columns(3)
+                        with c1: p_data['Parent_Name'] = st.text_input("Father's Name", value=p_data.get('Father', ''))
+                        with c2: p_data['Mother'] = st.text_input("Mother's Name", placeholder="Enter Mother's Name")
+                        with c3: p_data['Contact_Num'] = st.text_input("Contact Number", value=p_data.get('Contact', ''), max_chars=10)
+                        
+                        c4, c5 = st.columns(2)
+                        with c4: p_data['Village'] = st.text_input("Village / City", value=p_data.get('Institution', ''))
+                        with c5: p_data['School_Status'] = st.selectbox("Child Status", ["School Going", "Not School Going", "Anganwadi"])
+                        
+                        st.divider()
+                        
+                        p_data['Clinical_Findings'] = st.text_area("Medical Condition / 4D", value=p_data.get('Condition', ''))
+                        
+                        c6, c7 = st.columns(2)
+                        with c6: p_data['Treatment_Given'] = st.text_input("Primary Treatment Given", value="Counselling and Referral")
+                        with c7: p_data['Referred_To'] = st.text_input("Referred To (Hospital)", value="CIVIL HOSPITAL JUNAGADH")
+                        
+                        c8, c9 = st.columns(2)
+                        with c8: p_data['MO_Name'] = st.text_input("Medical Officer Name", value="Dr. NIHAR UPADHYAY")
+                        with c9: p_data['Date'] = st.date_input("Official Referral Date")
+                            
+                        prepare_pdf = st.form_submit_button("🖨️ Generate Official Card & Stamp")
                     
-                    import base64
-                    b64 = base64.b64encode(pdf_bytes).decode()
-                    
-                    html_button = f'''
-                        <a href="data:application/pdf;base64,{b64}" download="Refer_{actual_name}.pdf" target="_blank" 
-                           style="display: inline-block; padding: 12px 24px; background-color: #3b82f6; color: white; 
-                           text-decoration: none; border-radius: 8px; font-weight: bold; text-align: center; width: 100%;">
-                           📄 Tap Here to View / Download PDF
-                        </a>
-                    '''
-                    st.markdown(html_button, unsafe_allow_html=True)
-                    st.caption("💡 **Mobile Users:** The PDF will open safely in a new window. When you are done, simply close the PDF to return to the app!")                
+                    if prepare_pdf:
+                        pdf_bytes = generate_refer_card(p_data) 
+                        st.success(f"✅ PDF Prepared for {actual_name}!")
+                        
+                        import base64
+                        b64 = base64.b64encode(pdf_bytes).decode()
+                        
+                        html_button = f'''
+                            <a href="data:application/pdf;base64,{b64}" download="Refer_{actual_name}.pdf" target="_blank" 
+                               style="display: inline-block; padding: 12px 24px; background-color: #3b82f6; color: white; 
+                               text-decoration: none; border-radius: 8px; font-weight: bold; text-align: center; width: 100%;">
+                               📄 Tap Here to View / Download PDF
+                            </a>
+                        '''
+                        st.markdown(html_button, unsafe_allow_html=True)
+                        st.caption("💡 **Mobile Users:** The PDF will open safely in a new window. When you are done, simply close the PDF to return to the app!")                
         
         else:
             st.warning("No children found in daily registry to generate a card. Screen children in Module 2 first.")
@@ -1121,7 +1135,6 @@ elif menu == "3. 4D Defect Registry":
                 file_name=f"4D_Master_Report_{today}.csv",
                 mime="text/csv"
             )
-
 # ==========================================
 # MODULE 4: VISUAL ANALYSIS
 # ==========================================
