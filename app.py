@@ -2056,7 +2056,7 @@ elif menu == "12. Automated State Report":
             df_combined = df_combined.dropna(subset=[date_col])
 
     # ==========================================
-    # 📄 TAB 1: FORM III (ORIGINAL CODE - UNTOUCHED)
+    # 📄 TAB 1: FORM III
     # ==========================================
     with tab_form3:
         if not df_combined.empty and date_col and dob_col:
@@ -2179,11 +2179,38 @@ elif menu == "12. Automated State Report":
                 export_df['Govt Age Bucket'] = report_df['Govt_Age_Bucket']
                 export_df['Gender'] = report_df['Clean_Gender']
                 
+                # 🚀 NEW FEATURE: Extract Height, Weight, Hb, and MUAC securely across both datasets
+                def get_merged_col(df, keywords):
+                    matched_cols = [c for c in df.columns if any(k in str(c).lower() for k in keywords)]
+                    if not matched_cols: return None
+                    merged = df[matched_cols[0]]
+                    for c in matched_cols[1:]:
+                        merged = merged.combine_first(df[c])
+                    return merged
+
+                ht_data = get_merged_col(report_df, ['height', 'ht', 'ઊંચાઈ'])
+                wt_data = get_merged_col(report_df, ['weight', 'wt', 'વજન'])
+                hb_data = get_merged_col(report_df, ['hb', 'hemoglobin'])
+                muac_data = get_merged_col(report_df, ['muac'])
+
+                if ht_data is not None: export_df['Height'] = ht_data
+                if wt_data is not None: export_df['Weight'] = wt_data
+                if hb_data is not None: export_df['Hb (School)'] = hb_data
+                if muac_data is not None: export_df['MUAC (AW)'] = muac_data
+                
                 if status_col: export_df['Nutrition (SAM/MAM)'] = report_df[status_col]
                 if disease_col: export_df['4D Condition Found'] = report_df[disease_col]
 
                 with st.expander("👁️ Preview Streamlined CSV Data"):
-                    st.dataframe(export_df, use_container_width=True, hide_index=True)
+                    # 🚀 NEW FEATURE: Institution Filter
+                    unique_institutions = sorted(list(set([str(i).strip() for i in export_df['Institution'].dropna() if str(i).strip() != ""])))
+                    selected_inst = st.selectbox("🏢 Filter by Institution (Optional):", ["All Institutions"] + unique_institutions, key="preview_filter")
+                    
+                    preview_df = export_df.copy()
+                    if selected_inst != "All Institutions":
+                        preview_df = preview_df[preview_df['Institution'].astype(str).str.strip() == selected_inst]
+                        
+                    st.dataframe(preview_df, use_container_width=True, hide_index=True)
 
                 csv = export_df.to_csv(index=False).encode('utf-8-sig')
                 st.download_button(
