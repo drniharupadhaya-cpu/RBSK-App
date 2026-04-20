@@ -23,7 +23,10 @@ st.markdown("""
 # -----------------------------------------
 import json
 
-scopes = ["https://www.googleapis.com/auth/spreadsheets"]
+scopes = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
 
 # Pull the secret from Streamlit
 raw_secret = st.secrets["gcp_service_account"]
