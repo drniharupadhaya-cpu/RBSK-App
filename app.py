@@ -1050,20 +1050,23 @@ elif menu == "2. Child Screening":
                 st.write(f"- 📈 **Upgrades to SAM/MAM:** {upgrades} children need to be automatically added to CMTC.")
                 st.write(f"- 📉 **Downgrades to Normal:** {downgrades} children will be marked 'Reclassified Normal'.")
                 
-        # --- EXECUTE THE FIX ---
+        # --- EXECUTE THE FIX (BATCH UPDATE METHOD) ---
         if c2.button("⚠️ Step 3: EXECUTE RECALIBRATION"):
-            with st.spinner("Surgically recalibrating database... DO NOT close the app (Estimated time: 30-90 seconds)..."):
+            with st.spinner("Surgically recalibrating database... DO NOT close the app (Estimated time: 5 seconds)..."):
                 aw_ws = spreadsheet.worksheet("daily_screenings_aw")
                 cmtc_ws = spreadsheet.worksheet("cmtc_referral")
                 
+                # 1. Download the whole sheets into Python Memory (1 API Call)
                 aw_records = aw_ws.get_all_values()
                 cmtc_records = cmtc_ws.get_all_values()
                 
-                # Create a map of existing CMTC children to easily find their rows
+                # Map of existing CMTC children to easily find their rows
                 cmtc_dict = {f"{str(r[0]).strip()}_{str(r[2]).strip()}": idx + 1 for idx, r in enumerate(cmtc_records) if len(r) > 2}
                 
                 updates_made = 0
+                new_cmtc_rows = []
                 
+                # 2. Make all 169+ changes instantly inside Python Memory (0 API Calls)
                 for idx, r in enumerate(aw_records[1:], start=2):
                     if len(r) > 12:
                         date_str = str(r[0]).strip()
@@ -1084,29 +1087,38 @@ elif menu == "2. Child Screening":
                         new_status = get_whz_status(gender, h, w)
                         
                         if new_status != old_status and new_status != "Out of bounds":
-                            # 1. Permanently update the Daily Screenings sheet (Status is Column 13)
-                            aw_ws.update_cell(idx, 13, new_status)
+                            # Update main screening list in memory (Column 13 is index 12)
+                            aw_records[idx - 1][12] = new_status
                             updates_made += 1
                             
-                            # 2. Smart-Sync the CMTC Referral Sheet
+                            # Update CMTC list in memory
                             cmtc_key = f"{date_str}_{name}"
                             
                             if new_status in ["SAM", "MAM"]:
                                 if cmtc_key in cmtc_dict:
-                                    # Adjust Severity (e.g., they were MAM, now they are SAM)
                                     cmtc_row = cmtc_dict[cmtc_key]
-                                    cmtc_ws.update_cell(cmtc_row, 9, new_status) # Status is Column 9
+                                    cmtc_records[cmtc_row - 1][8] = new_status # Column 9 is index 8
                                 else:
-                                    # Upgrade (New Admission to CMTC)
-                                    cmtc_ws.append_row([date_str, inst, name, dob, contact, w, h, muac, new_status, "Pending"])
+                                    new_cmtc_rows.append([date_str, inst, name, dob, contact, w, h, muac, new_status, "Pending"])
                             elif new_status == "Normal" and old_status in ["SAM", "MAM"]:
                                 if cmtc_key in cmtc_dict:
-                                    # Downgrade (False Alarm under old logic)
                                     cmtc_row = cmtc_dict[cmtc_key]
-                                    cmtc_ws.update_cell(cmtc_row, 9, "Reclassified Normal")
+                                    cmtc_records[cmtc_row - 1][8] = "Reclassified Normal"
                                     
-                st.success(f"✅ Recalibration completely successfully! {updates_made} historical records were perfectly converted to the WHO Gold Standard.")
-                st.balloons()
+                # 3. Push everything back to Google in large, single batches!
+                try:
+                    aw_ws.update(range_name="A1", values=aw_records)
+                    
+                    if len(cmtc_records) > 0:
+                        cmtc_ws.update(range_name="A1", values=cmtc_records)
+                        
+                    if new_cmtc_rows:
+                        cmtc_ws.append_rows(new_cmtc_rows)
+                        
+                    st.success(f"✅ Recalibration completely successfully! {updates_made} historical records were perfectly converted to the WHO Gold Standard in one batch.")
+                    st.balloons()
+                except Exception as e:
+                    st.error(f"Upload failed: {e}")
 # ==========================================
 # MODULE 3: 4D DEFECT REGISTRY & CASE MANAGEMENT (Emoji-Anchor Edition)
 # ==========================================
