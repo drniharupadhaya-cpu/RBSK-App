@@ -41,7 +41,7 @@ client = gspread.authorize(credentials)
 @st.cache_data(ttl=600)
 def load_all_defect_data():
     try:
-        sheet = client.open("NEW BIRTH DEFECT TOTAL 2025-26 (1)")
+        sheet = client.open("NEW BIRTH DEFECT TOTAL 2025-26")
         
         # 1. Load Executive Summary
         summary_ws = sheet.worksheet("SUMMRY SHEET report")
