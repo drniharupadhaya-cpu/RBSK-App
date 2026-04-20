@@ -704,7 +704,8 @@ elif menu == "2. Child Screening":
                             ws.append_row(new_row)
                             
                             if category == "👶 Anganwadi" and final_status in ["SAM", "MAM"]:
-                                spreadsheet.worksheet("cmtc_referral").append_row([screening_date, selected_inst, new_name, str(new_dob), new_contact, weight_val, height_val, muac_val, final_status, "Pending"])
+                                # 🛠️ FIX 1: SWAPPED HEIGHT AND WEIGHT HERE!
+                                spreadsheet.worksheet("cmtc_referral").append_row([screening_date, selected_inst, new_name, str(new_dob), new_contact, height_val, weight_val, muac_val, final_status, "Pending"])
                             
                             st.toast(f"✅ Successfully registered and screened {new_name}!", icon="🎉")
                             get_recent_screenings.clear() 
@@ -844,7 +845,8 @@ elif menu == "2. Child Screening":
                                             if len(r) > 2 and r[0] == str(screening_date) and str(r[2]).strip() == final_child_name.strip():
                                                 cmtc_row = i + 1; break
                                                 
-                                        cmtc_data = [str(screening_date), selected_inst, final_child_name, str(dob), merged_contact, merged_w, merged_h, merged_m, merged_status, "Pending"]
+                                        # 🛠️ FIX 2: SWAPPED HEIGHT AND WEIGHT HERE!
+                                        cmtc_data = [str(screening_date), selected_inst, final_child_name, str(dob), merged_contact, merged_h, merged_w, merged_m, merged_status, "Pending"]
                                         
                                         if cmtc_row:
                                             cmtc_ws.update(range_name=f"A{cmtc_row}", values=[cmtc_data]) 
@@ -867,7 +869,8 @@ elif menu == "2. Child Screening":
                                     st.toast(f"✅ New screening saved for {final_child_name}!", icon="🎉")
                                     
                                     if category == "👶 Anganwadi" and final_status in ["SAM", "MAM"]:
-                                        spreadsheet.worksheet("cmtc_referral").append_row([str(screening_date), selected_inst, final_child_name, str(dob), updated_contact, weight_val, height_val, muac_val, final_status, "Pending"])
+                                        # 🛠️ FIX 3: SWAPPED HEIGHT AND WEIGHT HERE!
+                                        spreadsheet.worksheet("cmtc_referral").append_row([str(screening_date), selected_inst, final_child_name, str(dob), updated_contact, height_val, weight_val, muac_val, final_status, "Pending"])
                             
                                 get_recent_screenings.clear() 
                                 import time
@@ -1008,6 +1011,45 @@ elif menu == "2. Child Screening":
             st.dataframe(display_df, use_container_width=True, hide_index=True)
         else:
             st.warning(f"No {view_category} found assigned to {selected_team}. Make sure the master database contains the exact team name.")
+
+    # ==========================================
+    # 🧹 TEMPORARY CMTC SHEET CLEANER
+    # ==========================================
+    st.divider()
+    with st.expander("🚨 ADMIN ONLY: Fix Swapped CMTC Columns & Remove 0kg Ghost Records"):
+        if st.button("🧹 Clean CMTC Sheet Now"):
+            with st.spinner("Swapping columns and cleaning data..."):
+                cmtc_ws = spreadsheet.worksheet("cmtc_referral")
+                records = cmtc_ws.get_all_values()
+                
+                updates = 0
+                ghosts_removed = 0
+                
+                for idx, r in enumerate(records[1:], start=1):
+                    if len(r) > 8:
+                        col_F_val = safe_float(r[5]) # Currently holds Weight (e.g., 0 or 11)
+                        col_G_val = safe_float(r[6]) # Currently holds Height (e.g., 81 or 92)
+                        
+                        # If Col F is smaller than Col G, they are backwards! 
+                        # (Height is always bigger than Weight in SAM children)
+                        if col_F_val < col_G_val:
+                            # Swap them in memory
+                            true_height = col_G_val
+                            true_weight = col_F_val
+                            
+                            records[idx][5] = true_height
+                            records[idx][6] = true_weight
+                            updates += 1
+                            
+                            # Catch the 0kg "Ghost SAM" bug!
+                            if true_weight == 0:
+                                records[idx][8] = "Invalid Data (0 kg)"
+                                ghosts_removed += 1
+                                
+                # Push the cleanly swapped data back to Google Sheets
+                cmtc_ws.update(values=records, range_name="A1")
+                st.success(f"✅ Cleaned! Swapped Height/Weight for {updates} children. Marked {ghosts_removed} children as 'Invalid Data (0 kg)' so Module 15 ignores them.")
+                st.balloons()
 # ==========================================
 # MODULE 3: 4D DEFECT REGISTRY & CASE MANAGEMENT (Emoji-Anchor Edition)
 # ==========================================
