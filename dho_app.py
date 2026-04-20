@@ -41,7 +41,7 @@ client = gspread.authorize(credentials)
 @st.cache_data(ttl=600)
 def load_all_defect_data():
     try:
-        sheet = client.open("NEW BIRTH DEFECT TOTAL 2025-26 (1).xlsx")
+        sheet = client.open("NEW BIRTH DEFECT TOTAL 2025-26")
         
         # 1. Load Executive Summary (Using raw values to bypass gspread bugs)
         summary_ws = sheet.worksheet("SUMMRY SHEET report")
@@ -90,7 +90,7 @@ def load_all_defect_data():
 @st.cache_data(ttl=600)
 def load_monthly_covered_data(month_tab):
     try:
-        sheet = client.open("JUNAGADH DISTRICT COVERED 2025-26 (1).xlsx")
+        sheet = client.open("JUNAGADH DISTRICT COVERED 2025-26")
         ws = sheet.worksheet(month_tab)
         raw_data = ws.get_all_values()
         df_month = pd.DataFrame(raw_data)
