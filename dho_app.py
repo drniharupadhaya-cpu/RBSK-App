@@ -21,8 +21,19 @@ st.markdown("""
 # -----------------------------------------
 # GOOGLE SHEETS CONNECTION
 # -----------------------------------------
+import json
+
 scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-skey = st.secrets["gcp_service_account"]
+
+# Pull the secret from Streamlit
+raw_secret = st.secrets["gcp_service_account"]
+
+# 🚀 BULLETPROOF FIX: Safely translate the secret whether it's a String or a Dictionary
+if isinstance(raw_secret, str):
+    skey = json.loads(raw_secret)
+else:
+    skey = dict(raw_secret)
+
 credentials = Credentials.from_service_account_info(skey, scopes=scopes)
 client = gspread.authorize(credentials)
 
