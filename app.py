@@ -1899,7 +1899,7 @@ elif menu == "8. School Directory":
         st.write("A complete infrastructure and demographic breakdown of all schools across your PHCs.")
         
         if not df_directory.empty:
-            # 🚀 NEW: PHC Filter UI
+            # PHC Filter UI
             phc_col = 'PHC'
             if phc_col in df_directory.columns:
                 phc_list = sorted([str(x) for x in df_directory[phc_col].unique() if str(x).strip() not in ['', 'nan', 'None']])
@@ -1984,6 +1984,19 @@ elif menu == "8. School Directory":
 
             if summary_data:
                 summary_df = pd.DataFrame(summary_data).sort_values(by=["PHC", "School Name"])
+                
+                # 🚀 NEW: Generate and Append Total Row
+                total_row = {}
+                for col in summary_df.columns:
+                    if col == "PHC":
+                        total_row[col] = "🏆 GRAND TOTAL"
+                    elif col in ["School Name", "Category", "Type"]:
+                        total_row[col] = "-"
+                    else:
+                        total_row[col] = summary_df[col].sum()
+                
+                # Safely append the total row to the bottom
+                summary_df = pd.concat([summary_df, pd.DataFrame([total_row])], ignore_index=True)
                 
                 import datetime
                 csv_summary = summary_df.to_csv(index=False).encode('utf-8-sig')
