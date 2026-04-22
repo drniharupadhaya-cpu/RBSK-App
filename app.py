@@ -1843,53 +1843,160 @@ elif menu == "8. School Directory":
     render_header("Master School Data Management", "Get all info about schools", "🗄️", "#4f46e5")
     st.write("Instantly look up school demographics, principals, and class sizes.")
 
-    if not df_directory.empty:
-        school_options = sorted([str(x) for x in df_directory['School'].unique() if str(x) != 'nan' and str(x).strip() != ''])
-        selected_school = st.selectbox("Select a School to view its ID Card:", ["-- Select a School --"] + school_options)
+    # 🚀 NEW: Tabbed Interface for Schools!
+    tab_search, tab_summary = st.tabs(["🔍 School ID Search", "📊 PHC Analytics & Matrix"])
+
+    with tab_search:
+        if not df_directory.empty:
+            school_options = sorted([str(x) for x in df_directory['School'].unique() if str(x) != 'nan' and str(x).strip() != ''])
+            selected_school = st.selectbox("Select a School to view its ID Card:", ["-- Select a School --"] + school_options)
+            
+            if selected_school != "-- Select a School --":
+                s_data = df_directory[df_directory['School'] == selected_school].iloc[0]
+                st.divider()
+                
+                st.subheader(f"📍 {selected_school}")
+                c1, c2, c3 = st.columns(3)
+                c1.info(f"**Type:** {s_data.get('PRIMARY/HIGH SCHOOL', 'N/A')}")
+                c2.info(f"**Category:** {s_data.get('GOVT/PRIVATE', 'N/A')}")
+                c3.info(f"**PHC:** {s_data.get('PHC', 'N/A')}")
+                
+                st.markdown("### 👨‍🏫 Administrative Contact")
+                st.success(f"**Principal:** {s_data.get('PRINCIPAL NAME', 'N/A')} | 📞 **Phone:** {s_data.get('PRINCIPAL CONTACT NUMBER', 'N/A')}")
+                
+                st.markdown("### 📊 Overall Student Strength")
+                m1, m2, m3 = st.columns(3)
+                m1.metric("👦 Total Boys", s_data.get('TOTAL BOYS', '0'))
+                m2.metric("👧 Total Girls", s_data.get('TOTAL GIRLS', '0'))
+                m3.metric("🏫 Grand Total", s_data.get('TOTAL', '0'))
+                
+                st.markdown("### 📋 Class-by-Class Breakdown")
+                class_prefixes = ['BV', 'CLS1', 'CLS2', 'CLS3', 'CLS4', 'CLS5', 'CLS6', 'CLS7', 'CLS8', 'CLS9', 'CLS10', 'CLS11', 'CLS12']
+                class_names = ['Bal Vatika', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10', 'Class 11', 'Class 12']
+                breakdown_list = []
+                
+                for prefix, readable_name in zip(class_prefixes, class_names):
+                    total_val = str(s_data.get(f'Total_{prefix}', '0')).strip()
+                    if total_val not in ['0', '0.0', 'nan', '', 'None']:
+                        breakdown_list.append({
+                            "Standard": readable_name,
+                            "Boys": str(s_data.get(f'{prefix}_B', '0')),
+                            "Girls": str(s_data.get(f'{prefix}_G', '0')),
+                            "Transgender": str(s_data.get(f'{prefix}_TG', '0')),
+                            "Total Students": total_val
+                        })
+                
+                if breakdown_list:
+                    df_breakdown = pd.DataFrame(breakdown_list)
+                    st.dataframe(df_breakdown, use_container_width=True, hide_index=True)
+                else:
+                    st.warning("No student demographic data is currently available for this school.")
+        else:
+            st.error("⚠️ Could not load data from the 'ALL SCHOOL DETAILS' tab.")
+
+    with tab_summary:
+        st.subheader("📈 Master PHC & School Summary")
+        st.write("A complete infrastructure and demographic breakdown of all schools across your PHCs.")
         
-        if selected_school != "-- Select a School --":
-            s_data = df_directory[df_directory['School'] == selected_school].iloc[0]
+        if not df_directory.empty:
+            # 🚀 NEW: PHC Filter UI
+            phc_col = 'PHC'
+            if phc_col in df_directory.columns:
+                phc_list = sorted([str(x) for x in df_directory[phc_col].unique() if str(x).strip() not in ['', 'nan', 'None']])
+                selected_phc = st.selectbox("🎯 Filter by PHC:", ["All PHCs"] + phc_list)
+                
+                if selected_phc != "All PHCs":
+                    filtered_school_df = df_directory[df_directory[phc_col].astype(str).str.strip() == selected_phc]
+                else:
+                    filtered_school_df = df_directory
+            else:
+                filtered_school_df = df_directory
+                st.warning("⚠️ PHC column could not be identified.")
+
+            # Safe integer converter for math
+            def safe_int(val):
+                try:
+                    clean_str = ''.join(c for c in str(val).replace(',', '.') if c.isdigit() or c == '.')
+                    return int(float(clean_str)) if clean_str else 0
+                except: 
+                    return 0
+
+            # --- TOP LEVEL ANALYTICS ---
+            total_schools = len(filtered_school_df)
+            
+            # Government vs Private Breakdown
+            cat_series = filtered_school_df.get('GOVT/PRIVATE', pd.Series(dtype=str)).astype(str).str.upper()
+            govt_count = len(filtered_school_df[cat_series.str.contains('GOVT|GOVERNMENT', na=False)])
+            pvt_count = len(filtered_school_df[cat_series.str.contains('PRIV|SELF|GRANT', na=False)])
+            
+            # Primary vs High School Breakdown
+            type_series = filtered_school_df.get('PRIMARY/HIGH SCHOOL', pd.Series(dtype=str)).astype(str).str.upper()
+            primary_count = len(filtered_school_df[type_series.str.contains('PRI|LOWER', na=False)])
+            high_count = len(filtered_school_df[type_series.str.contains('HIGH|SEC|UPPER', na=False)])
+
+            # Total Students Demographic
+            grand_total = sum(safe_int(x) for x in filtered_school_df.get('TOTAL', []))
+            grand_boys = sum(safe_int(x) for x in filtered_school_df.get('TOTAL BOYS', []))
+            grand_girls = sum(safe_int(x) for x in filtered_school_df.get('TOTAL GIRLS', []))
+
             st.divider()
+            st.markdown(f"### 🏆 Metrics for: {selected_phc}")
             
-            st.subheader(f"📍 {selected_school}")
-            c1, c2, c3 = st.columns(3)
-            c1.info(f"**Type:** {s_data.get('PRIMARY/HIGH SCHOOL', 'N/A')}")
-            c2.info(f"**Category:** {s_data.get('GOVT/PRIVATE', 'N/A')}")
-            c3.info(f"**PHC:** {s_data.get('PHC', 'N/A')}")
-            
-            st.markdown("### 👨‍🏫 Administrative Contact")
-            st.success(f"**Principal:** {s_data.get('PRINCIPAL NAME', 'N/A')} | 📞 **Phone:** {s_data.get('PRINCIPAL CONTACT NUMBER', 'N/A')}")
-            
-            st.markdown("### 📊 Overall Student Strength")
-            m1, m2, m3 = st.columns(3)
-            m1.metric("👦 Total Boys", s_data.get('TOTAL BOYS', '0'))
-            m2.metric("👧 Total Girls", s_data.get('TOTAL GIRLS', '0'))
-            m3.metric("🏫 Grand Total", s_data.get('TOTAL', '0'))
-            
-            st.markdown("### 📋 Class-by-Class Breakdown")
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("🏫 Total Schools", total_schools)
+            m2.metric("👩‍🎓 Total Students", grand_total)
+            m3.metric("👦 Boys", grand_boys)
+            m4.metric("👧 Girls", grand_girls)
+
+            st.markdown("#### 🏛️ School Infrastructure & Category")
+            i1, i2, i3, i4 = st.columns(4)
+            i1.metric("🏛️ Government Schools", govt_count)
+            i2.metric("🏢 Private Schools", pvt_count)
+            i3.metric("🎒 Primary Schools", primary_count)
+            i4.metric("🎓 High Schools", high_count)
+
+            st.divider()
+            st.markdown("#### 📚 Detailed Standard-Wise & Gender-Wise Matrix")
+
+            # --- DETAILED MATRIX GENERATION ---
+            summary_data = []
             class_prefixes = ['BV', 'CLS1', 'CLS2', 'CLS3', 'CLS4', 'CLS5', 'CLS6', 'CLS7', 'CLS8', 'CLS9', 'CLS10', 'CLS11', 'CLS12']
             class_names = ['Bal Vatika', 'Class 1', 'Class 2', 'Class 3', 'Class 4', 'Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10', 'Class 11', 'Class 12']
-            breakdown_list = []
-            
-            for prefix, readable_name in zip(class_prefixes, class_names):
-                total_val = str(s_data.get(f'Total_{prefix}', '0')).strip()
-                if total_val not in ['0', '0.0', 'nan', '', 'None']:
-                    breakdown_list.append({
-                        "Standard": readable_name,
-                        "Boys": str(s_data.get(f'{prefix}_B', '0')),
-                        "Girls": str(s_data.get(f'{prefix}_G', '0')),
-                        "Transgender": str(s_data.get(f'{prefix}_TG', '0')),
-                        "Total Students": total_val
-                    })
-            
-            if breakdown_list:
-                df_breakdown = pd.DataFrame(breakdown_list)
-                st.dataframe(df_breakdown, use_container_width=True, hide_index=True)
-            else:
-                st.warning("No student demographic data is currently available for this school.")
-    else:
-        st.error("⚠️ Could not load data from the 'ALL SCHOOL DETAILS' tab.")
 
+            for _, row in filtered_school_df.iterrows():
+                row_data = {
+                    "PHC": str(row.get('PHC', 'N/A')).strip(),
+                    "School Name": str(row.get('School', 'N/A')).strip(),
+                    "Category": str(row.get('GOVT/PRIVATE', 'N/A')).strip(),
+                    "Type": str(row.get('PRIMARY/HIGH SCHOOL', 'N/A')).strip(),
+                    "Total Boys": safe_int(row.get('TOTAL BOYS', 0)),
+                    "Total Girls": safe_int(row.get('TOTAL GIRLS', 0)),
+                    "Total Students": safe_int(row.get('TOTAL', 0))
+                }
+                
+                # Append gender-wise breakdown for EVERY standard!
+                for prefix, name in zip(class_prefixes, class_names):
+                    row_data[f"{name} (Boys)"] = safe_int(row.get(f'{prefix}_B', 0))
+                    row_data[f"{name} (Girls)"] = safe_int(row.get(f'{prefix}_G', 0))
+                    row_data[f"{name} (Total)"] = safe_int(row.get(f'Total_{prefix}', 0))
+                    
+                summary_data.append(row_data)
+
+            if summary_data:
+                summary_df = pd.DataFrame(summary_data).sort_values(by=["PHC", "School Name"])
+                
+                import datetime
+                csv_summary = summary_df.to_csv(index=False).encode('utf-8-sig')
+                st.download_button(
+                    label="⬇️ Download School Matrix Summary (CSV)",
+                    data=csv_summary,
+                    file_name=f"School_Matrix_Summary_{datetime.date.today()}.csv",
+                    mime="text/csv"
+                )
+                
+                st.dataframe(summary_df, use_container_width=True, hide_index=True)
+        else:
+            st.error("⚠️ Could not load data from the 'ALL SCHOOL DETAILS' tab.")
 # ==========================================
 # MODULE 9: ANGANWADI DIRECTORY 
 # ==========================================
