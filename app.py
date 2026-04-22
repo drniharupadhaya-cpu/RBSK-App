@@ -2483,7 +2483,6 @@ elif menu == "12. Automated State Report":
         gender_col = find_col(df_combined, ['gender', 'sex'])
         disease_col = find_col(df_combined, ['disease', '4d', 'defect'])
         status_col = find_col(df_combined, ['status', 'sam', 'mam'])
-        # Necessary for the Scoreboard Backtracking
         inst_col_daily = find_col(df_combined, ['inst', 'school', 'center', 'awc'])
 
         if date_col and dob_col:
@@ -2622,7 +2621,6 @@ elif menu == "12. Automated State Report":
                 export_df['Govt Age Bucket'] = report_df['Govt_Age_Bucket']
                 export_df['Gender'] = report_df['Clean_Gender']
                 
-                # 🚀 NEW FEATURE: Extract Height, Weight, Hb, and MUAC securely across both datasets
                 def get_merged_col(df, keywords):
                     matched_cols = [c for c in df.columns if any(k in str(c).lower() for k in keywords)]
                     if not matched_cols: return None
@@ -2645,7 +2643,6 @@ elif menu == "12. Automated State Report":
                 if disease_col: export_df['4D Condition Found'] = report_df[disease_col]
 
                 with st.expander("👁️ Preview Streamlined CSV Data"):
-                    # 🚀 NEW FEATURE: Institution Filter
                     unique_institutions = sorted(list(set([str(i).strip() for i in export_df['Institution'].dropna() if str(i).strip() != ""])))
                     selected_inst = st.selectbox("🏢 Filter by Institution (Optional):", ["All Institutions"] + unique_institutions, key="preview_filter")
                     
@@ -2666,15 +2663,14 @@ elif menu == "12. Automated State Report":
             st.info("No valid daily screening data found yet to generate Form III. Start screening in Module 2!")
 
     # ==========================================
-    # 🎯 TAB 2: LIVE SCOREBOARD (CYCLE MATH & DEMOGRAPHIC MATRIX)
+    # 🎯 TAB 2: LIVE SCOREBOARD (MASTER TALUKA + GRANULAR MATRIX)
     # ==========================================
     with tab_scoreboard:
         st.subheader("🏆 Team-wise Performance Command Center")
         st.markdown("**Block:** Visavadar | **District:** Junagadh")
 
         try:
-            with st.spinner("Calculating Cycles, Demographics, and Backtracking Achievements..."):
-                # 1. FETCH MASTER SHEETS (For Targets)
+            with st.spinner("Calculating Taluka Matrix, Cycles, and Achievements..."):
                 master_aw = pd.DataFrame(spreadsheet.worksheet("aw new data").get_all_records())
                 master_sch = pd.DataFrame(spreadsheet.worksheet("1240315 ALL STUDENTS NAMES").get_all_records())
 
@@ -2698,13 +2694,15 @@ elif menu == "12. Automated State Report":
                 if sch_loc_key and sch_team_key:
                     team_lookup.update(dict(zip(master_sch[sch_loc_key].astype(str).str.strip(), master_sch[sch_team_key].astype(str).str.strip())))
 
-                # Process Daily Achievements (Needs Age Calculation for Matrix)
+                # Process Daily Achievements
                 if not df_combined.empty and inst_col_daily and date_col:
                     df_combined['Mapped_Team'] = df_combined[inst_col_daily].astype(str).str.strip().map(team_lookup)
                     df_combined['Screening_Month'] = df_combined[date_col].dt.month
-                    # Cycle 1: April (4) to Sept (9)
+                    
+                    # Cycle Logic
                     df_combined['Cycle'] = df_combined['Screening_Month'].apply(lambda m: 'Cycle 1' if 4 <= m <= 9 else 'Cycle 2')
                     
+                    # Age Calculation for precise bucketing
                     if dob_col:
                         df_combined['_age'] = (df_combined[date_col] - df_combined[dob_col]).dt.days / 365.25
                     else:
@@ -2715,98 +2713,122 @@ elif menu == "12. Automated State Report":
                     else:
                         df_combined['_g'] = 'U'
 
-                # 2. EVALUATE EACH TEAM
-                for t_id in ["TEAM-1240315", "TEAM-1240309"]:
-                    st.divider()
-                    st.markdown(f"### 🚀 Team: {t_id}")
+                # Data Dictionary to hold all processed stats
+                stats = {}
+                team_ids = ["TEAM-1240315", "TEAM-1240309"]
+
+                for t_id in team_ids:
+                    stats[t_id] = {
+                        "tgt_aw_base": 0, "tgt_sch_base": 0,
+                        "tgt_aw_0_6m_M": 0, "tgt_aw_0_6m_F": 0,
+                        "tgt_aw_6m_3y_M": 0, "tgt_aw_6m_3y_F": 0,
+                        "tgt_aw_3_6y_M": 0, "tgt_aw_3_6y_F": 0,
+                        "tgt_sch_M": 0, "tgt_sch_F": 0,
+                        
+                        "ach_c1_aw": 0, "ach_c2_aw": 0, "ach_sch": 0,
+                        "ach_aw_0_6m_M": 0, "ach_aw_0_6m_F": 0,
+                        "ach_aw_6m_3y_M": 0, "ach_aw_6m_3y_F": 0,
+                        "ach_aw_3_6y_M": 0, "ach_aw_3_6y_F": 0,
+                        "ach_sch_M": 0, "ach_sch_F": 0
+                    }
                     
-                    # --- TARGET CALCULATIONS ---
-                    aw_base = 0; aw_boys = 0; aw_girls = 0
-                    aw_0_6m = 0; aw_6m_3y = 0; aw_3_6y = 0
-                    
+                    # --- 1. PROCESS TARGETS ---
                     if aw_team_key:
-                        t_aw_df = master_aw[master_aw[aw_team_key].astype(str).str.strip() == t_id]
-                        aw_base = len(t_aw_df)
-                        if aw_gender_key:
-                            aw_boys = len(t_aw_df[t_aw_df[aw_gender_key].astype(str).str.upper().str.startswith('M')])
-                            aw_girls = len(t_aw_df[t_aw_df[aw_gender_key].astype(str).str.upper().str.startswith('F')])
-                        if aw_beneficiary_key:
-                            aw_0_6m = len(t_aw_df[t_aw_df[aw_beneficiary_key].astype(str).str.lower().str.strip() == 'children_0m_6m'])
-                            aw_6m_3y = len(t_aw_df[t_aw_df[aw_beneficiary_key].astype(str).str.lower().str.strip() == 'children_6m_3y'])
-                            aw_3_6y = len(t_aw_df[t_aw_df[aw_beneficiary_key].astype(str).str.lower().str.strip() == 'children_3y_6y'])
+                        t_aw_df = master_aw[master_aw[aw_team_key].astype(str).str.strip() == t_id].copy()
+                        stats[t_id]["tgt_aw_base"] = len(t_aw_df)
+                        
+                        if aw_gender_key and aw_beneficiary_key:
+                            is_M = t_aw_df[aw_gender_key].astype(str).str.upper().str.startswith('M')
+                            is_F = t_aw_df[aw_gender_key].astype(str).str.upper().str.startswith('F')
+                            b_type = t_aw_df[aw_beneficiary_key].astype(str).str.lower().str.strip()
                             
-                    sch_base = 0; sch_boys = 0; sch_girls = 0
+                            stats[t_id]["tgt_aw_0_6m_M"] = len(t_aw_df[(b_type == 'children_0m_6m') & is_M]) * 2
+                            stats[t_id]["tgt_aw_0_6m_F"] = len(t_aw_df[(b_type == 'children_0m_6m') & is_F]) * 2
+                            stats[t_id]["tgt_aw_6m_3y_M"] = len(t_aw_df[(b_type == 'children_6m_3y') & is_M]) * 2
+                            stats[t_id]["tgt_aw_6m_3y_F"] = len(t_aw_df[(b_type == 'children_6m_3y') & is_F]) * 2
+                            stats[t_id]["tgt_aw_3_6y_M"] = len(t_aw_df[(b_type == 'children_3y_6y') & is_M]) * 2
+                            stats[t_id]["tgt_aw_3_6y_F"] = len(t_aw_df[(b_type == 'children_3y_6y') & is_F]) * 2
+
                     if sch_team_key:
-                        t_sch_df = master_sch[master_sch[sch_team_key].astype(str).str.strip() == t_id]
-                        sch_base = len(t_sch_df)
+                        t_sch_df = master_sch[master_sch[sch_team_key].astype(str).str.strip() == t_id].copy()
+                        stats[t_id]["tgt_sch_base"] = len(t_sch_df)
+                        
                         if sch_gender_key:
-                            sch_boys = len(t_sch_df[t_sch_df[sch_gender_key].astype(str).str.upper().str.startswith('M')])
-                            sch_girls = len(t_sch_df[t_sch_df[sch_gender_key].astype(str).str.upper().str.startswith('F')])
+                            stats[t_id]["tgt_sch_M"] = len(t_sch_df[t_sch_df[sch_gender_key].astype(str).str.upper().str.startswith('M')])
+                            stats[t_id]["tgt_sch_F"] = len(t_sch_df[t_sch_df[sch_gender_key].astype(str).str.upper().str.startswith('F')])
 
-                    # CORE MATH: Anganwadi cycles x2, School cycles x1
-                    total_annual_target = (aw_base * 2) + sch_base
-                    total_boys_target = (aw_boys * 2) + sch_boys
-                    total_girls_target = (aw_girls * 2) + sch_girls
-
-                    # --- ACHIEVEMENT CALCULATIONS ---
-                    ach_c1_aw = 0; ach_c2_aw = 0; ach_sch = 0
-                    ach_aw_boys = 0; ach_aw_girls = 0; ach_sch_boys = 0; ach_sch_girls = 0
-                    ach_aw_0_6m = 0; ach_aw_6m_3y = 0; ach_aw_3_6y = 0
-                    
+                    # --- 2. PROCESS ACHIEVEMENTS ---
                     if not df_combined.empty and inst_col_daily:
-                        t_daily = df_combined[df_combined['Mapped_Team'] == t_id]
+                        t_daily = df_combined[df_combined['Mapped_Team'] == t_id].copy()
                         
+                        # AW Logic
                         t_aw_daily = t_daily[t_daily['Source'] == 'Anganwadi']
-                        ach_c1_aw = len(t_aw_daily[t_aw_daily['Cycle'] == 'Cycle 1'])
-                        ach_c2_aw = len(t_aw_daily[t_aw_daily['Cycle'] == 'Cycle 2'])
+                        stats[t_id]["ach_c1_aw"] = len(t_aw_daily[t_aw_daily['Cycle'] == 'Cycle 1'])
+                        stats[t_id]["ach_c2_aw"] = len(t_aw_daily[t_aw_daily['Cycle'] == 'Cycle 2'])
                         
-                        ach_aw_boys = len(t_aw_daily[t_aw_daily['_g'] == 'M'])
-                        ach_aw_girls = len(t_aw_daily[t_aw_daily['_g'] == 'F'])
-                        ach_aw_0_6m = len(t_aw_daily[t_aw_daily['_age'] <= 0.5])
-                        ach_aw_6m_3y = len(t_aw_daily[(t_aw_daily['_age'] > 0.5) & (t_aw_daily['_age'] <= 3.0)])
-                        ach_aw_3_6y = len(t_aw_daily[(t_aw_daily['_age'] > 3.0) & (t_aw_daily['_age'] <= 6.0)])
-                        
-                        t_sch_daily = t_daily[t_daily['Source'] == 'School']
-                        ach_sch = len(t_sch_daily)
-                        ach_sch_boys = len(t_sch_daily[t_sch_daily['_g'] == 'M'])
-                        ach_sch_girls = len(t_sch_daily[t_sch_daily['_g'] == 'F'])
+                        stats[t_id]["ach_aw_0_6m_M"] = len(t_aw_daily[(t_aw_daily['_age'] <= 0.5) & (t_aw_daily['_g'] == 'M')])
+                        stats[t_id]["ach_aw_0_6m_F"] = len(t_aw_daily[(t_aw_daily['_age'] <= 0.5) & (t_aw_daily['_g'] == 'F')])
+                        stats[t_id]["ach_aw_6m_3y_M"] = len(t_aw_daily[(t_aw_daily['_age'] > 0.5) & (t_aw_daily['_age'] <= 3.0) & (t_aw_daily['_g'] == 'M')])
+                        stats[t_id]["ach_aw_6m_3y_F"] = len(t_aw_daily[(t_aw_daily['_age'] > 0.5) & (t_aw_daily['_age'] <= 3.0) & (t_aw_daily['_g'] == 'F')])
+                        stats[t_id]["ach_aw_3_6y_M"] = len(t_aw_daily[(t_aw_daily['_age'] > 3.0) & (t_aw_daily['_age'] <= 6.0) & (t_aw_daily['_g'] == 'M')])
+                        stats[t_id]["ach_aw_3_6y_F"] = len(t_aw_daily[(t_aw_daily['_age'] > 3.0) & (t_aw_daily['_age'] <= 6.0) & (t_aw_daily['_g'] == 'F')])
 
-                    total_achieved = ach_c1_aw + ach_c2_aw + ach_sch
-                    total_ach_boys = ach_aw_boys + ach_sch_boys
-                    total_ach_girls = ach_aw_girls + ach_sch_girls
+                        # SCHOOL Logic (Includes the special March 2026 Exception!)
+                        # Valid School Dates: Anything from March 1, 2026 onwards
+                        t_sch_daily = t_daily[(t_daily['Source'] == 'School') & (t_daily[date_col] >= '2026-03-01')]
+                        stats[t_id]["ach_sch"] = len(t_sch_daily)
+                        stats[t_id]["ach_sch_M"] = len(t_sch_daily[t_sch_daily['_g'] == 'M'])
+                        stats[t_id]["ach_sch_F"] = len(t_sch_daily[t_sch_daily['_g'] == 'F'])
 
+                # --- 3. AGGREGATE GRAND TALUKA DATA ---
+                taluka = {k: sum(stats[t][k] for t in team_ids) for k in stats[team_ids[0]].keys()}
+                
+                def render_dashboard(title, data, is_taluka=False):
+                    total_annual_target = (data["tgt_aw_base"] * 2) + data["tgt_sch_base"]
+                    total_achieved = data["ach_c1_aw"] + data["ach_c2_aw"] + data["ach_sch"]
                     overall_pct = (total_achieved / total_annual_target * 100) if total_annual_target > 0 else 0
+                    
+                    if is_taluka:
+                        st.markdown(f"## 🌟 {title}")
+                    else:
+                        st.divider()
+                        st.markdown(f"### 🚀 {title}")
 
-                    # --- UI RENDERING ---
-                    st.markdown("#### 🏆 Grand Annual Summary")
+                    # Header Metrics
                     sc1, sc2, sc3 = st.columns(3)
-                    sc1.metric("Grand Annual Target", f"{total_annual_target:,}", help=f"Anganwadi ({aw_base} x 2 Cycles) + School ({sch_base})")
+                    sc1.metric("Grand Annual Target", f"{total_annual_target:,}", help=f"AW ({data['tgt_aw_base']} x 2) + Sch ({data['tgt_sch_base']})")
                     sc2.metric("Total Achieved", f"{total_achieved:,}", delta=f"{total_achieved - total_annual_target} Remaining")
                     sc3.metric("Overall Completion", f"{overall_pct:.2f}%")
                     st.progress(min(overall_pct / 100.0, 1.0))
 
-                    st.markdown("#### 📈 Source-Wise Progress")
+                    # Sub-Metrics
                     s1, s2, s3 = st.columns(3)
-                    s1.info(f"**🏫 Schools (1x Cycle)**\n\nTarget: **{sch_base}**\n\nAchieved: **{ach_sch}**")
-                    s2.success(f"**👶 Anganwadi (Cycle 1: Apr-Sep)**\n\nTarget: **{aw_base}**\n\nAchieved: **{ach_c1_aw}**")
-                    s3.warning(f"**👶 Anganwadi (Cycle 2: Oct-Mar)**\n\nTarget: **{aw_base}**\n\nAchieved: **{ach_c2_aw}**")
+                    s1.info(f"**🏫 Schools (1x Cycle)**\n\nTarget: **{data['tgt_sch_base']}**\n\nAchieved: **{data['ach_sch']}**")
+                    s2.success(f"**👶 AW (Cycle 1: Apr-Sep)**\n\nTarget: **{data['tgt_aw_base']}**\n\nAchieved: **{data['ach_c1_aw']}**")
+                    s3.warning(f"**👶 AW (Cycle 2: Oct-Mar)**\n\nTarget: **{data['tgt_aw_base']}**\n\nAchieved: **{data['ach_c2_aw']}**")
 
-                    # Demographic Matrix Comparison
-                    with st.expander("📊 View Detailed Target vs. Achievement Matrix"):
+                    # Deep Demographic Matrix
+                    with st.expander(f"📊 View Age & Gender Matrix for {title}"):
                         matrix_data = [
-                            {"Metric": "👦 Total Boys", "Annual Target": total_boys_target, "Total Achieved": total_ach_boys},
-                            {"Metric": "👧 Total Girls", "Annual Target": total_girls_target, "Total Achieved": total_ach_girls},
-                            {"Metric": "🍼 AW: 0 - 6 Months", "Annual Target": (aw_0_6m * 2), "Total Achieved": ach_aw_0_6m},
-                            {"Metric": "👶 AW: 6 Months - 3 Years", "Annual Target": (aw_6m_3y * 2), "Total Achieved": ach_aw_6m_3y},
-                            {"Metric": "🧒 AW: 3 - 6 Years", "Annual Target": (aw_3_6y * 2), "Total Achieved": ach_aw_3_6y},
-                            {"Metric": "🎓 Schools: 6 - 18 Years", "Annual Target": sch_base, "Total Achieved": ach_sch}
+                            {"Metric": "🍼 AW: 0 - 6 Months (Boys)", "Annual Target": data["tgt_aw_0_6m_M"], "Achieved": data["ach_aw_0_6m_M"]},
+                            {"Metric": "🍼 AW: 0 - 6 Months (Girls)", "Annual Target": data["tgt_aw_0_6m_F"], "Achieved": data["ach_aw_0_6m_F"]},
+                            {"Metric": "👶 AW: 6M - 3 Years (Boys)", "Annual Target": data["tgt_aw_6m_3y_M"], "Achieved": data["ach_aw_6m_3y_M"]},
+                            {"Metric": "👶 AW: 6M - 3 Years (Girls)", "Annual Target": data["tgt_aw_6m_3y_F"], "Achieved": data["ach_aw_6m_3y_F"]},
+                            {"Metric": "🧒 AW: 3 - 6 Years (Boys)", "Annual Target": data["tgt_aw_3_6y_M"], "Achieved": data["ach_aw_3_6y_M"]},
+                            {"Metric": "🧒 AW: 3 - 6 Years (Girls)", "Annual Target": data["tgt_aw_3_6y_F"], "Achieved": data["ach_aw_3_6y_F"]},
+                            {"Metric": "🎓 Schools: 6 - 18 Years (Boys)", "Annual Target": data["tgt_sch_M"], "Achieved": data["ach_sch_M"]},
+                            {"Metric": "🎓 Schools: 6 - 18 Years (Girls)", "Annual Target": data["tgt_sch_F"], "Achieved": data["ach_sch_F"]}
                         ]
                         
                         df_matrix = pd.DataFrame(matrix_data)
-                        df_matrix['% Completed'] = (df_matrix['Total Achieved'] / df_matrix['Annual Target'] * 100).fillna(0).round(1).astype(str) + "%"
-                        
+                        df_matrix['% Completed'] = (df_matrix['Achieved'] / df_matrix['Annual Target'] * 100).fillna(0).round(1).astype(str) + "%"
                         st.dataframe(df_matrix, use_container_width=True, hide_index=True)
-            
+
+                # --- 4. EXECUTE UI RENDERING ---
+                render_dashboard("TALUKA GRAND SUMMARY (ALL TEAMS)", taluka, is_taluka=True)
+                for t_id in team_ids:
+                    render_dashboard(f"Team: {t_id}", stats[t_id])
+
         except Exception as e:
             st.error(f"❌ Scoreboard Error: {e}")
 # ==========================================
