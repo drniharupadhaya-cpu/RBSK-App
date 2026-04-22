@@ -1961,12 +1961,37 @@ elif menu == "9. Anganwadi Directory":
         st.write("A complete numerical breakdown of all Anganwadi centers dynamically generated from your Master Database.")
         
         if not df_aw.empty and 'AWC Name' in df_aw.columns:
-            summary_data = []
-            gender_col = next((c for c in df_aw.columns if str(c).lower() == 'gender'), None)
             
-            # Loop through every unique Anganwadi and count the children!
-            for awc in df_aw['AWC Name'].dropna().unique():
-                aw_data = df_aw[df_aw['AWC Name'] == awc]
+            # 🚀 NEW: Dynamically find the Sector column (Column E / index 4)
+            sector_col = None
+            for col in df_aw.columns:
+                if 'sector' in str(col).lower():
+                    sector_col = col
+                    break
+            # Fallback: if 'sector' isn't in the column header name, grab the 5th column (Index 4)
+            if not sector_col and len(df_aw.columns) >= 5:
+                sector_col = df_aw.columns[4]
+
+            # 🚀 NEW: Sector Filter UI
+            selected_sector = "All Sectors"
+            if sector_col:
+                sector_list = sorted([str(x) for x in df_aw[sector_col].unique() if str(x).strip() not in ['', 'nan', 'None']])
+                selected_sector = st.selectbox("🎯 Filter by Sector:", ["All Sectors"] + sector_list)
+                
+                if selected_sector != "All Sectors":
+                    filtered_aw_df = df_aw[df_aw[sector_col].astype(str).str.strip() == selected_sector]
+                else:
+                    filtered_aw_df = df_aw
+            else:
+                filtered_aw_df = df_aw
+                st.warning("⚠️ Sector column (Column E) could not be identified.")
+
+            summary_data = []
+            gender_col = next((c for c in filtered_aw_df.columns if str(c).lower() == 'gender'), None)
+            
+            # Loop through every unique Anganwadi in the FILTERED dataset and count!
+            for awc in filtered_aw_df['AWC Name'].dropna().unique():
+                aw_data = filtered_aw_df[filtered_aw_df['AWC Name'] == awc]
                 total = len(aw_data)
                 
                 if gender_col:
@@ -1974,8 +1999,12 @@ elif menu == "9. Anganwadi Directory":
                     girls = len(aw_data[aw_data[gender_col].astype(str).str.upper().str.startswith('F')])
                 else:
                     boys, girls = 0, 0
-                    
+                
+                # Extract Sector Name for the table row
+                awc_sector = aw_data[sector_col].iloc[0] if sector_col and not aw_data.empty else "N/A"
+                
                 summary_data.append({
+                    "Sector": str(awc_sector).strip(),
                     "Anganwadi Center": str(awc).strip(),
                     "Total Children": total,
                     "👦 Boys": boys,
@@ -1983,28 +2012,38 @@ elif menu == "9. Anganwadi Directory":
                 })
             
             if summary_data:
-                summary_df = pd.DataFrame(summary_data).sort_values(by="Anganwadi Center")
+                summary_df = pd.DataFrame(summary_data).sort_values(by=["Sector", "Anganwadi Center"])
                 
-                # Calculate Grand Totals for the header
+                # Calculate Grand Totals for the dynamic header metrics
                 total_all = summary_df['Total Children'].sum()
                 total_boys = summary_df['👦 Boys'].sum()
                 total_girls = summary_df['👧 Girls'].sum()
+                total_awcs = summary_df['Anganwadi Center'].nunique()
                 
-                st.info(f"🏆 **Grand Total Block Enrollment:** {total_all} Children ({total_boys} Boys | {total_girls} Girls)")
+                st.divider()
+                st.markdown(f"### 🏆 Metrics for: {selected_sector}")
+                
+                # The visual metrics layout
+                m1, m2, m3, m4 = st.columns(4)
+                m1.metric("🏠 Anganwadis", total_awcs)
+                m2.metric("👶 Total Children", total_all)
+                m3.metric("👦 Boys", total_boys)
+                m4.metric("👧 Girls", total_girls)
+                
+                st.divider()
                 
                 import datetime
                 csv_summary = summary_df.to_csv(index=False).encode('utf-8-sig')
                 st.download_button(
-                    label="⬇️ Download Master Summary (CSV)",
+                    label="⬇️ Download Sector Summary (CSV)",
                     data=csv_summary,
-                    file_name=f"Anganwadi_Master_Summary_{datetime.date.today()}.csv",
+                    file_name=f"Anganwadi_Sector_Summary_{datetime.date.today()}.csv",
                     mime="text/csv"
                 )
                 
                 st.dataframe(summary_df, use_container_width=True, hide_index=True)
         else:
             st.info("⚠️ No enrollment data available in the master database to generate a summary.")
-
 # ==========================================
 # MODULE 10: STAFF DIRECTORY
 # ==========================================
