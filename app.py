@@ -2475,6 +2475,33 @@ elif menu == "12. Automated State Report":
 
     tab_form3, tab_scoreboard = st.tabs(["📄 Form III (Govt Export)", "🎯 Live Scoreboard (Target vs. Achievement)"])
 
+    # 🚀 NEW: Fetch Master Mapping globally so both tabs run lightning fast!
+    with st.spinner("Synchronizing Master Team Databases..."):
+        try:
+            master_aw = pd.DataFrame(spreadsheet.worksheet("aw new data").get_all_records())
+            master_sch = pd.DataFrame(spreadsheet.worksheet("1240315 ALL STUDENTS NAMES").get_all_records())
+        except:
+            master_aw = pd.DataFrame()
+            master_sch = pd.DataFrame()
+
+        def find_m_col(df, keys):
+            return next((c for c in df.columns if any(k in str(c).upper() for k in keys)), None)
+
+        aw_loc_key = find_m_col(master_aw, ["INSTITUTE", "AWC", "CENTER", "AWC NAME"])
+        aw_team_key = find_m_col(master_aw, ["TEAM"])
+        aw_gender_key = find_m_col(master_aw, ["GENDER", "SEX"])
+        aw_beneficiary_key = find_m_col(master_aw, ["BENEFICIARY TYPE"])
+
+        sch_loc_key = find_m_col(master_sch, ["INSTITUTION", "SCHOOL"])
+        sch_team_key = find_m_col(master_sch, ["TEAM"])
+        sch_gender_key = find_m_col(master_sch, ["GENDER", "SEX"])
+
+        team_lookup = {}
+        if aw_loc_key and aw_team_key:
+            team_lookup.update(dict(zip(master_aw[aw_loc_key].astype(str).str.strip(), master_aw[aw_team_key].astype(str).str.strip())))
+        if sch_loc_key and sch_team_key:
+            team_lookup.update(dict(zip(master_sch[sch_loc_key].astype(str).str.strip(), master_sch[sch_team_key].astype(str).str.strip())))
+
     df_aw_daily, df_sch_daily, df_combined = get_daily_logs()
 
     if not df_aw_daily.empty or not df_sch_daily.empty:
@@ -2494,7 +2521,6 @@ elif menu == "12. Automated State Report":
         disease_col = find_col(df_combined, ['disease', '4d', 'defect'])
         status_col = find_col(df_combined, ['status', 'sam', 'mam'])
         
-        # 🚀 FIX: Unify the Institution Columns immediately so both Schools and AW map perfectly!
         inst_name_cols = [c for c in df_combined.columns if any(k in str(c).lower() for k in ['inst', 'school', 'awc', 'center', 'aw name', 'anganwadi'])]
         if inst_name_cols:
             df_combined['Official_Institution'] = df_combined[inst_name_cols[0]]
@@ -2503,6 +2529,9 @@ elif menu == "12. Automated State Report":
         else:
             df_combined['Official_Institution'] = "Unknown"
 
+        # 🚀 Map Teams Globally
+        df_combined['Mapped_Team'] = df_combined['Official_Institution'].astype(str).str.strip().map(team_lookup).fillna("Unassigned")
+
         if date_col and dob_col:
             df_combined[date_col] = df_combined[date_col].astype(str).str.strip()
             df_combined[dob_col] = df_combined[dob_col].astype(str).str.strip()
@@ -2510,14 +2539,13 @@ elif menu == "12. Automated State Report":
             df_combined[date_col] = df_combined[date_col].str.replace('/', '-').str.replace('.', '-', regex=False)
             df_combined[dob_col] = df_combined[dob_col].str.replace('/', '-').str.replace('.', '-', regex=False)
             
-            # 🚀 Date parsing that handles YYYY-MM-DD smoothly
             df_combined[date_col] = pd.to_datetime(df_combined[date_col], dayfirst=True, format='mixed', errors='coerce')
             df_combined[dob_col] = pd.to_datetime(df_combined[dob_col], dayfirst=True, format='mixed', errors='coerce')
             
             df_combined = df_combined.dropna(subset=[date_col])
 
     # ==========================================
-    # 📄 TAB 1: FORM III
+    # 📄 TAB 1: FORM III (TEAM-WISE)
     # ==========================================
     with tab_form3:
         if not df_combined.empty and date_col and dob_col:
@@ -2566,64 +2594,77 @@ elif menu == "12. Automated State Report":
                 else:
                     report_df['Clean_Gender'] = "U"
 
-                st.markdown(f"### 📊 Official Form III Output: **{selected_month} {selected_year}**")
-                st.write(f"Total Children Screened this month: **{len(report_df)}**")
-
-                col_0_3, col_3_6, col_6_18 = st.columns(3)
-                
-                def render_bucket_stats(bucket_name, column_ui):
-                    bucket_data = report_df[report_df['Govt_Age_Bucket'] == bucket_name]
-                    boys = len(bucket_data[bucket_data['Clean_Gender'] == 'M'])
-                    girls = len(bucket_data[bucket_data['Clean_Gender'] == 'F'])
-                    
-                    with column_ui:
-                        st.info(f"**{bucket_name}**")
-                        st.metric("Total", len(bucket_data))
-                        st.write(f"👦 Boys: **{boys}**")
-                        st.write(f"👧 Girls: **{girls}**")
-                
-                render_bucket_stats("0-3 Years", col_0_3)
-                render_bucket_stats("3-6 Years", col_3_6)
-                render_bucket_stats("6-18 Years", col_6_18)
+                st.markdown(f"## 📊 Official Form III Output: **{selected_month} {selected_year}**")
+                st.write(f"Total Children Screened (Entire Block): **{len(report_df)}**")
 
                 unknown_count = len(report_df[report_df['Govt_Age_Bucket'] == 'Unknown'])
                 if unknown_count > 0:
                     st.warning(f"⚠️ **DATA ALERT:** There are **{unknown_count} children** with a missing or invalid Date of Birth. They cannot be sorted into the age buckets.")
 
                 st.divider()
-                st.markdown("### 🚨 Disease & Malnutrition Referrals")
+
+                # 🚀 NEW: Split Form III by Team!
+                teams_to_show = ["TEAM-1240315", "TEAM-1240309", "Unassigned"]
                 
-                m1, m2 = st.columns(2)
-                with m1:
-                    st.write("**Nutritional Triage**")
-                    if status_col:
-                        sam_count = len(report_df[report_df[status_col].astype(str).str.upper() == 'SAM'])
-                        mam_count = len(report_df[report_df[status_col].astype(str).str.upper() == 'MAM'])
-                        st.error(f"🔴 SAM Cases: **{sam_count}**")
-                        st.warning(f"🟡 MAM Cases: **{mam_count}**")
-                    else:
-                        st.write("No nutrition status column found.")
+                for team in teams_to_show:
+                    team_df = report_df[report_df['Mapped_Team'] == team]
+                    if team_df.empty and team == "Unassigned":
+                        continue # Hide Unassigned if empty
                         
-                with m2:
-                    st.write("**4D Conditions Found**")
-                    if disease_col:
-                        def is_real_disease(val):
-                            clean = str(val).strip().lower()
-                            return clean not in ['', 'nan', 'none', 'no', 'null', 'na', 'false']
-                            
-                        diseases = report_df[report_df[disease_col].apply(is_real_disease)]
-                        if not diseases.empty:
-                            disease_counts = diseases[disease_col].value_counts().reset_index()
-                            disease_counts.columns = ['Condition', 'Count']
-                            st.dataframe(disease_counts, use_container_width=True, hide_index=True)
+                    st.markdown(f"### 🏥 {team}")
+                    st.write(f"Total Screened by this team: **{len(team_df)}**")
+
+                    col_0_3, col_3_6, col_6_18 = st.columns(3)
+                    
+                    def render_team_bucket(bucket_name, column_ui, t_df):
+                        b_data = t_df[t_df['Govt_Age_Bucket'] == bucket_name]
+                        boys = len(b_data[b_data['Clean_Gender'] == 'M'])
+                        girls = len(b_data[b_data['Clean_Gender'] == 'F'])
+                        with column_ui:
+                            st.info(f"**{bucket_name}**")
+                            st.metric("Total", len(b_data))
+                            st.write(f"👦 Boys: **{boys}**")
+                            st.write(f"👧 Girls: **{girls}**")
+                    
+                    render_team_bucket("0-3 Years", col_0_3, team_df)
+                    render_team_bucket("3-6 Years", col_3_6, team_df)
+                    render_team_bucket("6-18 Years", col_6_18, team_df)
+
+                    m1, m2 = st.columns(2)
+                    with m1:
+                        st.write("**Nutritional Triage**")
+                        if status_col:
+                            sam_count = len(team_df[team_df[status_col].astype(str).str.upper() == 'SAM'])
+                            mam_count = len(team_df[team_df[status_col].astype(str).str.upper() == 'MAM'])
+                            st.error(f"🔴 SAM Cases: **{sam_count}**")
+                            st.warning(f"🟡 MAM Cases: **{mam_count}**")
                         else:
-                            st.success("No 4D diseases logged this month!")
+                            st.write("No nutrition status column found.")
                             
-                st.divider()
+                    with m2:
+                        st.write("**4D Conditions Found**")
+                        if disease_col:
+                            def is_real_disease(val):
+                                clean = str(val).strip().lower()
+                                return clean not in ['', 'nan', 'none', 'no', 'null', 'na', 'false']
+                                
+                            t_diseases = team_df[team_df[disease_col].apply(is_real_disease)]
+                            if not t_diseases.empty:
+                                # 🚀 NEW: Advanced 4D Demographic Matrix
+                                d_counts = t_diseases.groupby([disease_col, 'Govt_Age_Bucket', 'Clean_Gender']).size().reset_index(name='Count')
+                                d_counts.columns = ['Condition', 'Age Group', 'Gender', 'Count']
+                                d_counts['Gender'] = d_counts['Gender'].map({'M': 'Boys', 'F': 'Girls', 'U': 'Unknown'}).fillna('Unknown')
+                                st.dataframe(d_counts, use_container_width=True, hide_index=True)
+                            else:
+                                st.success("No 4D diseases logged by this team!")
+                                
+                    st.divider()
+
                 st.markdown("### 📥 Download Cleaned Report")
                 
                 export_df = pd.DataFrame()
                 export_df['Screening Date'] = report_df[date_col].dt.strftime('%d-%m-%Y')
+                export_df['Assigned Team'] = report_df['Mapped_Team']  # 🚀 NEW: Added Team to CSV
                 export_df['Source'] = report_df['Source']
                 export_df['Institution'] = report_df['Official_Institution'] 
                 export_df['Child Name'] = report_df['Official_Child_Name']   
@@ -2682,33 +2723,10 @@ elif menu == "12. Automated State Report":
 
         try:
             with st.spinner("Calculating Taluka Matrix, Cycles, and Achievements..."):
-                master_aw = pd.DataFrame(spreadsheet.worksheet("aw new data").get_all_records())
-                master_sch = pd.DataFrame(spreadsheet.worksheet("1240315 ALL STUDENTS NAMES").get_all_records())
-
-                def find_m_col(df, keys):
-                    return next((c for c in df.columns if any(k in str(c).upper() for k in keys)), None)
-
-                aw_loc_key = find_m_col(master_aw, ["INSTITUTE", "AWC", "CENTER", "AWC NAME"])
-                aw_team_key = find_m_col(master_aw, ["TEAM"])
-                aw_gender_key = find_m_col(master_aw, ["GENDER", "SEX"])
-                aw_beneficiary_key = find_m_col(master_aw, ["BENEFICIARY TYPE"])
-
-                sch_loc_key = find_m_col(master_sch, ["INSTITUTION", "SCHOOL"])
-                sch_team_key = find_m_col(master_sch, ["TEAM"])
-                sch_gender_key = find_m_col(master_sch, ["GENDER", "SEX"])
-
-                # Build precise lookup mapping for daily logs
-                team_lookup = {}
-                if aw_loc_key and aw_team_key:
-                    team_lookup.update(dict(zip(master_aw[aw_loc_key].astype(str).str.strip(), master_aw[aw_team_key].astype(str).str.strip())))
-                if sch_loc_key and sch_team_key:
-                    team_lookup.update(dict(zip(master_sch[sch_loc_key].astype(str).str.strip(), master_sch[sch_team_key].astype(str).str.strip())))
-
-                # 🚀 Map using our newly combined Official_Institution column!
+                
+                # 🚀 Data already fetched and mapped globally at the top!
                 if not df_combined.empty and date_col:
-                    df_combined['Mapped_Team'] = df_combined['Official_Institution'].astype(str).str.strip().map(team_lookup)
                     df_combined['Screening_Month'] = df_combined[date_col].dt.month
-                    
                     df_combined['Cycle'] = df_combined['Screening_Month'].apply(lambda m: 'Cycle 1' if 4 <= m <= 9 else 'Cycle 2')
                     
                     if dob_col:
@@ -2777,7 +2795,6 @@ elif menu == "12. Automated State Report":
                         stats[t_id]["ach_aw_3_6y_M"] = len(t_aw_daily[(t_aw_daily['_age'] > 3.0) & (t_aw_daily['_age'] <= 6.0) & (t_aw_daily['_g'] == 'M')])
                         stats[t_id]["ach_aw_3_6y_F"] = len(t_aw_daily[(t_aw_daily['_age'] > 3.0) & (t_aw_daily['_age'] <= 6.0) & (t_aw_daily['_g'] == 'F')])
 
-                        # 🚀 School Logic with precise > 2026-03-01 filter!
                         t_sch_daily = t_daily[(t_daily['Source'] == 'School') & (t_daily[date_col] >= '2026-03-01')]
                         stats[t_id]["ach_sch"] = len(t_sch_daily)
                         stats[t_id]["ach_sch_M"] = len(t_sch_daily[t_sch_daily['_g'] == 'M'])
