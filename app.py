@@ -2462,7 +2462,8 @@ elif menu == "11. Annual FY Planner":
 elif menu == "12. Automated State Report":
     render_header("Automatic Report Generator", "Get real-time reports", "📅", "#f59e0b")
     st.write("Generate official Form III exports and track your team's annual targets.")
-# 🚀 NEW: Force Refresh Button for the Command Center
+
+    # 🚀 Force Refresh Button for the Command Center
     col_btn1, col_btn2 = st.columns([8, 2])
     with col_btn2:
         if st.button("🔄 Force Sync Latest Data"):
@@ -2471,6 +2472,7 @@ elif menu == "12. Automated State Report":
             import time
             time.sleep(0.5)
             st.rerun()
+
     tab_form3, tab_scoreboard = st.tabs(["📄 Form III (Govt Export)", "🎯 Live Scoreboard (Target vs. Achievement)"])
 
     df_aw_daily, df_sch_daily, df_combined = get_daily_logs()
@@ -2491,7 +2493,15 @@ elif menu == "12. Automated State Report":
         gender_col = find_col(df_combined, ['gender', 'sex'])
         disease_col = find_col(df_combined, ['disease', '4d', 'defect'])
         status_col = find_col(df_combined, ['status', 'sam', 'mam'])
-        inst_col_daily = find_col(df_combined, ['inst', 'school', 'center', 'awc'])
+        
+        # 🚀 FIX: Unify the Institution Columns immediately so both Schools and AW map perfectly!
+        inst_name_cols = [c for c in df_combined.columns if any(k in str(c).lower() for k in ['inst', 'school', 'awc', 'center', 'aw name', 'anganwadi'])]
+        if inst_name_cols:
+            df_combined['Official_Institution'] = df_combined[inst_name_cols[0]]
+            for col in inst_name_cols[1:]:
+                df_combined['Official_Institution'] = df_combined['Official_Institution'].combine_first(df_combined[col])
+        else:
+            df_combined['Official_Institution'] = "Unknown"
 
         if date_col and dob_col:
             df_combined[date_col] = df_combined[date_col].astype(str).str.strip()
@@ -2500,8 +2510,9 @@ elif menu == "12. Automated State Report":
             df_combined[date_col] = df_combined[date_col].str.replace('/', '-').str.replace('.', '-', regex=False)
             df_combined[dob_col] = df_combined[dob_col].str.replace('/', '-').str.replace('.', '-', regex=False)
             
-            df_combined[date_col] = pd.to_datetime(df_combined[date_col], dayfirst=True, errors='coerce')
-            df_combined[dob_col] = pd.to_datetime(df_combined[dob_col], dayfirst=True, errors='coerce')
+            # 🚀 Date parsing that handles YYYY-MM-DD smoothly
+            df_combined[date_col] = pd.to_datetime(df_combined[date_col], dayfirst=True, format='mixed', errors='coerce')
+            df_combined[dob_col] = pd.to_datetime(df_combined[dob_col], dayfirst=True, format='mixed', errors='coerce')
             
             df_combined = df_combined.dropna(subset=[date_col])
 
@@ -2539,14 +2550,6 @@ elif menu == "12. Automated State Report":
                         report_df['Official_Child_Name'] = report_df['Official_Child_Name'].combine_first(report_df[col])
                 else:
                     report_df['Official_Child_Name'] = "Unknown"
-
-                inst_name_cols = [c for c in report_df.columns if any(k in str(c).lower() for k in ['inst', 'school', 'awc', 'center', 'aw name'])]
-                if inst_name_cols:
-                    report_df['Official_Institution'] = report_df[inst_name_cols[0]]
-                    for col in inst_name_cols[1:]:
-                        report_df['Official_Institution'] = report_df['Official_Institution'].combine_first(report_df[col])
-                else:
-                    report_df['Official_Institution'] = "Unknown"
 
                 report_df['Age_Years'] = (report_df[date_col] - report_df[dob_col]).dt.days / 365.25
                 
@@ -2685,7 +2688,6 @@ elif menu == "12. Automated State Report":
                 def find_m_col(df, keys):
                     return next((c for c in df.columns if any(k in str(c).upper() for k in keys)), None)
 
-                # Locate keys
                 aw_loc_key = find_m_col(master_aw, ["INSTITUTE", "AWC", "CENTER", "AWC NAME"])
                 aw_team_key = find_m_col(master_aw, ["TEAM"])
                 aw_gender_key = find_m_col(master_aw, ["GENDER", "SEX"])
@@ -2695,33 +2697,30 @@ elif menu == "12. Automated State Report":
                 sch_team_key = find_m_col(master_sch, ["TEAM"])
                 sch_gender_key = find_m_col(master_sch, ["GENDER", "SEX"])
 
-                # Build lookup mapping for daily logs
+                # Build precise lookup mapping for daily logs
                 team_lookup = {}
                 if aw_loc_key and aw_team_key:
                     team_lookup.update(dict(zip(master_aw[aw_loc_key].astype(str).str.strip(), master_aw[aw_team_key].astype(str).str.strip())))
                 if sch_loc_key and sch_team_key:
                     team_lookup.update(dict(zip(master_sch[sch_loc_key].astype(str).str.strip(), master_sch[sch_team_key].astype(str).str.strip())))
 
-                # Process Daily Achievements
-                if not df_combined.empty and inst_col_daily and date_col:
-                    df_combined['Mapped_Team'] = df_combined[inst_col_daily].astype(str).str.strip().map(team_lookup)
+                # 🚀 Map using our newly combined Official_Institution column!
+                if not df_combined.empty and date_col:
+                    df_combined['Mapped_Team'] = df_combined['Official_Institution'].astype(str).str.strip().map(team_lookup)
                     df_combined['Screening_Month'] = df_combined[date_col].dt.month
                     
-                    # Cycle Logic
                     df_combined['Cycle'] = df_combined['Screening_Month'].apply(lambda m: 'Cycle 1' if 4 <= m <= 9 else 'Cycle 2')
                     
-                    # Age Calculation for precise bucketing
                     if dob_col:
                         df_combined['_age'] = (df_combined[date_col] - df_combined[dob_col]).dt.days / 365.25
                     else:
-                        df_combined['_age'] = 10.0 # Fallback
+                        df_combined['_age'] = 10.0 
                         
                     if gender_col:
                         df_combined['_g'] = df_combined[gender_col].astype(str).str.upper().str[0]
                     else:
                         df_combined['_g'] = 'U'
 
-                # Data Dictionary to hold all processed stats
                 stats = {}
                 team_ids = ["TEAM-1240315", "TEAM-1240309"]
 
@@ -2740,7 +2739,6 @@ elif menu == "12. Automated State Report":
                         "ach_sch_M": 0, "ach_sch_F": 0
                     }
                     
-                    # --- 1. PROCESS TARGETS ---
                     if aw_team_key:
                         t_aw_df = master_aw[master_aw[aw_team_key].astype(str).str.strip() == t_id].copy()
                         stats[t_id]["tgt_aw_base"] = len(t_aw_df)
@@ -2765,11 +2763,9 @@ elif menu == "12. Automated State Report":
                             stats[t_id]["tgt_sch_M"] = len(t_sch_df[t_sch_df[sch_gender_key].astype(str).str.upper().str.startswith('M')])
                             stats[t_id]["tgt_sch_F"] = len(t_sch_df[t_sch_df[sch_gender_key].astype(str).str.upper().str.startswith('F')])
 
-                    # --- 2. PROCESS ACHIEVEMENTS ---
-                    if not df_combined.empty and inst_col_daily:
+                    if not df_combined.empty and date_col:
                         t_daily = df_combined[df_combined['Mapped_Team'] == t_id].copy()
                         
-                        # AW Logic
                         t_aw_daily = t_daily[t_daily['Source'] == 'Anganwadi']
                         stats[t_id]["ach_c1_aw"] = len(t_aw_daily[t_aw_daily['Cycle'] == 'Cycle 1'])
                         stats[t_id]["ach_c2_aw"] = len(t_aw_daily[t_aw_daily['Cycle'] == 'Cycle 2'])
@@ -2781,14 +2777,12 @@ elif menu == "12. Automated State Report":
                         stats[t_id]["ach_aw_3_6y_M"] = len(t_aw_daily[(t_aw_daily['_age'] > 3.0) & (t_aw_daily['_age'] <= 6.0) & (t_aw_daily['_g'] == 'M')])
                         stats[t_id]["ach_aw_3_6y_F"] = len(t_aw_daily[(t_aw_daily['_age'] > 3.0) & (t_aw_daily['_age'] <= 6.0) & (t_aw_daily['_g'] == 'F')])
 
-                        # SCHOOL Logic (Includes the special March 2026 Exception!)
-                        # Valid School Dates: Anything from March 1, 2026 onwards
+                        # 🚀 School Logic with precise > 2026-03-01 filter!
                         t_sch_daily = t_daily[(t_daily['Source'] == 'School') & (t_daily[date_col] >= '2026-03-01')]
                         stats[t_id]["ach_sch"] = len(t_sch_daily)
                         stats[t_id]["ach_sch_M"] = len(t_sch_daily[t_sch_daily['_g'] == 'M'])
                         stats[t_id]["ach_sch_F"] = len(t_sch_daily[t_sch_daily['_g'] == 'F'])
 
-                # --- 3. AGGREGATE GRAND TALUKA DATA ---
                 taluka = {k: sum(stats[t][k] for t in team_ids) for k in stats[team_ids[0]].keys()}
                 
                 def render_dashboard(title, data, is_taluka=False):
@@ -2802,20 +2796,17 @@ elif menu == "12. Automated State Report":
                         st.divider()
                         st.markdown(f"### 🚀 {title}")
 
-                    # Header Metrics
                     sc1, sc2, sc3 = st.columns(3)
                     sc1.metric("Grand Annual Target", f"{total_annual_target:,}", help=f"AW ({data['tgt_aw_base']} x 2) + Sch ({data['tgt_sch_base']})")
                     sc2.metric("Total Achieved", f"{total_achieved:,}", delta=f"{total_achieved - total_annual_target} Remaining")
                     sc3.metric("Overall Completion", f"{overall_pct:.2f}%")
                     st.progress(min(overall_pct / 100.0, 1.0))
 
-                    # Sub-Metrics
                     s1, s2, s3 = st.columns(3)
                     s1.info(f"**🏫 Schools (1x Cycle)**\n\nTarget: **{data['tgt_sch_base']}**\n\nAchieved: **{data['ach_sch']}**")
                     s2.success(f"**👶 AW (Cycle 1: Apr-Sep)**\n\nTarget: **{data['tgt_aw_base']}**\n\nAchieved: **{data['ach_c1_aw']}**")
                     s3.warning(f"**👶 AW (Cycle 2: Oct-Mar)**\n\nTarget: **{data['tgt_aw_base']}**\n\nAchieved: **{data['ach_c2_aw']}**")
 
-                    # Deep Demographic Matrix
                     with st.expander(f"📊 View Age & Gender Matrix for {title}"):
                         matrix_data = [
                             {"Metric": "🍼 AW: 0 - 6 Months (Boys)", "Annual Target": data["tgt_aw_0_6m_M"], "Achieved": data["ach_aw_0_6m_M"]},
@@ -2832,7 +2823,6 @@ elif menu == "12. Automated State Report":
                         df_matrix['% Completed'] = (df_matrix['Achieved'] / df_matrix['Annual Target'] * 100).fillna(0).round(1).astype(str) + "%"
                         st.dataframe(df_matrix, use_container_width=True, hide_index=True)
 
-                # --- 4. EXECUTE UI RENDERING ---
                 render_dashboard("TALUKA GRAND SUMMARY (ALL TEAMS)", taluka, is_taluka=True)
                 for t_id in team_ids:
                     render_dashboard(f"Team: {t_id}", stats[t_id])
