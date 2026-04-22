@@ -1938,12 +1938,35 @@ elif menu == "9. Anganwadi Directory":
                         girls = len(aw_data[aw_data[gender_col].astype(str).str.upper().str.startswith('F')])
                     else:
                         boys, girls = 0, 0
+
+                    # 🚀 NEW: Age-wise breakdown logic for individual center
+                    beneficiary_col = None
+                    for col in aw_data.columns:
+                        if 'beneficiary type' in str(col).lower():
+                            beneficiary_col = col
+                            break
+                    if not beneficiary_col and len(aw_data.columns) >= 9:
+                        beneficiary_col = aw_data.columns[8] # Fallback to Column I
+
+                    if beneficiary_col:
+                        age_0_6m = len(aw_data[aw_data[beneficiary_col].astype(str).str.strip().str.lower() == 'children_0m_6m'])
+                        age_6m_3y = len(aw_data[aw_data[beneficiary_col].astype(str).str.strip().str.lower() == 'children_6m_3y'])
+                        age_3y_6y = len(aw_data[aw_data[beneficiary_col].astype(str).str.strip().str.lower() == 'children_3y_6y'])
+                    else:
+                        age_0_6m, age_6m_3y, age_3y_6y = 0, 0, 0
                     
                     st.markdown("#### 📊 Live Enrollment Summary")
                     c1, c2, c3 = st.columns(3)
                     c1.metric("👶 Total Children", total_kids)
                     c2.metric("👦 Boys", boys)
                     c3.metric("👧 Girls", girls)
+
+                    st.markdown("#### 🎂 Age-Wise Breakdown")
+                    a1, a2, a3 = st.columns(3)
+                    a1.metric("🍼 0 to 6 Months", age_0_6m)
+                    a2.metric("👶 6 Months to 3 Years", age_6m_3y)
+                    a3.metric("🧒 3 to 6 Years", age_3y_6y)
+
                     st.write("---")
                 
                 st.markdown("#### 📞 Contact Information")
@@ -1962,17 +1985,25 @@ elif menu == "9. Anganwadi Directory":
         
         if not df_aw.empty and 'AWC Name' in df_aw.columns:
             
-            # 🚀 NEW: Dynamically find the Sector column (Column E / index 4)
+            # Dynamically find the Sector column (Column E / index 4)
             sector_col = None
             for col in df_aw.columns:
                 if 'sector' in str(col).lower():
                     sector_col = col
                     break
-            # Fallback: if 'sector' isn't in the column header name, grab the 5th column (Index 4)
             if not sector_col and len(df_aw.columns) >= 5:
                 sector_col = df_aw.columns[4]
 
-            # 🚀 NEW: Sector Filter UI
+            # 🚀 NEW: Dynamically find the Beneficiary Type column (Column I / index 8)
+            beneficiary_col = None
+            for col in df_aw.columns:
+                if 'beneficiary type' in str(col).lower():
+                    beneficiary_col = col
+                    break
+            if not beneficiary_col and len(df_aw.columns) >= 9:
+                beneficiary_col = df_aw.columns[8]
+
+            # Sector Filter UI
             selected_sector = "All Sectors"
             if sector_col:
                 sector_list = sorted([str(x) for x in df_aw[sector_col].unique() if str(x).strip() not in ['', 'nan', 'None']])
@@ -1999,6 +2030,14 @@ elif menu == "9. Anganwadi Directory":
                     girls = len(aw_data[aw_data[gender_col].astype(str).str.upper().str.startswith('F')])
                 else:
                     boys, girls = 0, 0
+
+                # Calculate Age Breakdown
+                if beneficiary_col:
+                    age_0_6m = len(aw_data[aw_data[beneficiary_col].astype(str).str.strip().str.lower() == 'children_0m_6m'])
+                    age_6m_3y = len(aw_data[aw_data[beneficiary_col].astype(str).str.strip().str.lower() == 'children_6m_3y'])
+                    age_3y_6y = len(aw_data[aw_data[beneficiary_col].astype(str).str.strip().str.lower() == 'children_3y_6y'])
+                else:
+                    age_0_6m, age_6m_3y, age_3y_6y = 0, 0, 0
                 
                 # Extract Sector Name for the table row
                 awc_sector = aw_data[sector_col].iloc[0] if sector_col and not aw_data.empty else "N/A"
@@ -2008,7 +2047,10 @@ elif menu == "9. Anganwadi Directory":
                     "Anganwadi Center": str(awc).strip(),
                     "Total Children": total,
                     "👦 Boys": boys,
-                    "👧 Girls": girls
+                    "👧 Girls": girls,
+                    "🍼 0-6 Months": age_0_6m,
+                    "👶 6M-3 Years": age_6m_3y,
+                    "🧒 3-6 Years": age_3y_6y
                 })
             
             if summary_data:
@@ -2020,15 +2062,26 @@ elif menu == "9. Anganwadi Directory":
                 total_girls = summary_df['👧 Girls'].sum()
                 total_awcs = summary_df['Anganwadi Center'].nunique()
                 
+                total_0_6m = summary_df['🍼 0-6 Months'].sum()
+                total_6m_3y = summary_df['👶 6M-3 Years'].sum()
+                total_3y_6y = summary_df['🧒 3-6 Years'].sum()
+                
                 st.divider()
                 st.markdown(f"### 🏆 Metrics for: {selected_sector}")
                 
-                # The visual metrics layout
+                # The visual metrics layout (General)
                 m1, m2, m3, m4 = st.columns(4)
                 m1.metric("🏠 Anganwadis", total_awcs)
                 m2.metric("👶 Total Children", total_all)
                 m3.metric("👦 Boys", total_boys)
                 m4.metric("👧 Girls", total_girls)
+
+                # 🚀 NEW: The visual metrics layout (Age-Wise)
+                st.markdown("#### 🎂 Age-Wise Bifurcation")
+                a1, a2, a3 = st.columns(3)
+                a1.metric("🍼 0 to 6 Months", total_0_6m)
+                a2.metric("👶 6 Months to 3 Years", total_6m_3y)
+                a3.metric("🧒 3 to 6 Years", total_3y_6y)
                 
                 st.divider()
                 
