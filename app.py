@@ -2462,7 +2462,15 @@ elif menu == "11. Annual FY Planner":
 elif menu == "12. Automated State Report":
     render_header("Automatic Report Generator", "Get real-time reports", "📅", "#f59e0b")
     st.write("Generate official Form III exports and track your team's annual targets.")
-
+# 🚀 NEW: Force Refresh Button for the Command Center
+    col_btn1, col_btn2 = st.columns([8, 2])
+    with col_btn2:
+        if st.button("🔄 Force Sync Latest Data"):
+            st.cache_data.clear()
+            st.toast("Data synchronized with live Google Sheets!", icon="✅")
+            import time
+            time.sleep(0.5)
+            st.rerun()
     tab_form3, tab_scoreboard = st.tabs(["📄 Form III (Govt Export)", "🎯 Live Scoreboard (Target vs. Achievement)"])
 
     df_aw_daily, df_sch_daily, df_combined = get_daily_logs()
