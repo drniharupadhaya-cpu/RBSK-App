@@ -1929,7 +1929,7 @@ elif menu == "9. Anganwadi Directory":
                 st.subheader(f"🏠 {selected_awc}")
                 
                 if not df_aw.empty and 'AWC Name' in df_aw.columns:
-                    aw_data = df_aw[df_aw['AWC Name'] == selected_awc]
+                    aw_data = df_aw[df_aw['AWC Name'] == selected_awc].copy()
                     total_kids = len(aw_data)
                     
                     gender_col = next((c for c in aw_data.columns if str(c).lower() == 'gender'), None)
@@ -1943,7 +1943,7 @@ elif menu == "9. Anganwadi Directory":
                         is_F = pd.Series([False]*len(aw_data), index=aw_data.index)
                         boys, girls = 0, 0
 
-                    # Age-wise & Gender-wise breakdown logic for individual center
+                    # 1. Broad Age Groups (From Beneficiary Type)
                     beneficiary_col = None
                     for col in aw_data.columns:
                         if 'beneficiary type' in str(col).lower():
@@ -1964,6 +1964,22 @@ elif menu == "9. Anganwadi Directory":
                         age_0_6m_M = age_0_6m_F = age_0_6m_T = 0
                         age_6m_3y_M = age_6m_3y_F = age_6m_3y_T = 0
                         age_3y_6y_M = age_3y_6y_F = age_3y_6y_T = 0
+
+                    # 🚀 2. NEW SPECIFIC 5-6 YEARS (From DoB)
+                    dob_col = next((c for c in aw_data.columns if 'dob' in str(c).lower() or 'date of birth' in str(c).lower()), None)
+                    if not dob_col and len(aw_data.columns) >= 11:
+                        dob_col = aw_data.columns[10] # Column K
+                        
+                    if dob_col:
+                        dobs = pd.to_datetime(aw_data[dob_col], errors='coerce', dayfirst=True)
+                        age_years = (pd.Timestamp.now() - dobs).dt.days / 365.25
+                        is_5_to_6 = (age_years >= 5) & (age_years < 6)
+                        
+                        age_5_6y_M = len(aw_data[is_5_to_6 & is_M])
+                        age_5_6y_F = len(aw_data[is_5_to_6 & is_F])
+                        age_5_6y_T = len(aw_data[is_5_to_6])
+                    else:
+                        age_5_6y_M = age_5_6y_F = age_5_6y_T = 0
                     
                     st.markdown("#### 📊 Live Enrollment Summary")
                     c1, c2, c3 = st.columns(3)
@@ -1971,15 +1987,15 @@ elif menu == "9. Anganwadi Directory":
                     c2.metric("👦 Boys", boys)
                     c3.metric("👧 Girls", girls)
 
-                    # 🚀 NEW: Beautiful Age & Gender Matrix UI
+                    # 🚀 NEW: 2x2 Grid for Age Matrix to fit the 5-6 Years elegantly
                     st.markdown("#### 🎂 Age & Gender Matrix")
-                    a1, a2, a3 = st.columns(3)
+                    a1, a2 = st.columns(2)
                     with a1:
                         st.info(f"**🍼 0 to 6 Months: {age_0_6m_T}**\n\n👦 Boys: **{age_0_6m_M}** | 👧 Girls: **{age_0_6m_F}**")
+                        st.info(f"**🧒 3 to 6 Years: {age_3y_6y_T}**\n\n👦 Boys: **{age_3y_6y_M}** | 👧 Girls: **{age_3y_6y_F}**")
                     with a2:
                         st.info(f"**👶 6M to 3 Years: {age_6m_3y_T}**\n\n👦 Boys: **{age_6m_3y_M}** | 👧 Girls: **{age_6m_3y_F}**")
-                    with a3:
-                        st.info(f"**🧒 3 to 6 Years: {age_3y_6y_T}**\n\n👦 Boys: **{age_3y_6y_M}** | 👧 Girls: **{age_3y_6y_F}**")
+                        st.success(f"**🎓 5 to 6 Years (Specific): {age_5_6y_T}**\n\n👦 Boys: **{age_5_6y_M}** | 👧 Girls: **{age_5_6y_F}**")
 
                     st.write("---")
                 
@@ -1999,7 +2015,6 @@ elif menu == "9. Anganwadi Directory":
         
         if not df_aw.empty and 'AWC Name' in df_aw.columns:
             
-            # Dynamically find the Sector column (Column E / index 4)
             sector_col = None
             for col in df_aw.columns:
                 if 'sector' in str(col).lower():
@@ -2008,7 +2023,6 @@ elif menu == "9. Anganwadi Directory":
             if not sector_col and len(df_aw.columns) >= 5:
                 sector_col = df_aw.columns[4]
 
-            # Dynamically find the Beneficiary Type column (Column I / index 8)
             beneficiary_col = None
             for col in df_aw.columns:
                 if 'beneficiary type' in str(col).lower():
@@ -2016,25 +2030,35 @@ elif menu == "9. Anganwadi Directory":
                     break
             if not beneficiary_col and len(df_aw.columns) >= 9:
                 beneficiary_col = df_aw.columns[8]
+                
+            # Locate DoB column for entire dataframe
+            dob_col = next((c for c in df_aw.columns if 'dob' in str(c).lower() or 'date of birth' in str(c).lower()), None)
+            if not dob_col and len(df_aw.columns) >= 11:
+                dob_col = df_aw.columns[10]
 
-            # Sector Filter UI
             selected_sector = "All Sectors"
             if sector_col:
                 sector_list = sorted([str(x) for x in df_aw[sector_col].unique() if str(x).strip() not in ['', 'nan', 'None']])
                 selected_sector = st.selectbox("🎯 Filter by Sector:", ["All Sectors"] + sector_list)
                 
                 if selected_sector != "All Sectors":
-                    filtered_aw_df = df_aw[df_aw[sector_col].astype(str).str.strip() == selected_sector]
+                    filtered_aw_df = df_aw[df_aw[sector_col].astype(str).str.strip() == selected_sector].copy()
                 else:
-                    filtered_aw_df = df_aw
+                    filtered_aw_df = df_aw.copy()
             else:
-                filtered_aw_df = df_aw
+                filtered_aw_df = df_aw.copy()
                 st.warning("⚠️ Sector column (Column E) could not be identified.")
+                
+            # Pre-calculate age in years for speed
+            if dob_col:
+                dobs = pd.to_datetime(filtered_aw_df[dob_col], errors='coerce', dayfirst=True)
+                filtered_aw_df['_age_years'] = (pd.Timestamp.now() - dobs).dt.days / 365.25
+            else:
+                filtered_aw_df['_age_years'] = -1
 
             summary_data = []
             gender_col = next((c for c in filtered_aw_df.columns if str(c).lower() == 'gender'), None)
             
-            # Loop through every unique Anganwadi in the FILTERED dataset and count!
             for awc in filtered_aw_df['AWC Name'].dropna().unique():
                 aw_data = filtered_aw_df[filtered_aw_df['AWC Name'] == awc]
                 total = len(aw_data)
@@ -2049,7 +2073,7 @@ elif menu == "9. Anganwadi Directory":
                     is_F = pd.Series([False]*len(aw_data), index=aw_data.index)
                     boys, girls = 0, 0
 
-                # Calculate Age & Gender Breakdown
+                # 1. Beneficiary Type Breakdown
                 if beneficiary_col:
                     is_0_6m = aw_data[beneficiary_col].astype(str).str.strip().str.lower() == 'children_0m_6m'
                     is_6m_3y = aw_data[beneficiary_col].astype(str).str.strip().str.lower() == 'children_6m_3y'
@@ -2062,11 +2086,15 @@ elif menu == "9. Anganwadi Directory":
                     age_0_6m_M = age_0_6m_F = age_0_6m_T = 0
                     age_6m_3y_M = age_6m_3y_F = age_6m_3y_T = 0
                     age_3y_6y_M = age_3y_6y_F = age_3y_6y_T = 0
+                    
+                # 2. Specific 5-6 Years Breakdown
+                is_5_to_6 = (aw_data['_age_years'] >= 5) & (aw_data['_age_years'] < 6)
+                age_5_6y_M = len(aw_data[is_5_to_6 & is_M])
+                age_5_6y_F = len(aw_data[is_5_to_6 & is_F])
+                age_5_6y_T = len(aw_data[is_5_to_6])
                 
-                # Extract Sector Name for the table row
                 awc_sector = aw_data[sector_col].iloc[0] if sector_col and not aw_data.empty else "N/A"
                 
-                # 🚀 NEW: Adding all columns to the dataframe
                 summary_data.append({
                     "Sector": str(awc_sector).strip(),
                     "Anganwadi Center": str(awc).strip(),
@@ -2081,13 +2109,15 @@ elif menu == "9. Anganwadi Directory":
                     "👶 6m-3y (Total)": age_6m_3y_T,
                     "🧒 3-6y (Boys)": age_3y_6y_M,
                     "🧒 3-6y (Girls)": age_3y_6y_F,
-                    "🧒 3-6y (Total)": age_3y_6y_T
+                    "🧒 3-6y (Total)": age_3y_6y_T,
+                    "🎓 5-6y (Boys)": age_5_6y_M,
+                    "🎓 5-6y (Girls)": age_5_6y_F,
+                    "🎓 5-6y (Total)": age_5_6y_T
                 })
             
             if summary_data:
                 summary_df = pd.DataFrame(summary_data).sort_values(by=["Sector", "Anganwadi Center"])
                 
-                # Calculate Grand Totals for the dynamic header metrics
                 total_all = summary_df['Total Children'].sum()
                 total_boys = summary_df['👦 Boys'].sum()
                 total_girls = summary_df['👧 Girls'].sum()
@@ -2096,26 +2126,25 @@ elif menu == "9. Anganwadi Directory":
                 t_0_6m_M, t_0_6m_F, t_0_6m_T = summary_df['🍼 0-6m (Boys)'].sum(), summary_df['🍼 0-6m (Girls)'].sum(), summary_df['🍼 0-6m (Total)'].sum()
                 t_6m_3y_M, t_6m_3y_F, t_6m_3y_T = summary_df['👶 6m-3y (Boys)'].sum(), summary_df['👶 6m-3y (Girls)'].sum(), summary_df['👶 6m-3y (Total)'].sum()
                 t_3y_6y_M, t_3y_6y_F, t_3y_6y_T = summary_df['🧒 3-6y (Boys)'].sum(), summary_df['🧒 3-6y (Girls)'].sum(), summary_df['🧒 3-6y (Total)'].sum()
+                t_5_6y_M, t_5_6y_F, t_5_6y_T = summary_df['🎓 5-6y (Boys)'].sum(), summary_df['🎓 5-6y (Girls)'].sum(), summary_df['🎓 5-6y (Total)'].sum()
                 
                 st.divider()
                 st.markdown(f"### 🏆 Master Metrics for: {selected_sector}")
                 
-                # The visual metrics layout (General)
                 m1, m2, m3, m4 = st.columns(4)
                 m1.metric("🏠 Anganwadis", total_awcs)
                 m2.metric("👶 Total Children", total_all)
                 m3.metric("👦 Boys", total_boys)
                 m4.metric("👧 Girls", total_girls)
 
-                # 🚀 NEW: The visual metrics layout (Age-Wise Matrix)
                 st.markdown("#### 🎂 Age & Gender Matrix")
-                a1, a2, a3 = st.columns(3)
+                a1, a2 = st.columns(2)
                 with a1:
                     st.info(f"**🍼 0 to 6 Months: {t_0_6m_T}**\n\n👦 Boys: **{t_0_6m_M}** | 👧 Girls: **{t_0_6m_F}**")
+                    st.info(f"**🧒 3 to 6 Years: {t_3y_6y_T}**\n\n👦 Boys: **{t_3y_6y_M}** | 👧 Girls: **{t_3y_6y_F}**")
                 with a2:
                     st.info(f"**👶 6M to 3 Years: {t_6m_3y_T}**\n\n👦 Boys: **{t_6m_3y_M}** | 👧 Girls: **{t_6m_3y_F}**")
-                with a3:
-                    st.info(f"**🧒 3 to 6 Years: {t_3y_6y_T}**\n\n👦 Boys: **{t_3y_6y_M}** | 👧 Girls: **{t_3y_6y_F}**")
+                    st.success(f"**🎓 5 to 6 Years: {t_5_6y_T}**\n\n👦 Boys: **{t_5_6y_M}** | 👧 Girls: **{t_5_6y_F}**")
                 
                 st.divider()
                 
