@@ -229,6 +229,7 @@ def load_all_data():
     df_q_perf = safe_load("Q_Performance")
     df_q_loc = safe_load("Q_Location_4D")
     df_q_demo = safe_load("Q_Demo_4D")
+    df_team_4d = get_sheet_data("Team_4D_Report")
     df_hbnc = safe_load("hbnc_screenings") # 🚀 Added Module 5 to the fast-cache!
 
     return df_4d, df_anemia, df_directory, df_aw_contacts, df_staff, df_aw_master, df_all_students, df_q_perf, df_q_loc, df_q_demo, df_hbnc
@@ -1458,8 +1459,8 @@ elif menu == "4. Visual Analysis":
     render_header("Visual Analytics", "Quarterly Zero-Lag Performance & Epidemiological Mapping", "🗺️", "#f97316")
     st.write("Welcome to the Zero-Lag Command Center. This dashboard processes your Quarterly State Reports for maximum speed and deep insights.")
 
-    tab_coverage, tab_hotspot, tab_radar = st.tabs([
-        "🎯 Coverage & Velocity Matrix", "📍 Disease Hotspot Mapper", "🧬 Epidemiological Radar"
+    tab_coverage, tab_hotspot, tab_radar, tab_team = st.tabs([
+        "🎯 Coverage Matrix", "📍 Disease Hotspot", "🧬 Demographic Radar", "👥 Team Performance Matrix"
     ])
 
     with tab_coverage:
@@ -1557,6 +1558,105 @@ elif menu == "4. Visual Analysis":
                     st.success(f"✅ No demographic cases found for **{selected_demo_disease}**!")
         else:
             st.warning("⚠️ Waiting for valid data in the 'Q_Demo_4D' tab.")
+
+    # 🚀 NEW: TEAM PERFORMANCE MATRIX
+    with tab_team:
+        st.subheader("👥 Operational Workforce & Team Performance Matrix")
+        st.write("Track productivity, efficiency, and clinical detection quality across all specific RBSK Teams.")
+
+        # Ensure df_team_4d exists
+        if 'df_team_4d' in locals() and not df_team_4d.empty:
+            df_t = df_team_4d.copy()
+            
+            # Clean data: Remove TOTAL rows so graphs aren't skewed
+            df_t = df_t[~df_t['Team ID'].astype(str).str.contains("TOTAL", case=False, na=False)]
+            
+            # Convert all necessary columns to numeric
+            num_cols = [
+                'Total No. of Children (AWC)', 'Screened (AWC)', 'SCREENING PERCENTAGE',
+                'Defect at birth (AWC)', 'Deficiencies (AWC)', 'Diseases (AWC)', 'Developmental Delay (AWC)', 'TOTAL 4D ANGANVADI',
+                'Total No. of Children (School)', 'Screened (School)', 'Defect at birth (School)', 
+                'Deficiencies (School)', 'Diseases (School)', 'Developmental Delay (School)', 'TOAL 4D SCHOOL'
+            ]
+            for c in num_cols:
+                if c in df_t.columns:
+                    df_t[c] = pd.to_numeric(df_t[c].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
+
+            # --- Calculate Globals for Teams ---
+            df_t['Combined Registered'] = df_t['Total No. of Children (AWC)'] + df_t['Total No. of Children (School)']
+            df_t['Combined Screened'] = df_t['Screened (AWC)'] + df_t['Screened (School)']
+            df_t['Combined Screening %'] = np.where(df_t['Combined Registered'] > 0, (df_t['Combined Screened'] / df_t['Combined Registered']) * 100, 0)
+            
+            df_t['Combined 4D Found'] = df_t['TOTAL 4D ANGANVADI'] + df_t['TOAL 4D SCHOOL']
+            df_t['Combined Detection %'] = np.where(df_t['Combined Screened'] > 0, (df_t['Combined 4D Found'] / df_t['Combined Screened']) * 100, 0)
+            
+            df_t['School Screening %'] = np.where(df_t['Total No. of Children (School)'] > 0, (df_t['Screened (School)'] / df_t['Total No. of Children (School)']) * 100, 0)
+
+            # 1. 📊 RAW DATA TABLE
+            st.markdown("### 📋 Team Raw Data Table")
+            st.dataframe(df_t, use_container_width=True, hide_index=True)
+            st.divider()
+
+            import plotly.graph_objects as go
+
+            # 2. 🏆 The Screening Leaderboard (Bar + Line)
+            st.markdown("### 🏆 Overall Screening Leaderboard")
+            fig_lead = go.Figure()
+            fig_lead.add_trace(go.Bar(x=df_t['Team ID'], y=df_t['Combined Registered'], name='Total Registered', marker_color='#93c5fd'))
+            fig_lead.add_trace(go.Bar(x=df_t['Team ID'], y=df_t['Combined Screened'], name='Total Screened', marker_color='#3b82f6'))
+            fig_lead.add_trace(go.Scatter(x=df_t['Team ID'], y=df_t['Combined Screening %'], name='Screening %', yaxis='y2', line=dict(color='#ef4444', width=3), mode='lines+markers'))
+            
+            fig_lead.update_layout(
+                title="Registered vs. Screened with Overall Percentage",
+                barmode='group',
+                yaxis=dict(title='Number of Children'),
+                yaxis2=dict(title='Screening Percentage (%)', overlaying='y', side='right', range=[0, 100]),
+                hovermode='x unified'
+            )
+            st.plotly_chart(fig_lead, use_container_width=True)
+
+            # 3. 🧬 The 4D Clinical Breakdown (Stacked Bar)
+            st.markdown("### 🧬 4D Clinical Profile by Team")
+            df_t['Total Defects'] = df_t['Defect at birth (AWC)'] + df_t['Defect at birth (School)']
+            df_t['Total Deficiencies'] = df_t['Deficiencies (AWC)'] + df_t['Deficiencies (School)']
+            df_t['Total Diseases'] = df_t['Diseases (AWC)'] + df_t['Diseases (School)']
+            df_t['Total Delays'] = df_t['Developmental Delay (AWC)'] + df_t['Developmental Delay (School)']
+
+            fig_stack = go.Figure(data=[
+                go.Bar(name='Defects at Birth', x=df_t['Team ID'], y=df_t['Total Defects'], marker_color='#f87171'),
+                go.Bar(name='Deficiencies', x=df_t['Team ID'], y=df_t['Total Deficiencies'], marker_color='#fbbf24'),
+                go.Bar(name='Diseases', x=df_t['Team ID'], y=df_t['Total Diseases'], marker_color='#34d399'),
+                go.Bar(name='Delays', x=df_t['Team ID'], y=df_t['Total Delays'], marker_color='#a78bfa')
+            ])
+            fig_stack.update_layout(barmode='stack', title="Total 4D Conditions Found per Team")
+            st.plotly_chart(fig_stack, use_container_width=True)
+
+            c1, c2 = st.columns(2)
+            
+            # 4. 🏫 AWC vs. School Focus (Grouped Bar)
+            with c1:
+                st.markdown("### 🏫 Operational Focus: AWC vs School")
+                fig_focus = go.Figure(data=[
+                    go.Bar(name='AWC Screening %', x=df_t['Team ID'], y=df_t['SCREENING PERCENTAGE'], marker_color='#f472b6'),
+                    go.Bar(name='School Screening %', x=df_t['Team ID'], y=df_t['School Screening %'], marker_color='#60a5fa')
+                ])
+                fig_focus.update_layout(barmode='group', title="Screening Percentage Comparison", yaxis=dict(range=[0, 100]))
+                st.plotly_chart(fig_focus, use_container_width=True)
+
+            # 5. 🎯 The "Quality vs. Quantity" Scatter Matrix
+            with c2:
+                st.markdown("### 🎯 Efficiency Matrix: Quality vs. Quantity")
+                fig_scatter = px.scatter(df_t, x='Combined Screening %', y='Combined Detection %', 
+                                         text='Team ID', size='Combined Screened', color='Combined Detection %',
+                                         title="Screening Velocity vs. Detection Rate",
+                                         labels={'Combined Screening %': 'Quantity (Screening %)', 'Combined Detection %': 'Quality (Detection %)'},
+                                         color_continuous_scale='Viridis')
+                fig_scatter.update_traces(textposition='top center')
+                fig_scatter.update_layout(xaxis=dict(range=[-5, 105]))
+                st.plotly_chart(fig_scatter, use_container_width=True)
+
+        else:
+            st.warning("⚠️ Could not locate Team_4D_Report data. Please ensure 'df_team_4d' is loaded correctly at the top of your app.")
 
 # ==========================================
 # MODULE 5: HBNC NEWBORN VISIT (Zero-Lag Micro-Cache)
