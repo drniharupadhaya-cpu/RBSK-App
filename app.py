@@ -1406,13 +1406,24 @@ elif menu == "3. 4D Defect Registry":
                                 pdf.ln(10)
                                 y_pos = pdf.get_y()
                                 
-                                try:
-                                    if os.path.exists("seal.png"):
-                                        pdf.image("seal.png", x=30, y=y_pos, w=25)
-                                    if os.path.exists("sign.png"):
-                                        pdf.image("sign.png", x=150, y=y_pos, w=30)
-                                except Exception:
-                                    pass # Silently proceed if images aren't found
+                                seal_path = "SEAL.jpeg" 
+                                sign_path = "sign.jpg"
+                                
+                                if os.path.exists(seal_path):
+                                    try:
+                                        pdf.image(seal_path, x=30, y=y_pos, w=25)
+                                    except Exception as e:
+                                        st.warning(f"⚠️ Found {seal_path} but couldn't load it: {e}")
+                                else:
+                                    st.warning(f"⚠️ Could not find {seal_path} in the app directory.")
+
+                                if os.path.exists(sign_path):
+                                    try:
+                                        pdf.image(sign_path, x=150, y=y_pos, w=30)
+                                    except Exception as e:
+                                        st.warning(f"⚠️ Found {sign_path} but couldn't load it: {e}")
+                                else:
+                                    st.warning(f"⚠️ Could not find {sign_path} in the app directory.")
                                 
                                 pdf.set_y(y_pos + 25)
                                 pdf.set_font("Arial", 'B', 10)
