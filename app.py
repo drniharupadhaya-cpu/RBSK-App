@@ -1160,7 +1160,7 @@ elif menu == "3. 4D Defect Registry":
                          use_container_width=True, hide_index=True)
         else: st.info("Historical data is empty.")
 
-    # 📞 TAB 2: FOLLOW-UP LOGGER (FORM WRAPPED FOR SPEED)
+    # 📞 TAB 2: FOLLOW-UP LOGGER
     with tab_logger:
         st.subheader("📞 Interactive Case Logger")
         st.write("Double-click any cell below to edit! Edits will not save or reload the app until you click the save button.")
@@ -1186,7 +1186,6 @@ elif menu == "3. 4D Defect Registry":
                 editable_columns = ["Current Status", "Next Follow-Up Date", "Remarks"]
                 disabled_columns = [c for c in df_log_pool.columns if c not in editable_columns]
                 
-                # 🚀 FAST FIX: Wrapped in a form so edits don't trigger reruns!
                 with st.form("logger_editor_form"):
                     edited_df = st.data_editor(
                         df_log_pool,
@@ -1310,25 +1309,21 @@ elif menu == "3. 4D Defect Registry":
                     st.write(f"### 📋 Auto-Filled Screening Details for {p['Name']}")
                     st.caption("Data is pulled directly from the screening sheet. Please verify and add remarks.")
                     
-                    # Row 1
                     r1_1, r1_2, r1_3 = st.columns(3)
                     with r1_1: st.text_input("Screening Date", value=p['Date'], disabled=True)
                     with r1_2: st.text_input("Institution", value=p['Institution'], disabled=True)
                     with r1_3: st.text_input("Gender", value=p['Gender'], disabled=True)
                     
-                    # Row 2
                     r2_1, r2_2, r2_3 = st.columns(3)
                     with r2_1: st.text_input("DOB", value=p['DOB'], disabled=True)
                     with r2_2: st.text_input("Father Name", value=p['Father'], disabled=True)
                     with r2_3: st.text_input("Contact", value=p['Contact'], disabled=True)
                     
-                    # Row 3 (Vitals)
                     r3_1, r3_2, r3_3 = st.columns(3)
                     with r3_1: st.text_input("Height (cm)", value=p.get('Height', 'N/A'), disabled=True)
                     with r3_2: st.text_input("Weight (kg)", value=p.get('Weight', 'N/A'), disabled=True)
                     with r3_3: st.text_input("Hb (g/dL)", value=p.get('Hb', 'N/A'), disabled=True)
                     
-                    # Row 4 (Extras)
                     r4_1, r4_2 = st.columns(2)
                     with r4_1: st.text_input("MUAC (Anganwadi)", value=p.get('MUAC', 'N/A'), disabled=True)
                     with r4_2: st.text_input("Class (School)", value=p.get('Class', 'N/A'), disabled=True)
@@ -1350,6 +1345,7 @@ elif menu == "3. 4D Defect Registry":
                         def generate_enhanced_refer_card(data):
                             try:
                                 from fpdf import FPDF
+                                import os
                                 pdf = FPDF()
                                 pdf.add_page()
                                 
@@ -1406,12 +1402,28 @@ elif menu == "3. 4D Defect Registry":
                                 pdf.cell(0, 8, " 4. Referral Action", border=1, fill=True, ln=True)
                                 add_row("Referred To:", selected_refer_to, "Medical Officer:", "Dr. NIHAR UPADHYAY")
                                 
+                                # 🚀 RE-INTEGRATED: Signature and Seal
+                                pdf.ln(10)
+                                y_pos = pdf.get_y()
+                                
+                                try:
+                                    if os.path.exists("seal.png"):
+                                        pdf.image("seal.png", x=30, y=y_pos, w=25)
+                                    if os.path.exists("sign.png"):
+                                        pdf.image("sign.png", x=150, y=y_pos, w=30)
+                                except Exception:
+                                    pass # Silently proceed if images aren't found
+                                
+                                pdf.set_y(y_pos + 25)
+                                pdf.set_font("Arial", 'B', 10)
+                                pdf.cell(80, 5, "Official Seal", align='C')
+                                pdf.cell(110, 5, "Medical Officer Signature", align='R', ln=True)
+
                                 # Footer
-                                pdf.ln(15)
+                                pdf.ln(10)
                                 pdf.set_font("Arial", 'I', 9)
                                 pdf.cell(0, 10, "Authorized by RBSK Health Department. Generated Electronically.", align='C')
 
-                                # 🚀 FAST FIX: Handle Bytearray Encoding Smoothly
                                 pdf_out = pdf.output()
                                 if type(pdf_out) == str:
                                     return pdf_out.encode('latin1')
