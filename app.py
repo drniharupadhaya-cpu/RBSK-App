@@ -1025,11 +1025,27 @@ elif menu == "3. 4D Defect Registry":
         time.sleep(0.5)
         st.rerun()
 
-    # 🚀 GLOBAL ANEMIA LOGIC ENGINE
+    # 🚀 NEW: Build Team Lookup locally so this module works independently!
+    team_lookup = {}
+    if not df_aw.empty:
+        aw_loc_key = next((c for c in df_aw.columns if any(k in str(c).upper() for k in ["INSTITUTE", "AWC", "CENTER", "AWC NAME"])), None)
+        aw_team_key = next((c for c in df_aw.columns if "TEAM" in str(c).upper()), None)
+        if aw_loc_key and aw_team_key:
+            team_lookup.update(dict(zip(df_aw[aw_loc_key].astype(str).str.strip(), df_aw[aw_team_key].astype(str).str.strip())))
+            
+    if not df_directory.empty:
+        sch_loc_key = next((c for c in df_directory.columns if any(k in str(c).upper() for k in ["INSTITUTION", "SCHOOL"])), None)
+        sch_team_key = next((c for c in df_directory.columns if "TEAM" in str(c).upper()), None)
+        if sch_loc_key and sch_team_key:
+            team_lookup.update(dict(zip(df_directory[sch_loc_key].astype(str).str.strip(), df_directory[sch_team_key].astype(str).str.strip())))
+
+    # GLOBAL ANEMIA LOGIC ENGINE
     def get_anemia_status(hb_val):
         try:
-            hb = float(hb_val)
-            if hb <= 0: return "" # Handle 0 or empty
+            # Clean the string in case there are units like 'g/dl'
+            clean_hb = ''.join(c for c in str(hb_val) if c.isdigit() or c == '.')
+            hb = float(clean_hb)
+            if hb <= 0: return "" 
             if hb < 7.0: return "🔴 Severe Anemia"
             elif 7.0 <= hb <= 9.9: return "🟡 Moderate Anemia"
             elif 10.0 <= hb <= 10.9: return "🔵 Mild Anemia"
@@ -1041,13 +1057,8 @@ elif menu == "3. 4D Defect Registry":
     aw_logs, sch_logs, df_combined_daily = get_daily_logs()
     
     # --- GLOBAL FILTERS: TEAM & GENDER ---
-    # These apply to both the Historical Master (Tab 5) and the Live Registry (Tab 3)
-    team_list = []
-    if not df_4d.empty:
-        df_4d.columns = df_4d.columns.str.strip()
-        t_col = next((c for c in df_4d.columns if 'TEAM' in c.upper()), None)
-        if t_col: team_list = sorted([str(x) for x in df_4d[t_col].unique() if str(x) not in ['nan', '']])
-
+    team_list = sorted(list(set(team_lookup.values())))
+    
     st.markdown("### 🎯 Set Your Work Desk")
     f1, f2 = st.columns(2)
     with f1:
@@ -1064,11 +1075,10 @@ elif menu == "3. 4D Defect Registry":
 
     for source_type, df in [("Anganwadi", aw_logs), ("School", sch_logs)]:
         if not df.empty:
-            # 1. Identify Columns
             d_col = next((c for c in df.columns if c.lower() in ['disease', 'diseases', '4d']), None)
             s_col = next((c for c in df.columns if c.lower() in ['status', 'sam', 'mam']), None)
             hb_col = next((c for c in df.columns if c.lower() in ['hb', 'hemoglobin']), None)
-            inst_col = next((c for c in df.columns if any(k in c.lower() for k in ['inst', 'school', 'awc', 'anganwadi'])), None)
+            inst_col = next((c for c in df.columns if any(k in c.lower() for k in ['inst', 'school', 'awc', 'anganwadi', 'center'])), None)
             gender_daily_col = next((c for c in df.columns if any(k in c.lower() for k in ['gender', 'sex'])), None)
             
             for _, row in df.iterrows():
@@ -1095,7 +1105,6 @@ elif menu == "3. 4D Defect Registry":
                     gender_match = (selected_gender == "-- All Genders --" or clean_g == selected_gender)
 
                     if team_match and gender_match:
-                        # Combine Conditions
                         cond_list = []
                         if has_disease: cond_list.append(str(row[d_col]))
                         if has_status: cond_list.append(str(row[s_col]))
@@ -1116,11 +1125,12 @@ elif menu == "3. 4D Defect Registry":
     # --- PROCESS HISTORICAL MASTER (Tab 5) ---
     if not df_4d.empty:
         df_hist = df_4d.copy()
+        df_hist.columns = df_hist.columns.str.strip()
         h_t_col = next((c for c in df_hist.columns if 'TEAM' in c.upper()), None)
         h_g_col = next((c for c in df_hist.columns if any(k in c.upper() for k in ['GENDER', 'SEX'])), None)
         
         if selected_team != "-- All Teams --" and h_t_col:
-            df_hist = df_hist[df_hist[h_t_col] == selected_team]
+            df_hist = df_hist[df_hist[h_t_col].astype(str).str.strip() == selected_team]
         if selected_gender != "-- All Genders --" and h_g_col:
             g_char = selected_gender[0]
             df_hist = df_hist[df_hist[h_g_col].astype(str).str.upper().str.startswith(g_char)]
@@ -1137,6 +1147,7 @@ elif menu == "3. 4D Defect Registry":
     with tab_action:
         st.subheader("🎯 Filtered Action Desk")
         if not df_hist.empty:
+            import datetime
             today_ts = pd.Timestamp(datetime.date.today())
             overdue = df_hist[(df_hist['Parsed_Next_Date'] <= today_ts) & (df_hist['Current Status'].astype(str).str.upper() != 'CURED/RESOLVED')]
             unscheduled = df_hist[df_hist['Parsed_Next_Date'].isna() & (df_hist['Current Status'].astype(str).str.upper() != 'CURED/RESOLVED')]
@@ -1157,15 +1168,34 @@ elif menu == "3. 4D Defect Registry":
                 if sel_kid != "-- Select --":
                     k_name = sel_kid.split(" 🩺 ")[0].strip()
                     k_disease = sel_kid.split(" 🩺 ")[1].split(" 📍 ")[0].strip()
+                    
                     with st.form("logger_form"):
                         new_stat = st.selectbox("Status:", ["Under Treatment", "Referred to CHC", "Surgery Scheduled", "Cured/Resolved"])
                         nxt_dt = st.date_input("Next Date")
                         rems = st.text_input("Remarks")
                         if st.form_submit_button("💾 Save Update"):
-                            # (Existing save logic remains identical)
-                            st.success("Updating...")
-                            st.cache_data.clear()
-                            st.rerun()
+                            try:
+                                ws = spreadsheet.worksheet("4d_list")
+                                all_vals = ws.get_all_values()
+                                headers = all_vals[0]
+                                name_idx = headers.index("NAME")
+                                d_idx = headers.index("4D")
+                                status_idx = headers.index("Current Status")
+                                date_idx = headers.index("Next Follow-Up Date")
+                                remarks_idx = headers.index("Remarks") if "Remarks" in headers else None
+
+                                for i, row in enumerate(all_vals):
+                                    if i > 0 and str(row[name_idx]).strip() == k_name and str(row[d_idx]).strip() == k_disease:
+                                        ws.update_cell(i+1, status_idx + 1, new_stat)
+                                        ws.update_cell(i+1, date_idx + 1, "" if new_stat == "Cured/Resolved" else str(nxt_dt))
+                                        if remarks_idx:
+                                            ws.update_cell(i+1, remarks_idx + 1, rems)
+                                        break
+                                st.success("Case updated successfully!")
+                                st.cache_data.clear()
+                                time.sleep(0.5)
+                                st.rerun()
+                            except Exception as e: st.error(f"Error: {e}")
         else: st.success("No active cases.")
 
     with tab_live:
@@ -1181,11 +1211,11 @@ elif menu == "3. 4D Defect Registry":
         st.subheader("🪪 Refer Card Print")
         if all_live_defects:
             display_map = {f"{d['Name']} ({d['Institution']})": d for d in all_live_defects}
-            sel_card = st.selectbox("Select Child for Refer Card:", ["-- Select --"] + list(display_map.keys()))
+            sel_card = st.selectbox("Select Child for Refer Card:", ["-- Select --"] + sorted(list(display_map.keys())))
             if sel_card != "-- Select --":
                 p_data = display_map[sel_card]
-                # (Existing PDF Print Logic remains identical)
                 st.info(f"Preparing Referral for {p_data['Name']}...")
+                # (Existing PDF Print logic goes here as usual)
         else:
             st.warning("No children in registry.")
 
