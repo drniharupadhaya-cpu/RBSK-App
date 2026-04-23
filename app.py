@@ -1018,7 +1018,7 @@ elif menu == "2. Child Screening":
 elif menu == "3. 4D Defect Registry":
     render_header("4D Defect Command Center", "Clinical Registry & Refer Card Generator", "📋", "#8b5cf6")
 
-    # 🚀 SYNC BUTTON
+    # 🔄 SYNC BUTTON
     if st.button("🔄 Sync & Refresh Database"):
         try: get_daily_logs.clear()
         except: st.cache_data.clear()
@@ -1027,8 +1027,8 @@ elif menu == "3. 4D Defect Registry":
         time.sleep(0.5)
         st.rerun()
 
-    # --- 1. DATA PRE-PROCESSING (Fast & Cached) ---
-    # Build Team Lookup
+    # --- 1. DATA PRE-PROCESSING ---
+    # Build Team Lookup (Independent Mapping)
     team_lookup = {}
     if not df_aw.empty:
         aw_loc_key = next((c for c in df_aw.columns if any(k in str(c).upper() for k in ["INSTITUTE", "AWC", "CENTER", "AWC NAME"])), None)
@@ -1042,10 +1042,10 @@ elif menu == "3. 4D Defect Registry":
         if sch_loc_key and sch_team_key:
             team_lookup.update(dict(zip(df_directory[sch_loc_key].astype(str).str.strip(), df_directory[sch_team_key].astype(str).str.strip())))
 
-    # Clean Team List for dropdowns (No Blanks/NaN)
+    # Clean Team List for historical tabs
     team_options = sorted([str(x).strip() for x in set(team_lookup.values()) if str(x).strip() and str(x).lower() != 'nan'])
 
-    # Anemia Engine
+    # Anemia Logic
     def get_anemia_status(hb_val):
         try:
             clean_hb = ''.join(c for c in str(hb_val) if c.isdigit() or c == '.')
@@ -1057,10 +1057,9 @@ elif menu == "3. 4D Defect Registry":
             else: return "Normal"
         except: return ""
 
-    # Fetch Daily Logs
+    # Fetch Daily Logs for Live Tabs
     aw_logs, sch_logs, _ = get_daily_logs()
 
-    # Triple Check Logic for Live Registry
     def is_significant(val):
         v = str(val).strip().lower()
         return v not in ['', 'nan', 'none', 'no', 'null', 'na', 'n/a', 'false', 'normal', '-', 'absent']
@@ -1109,17 +1108,18 @@ elif menu == "3. 4D Defect Registry":
         "🚨 1. Action Desk", "📞 2. Follow-Up Logger", "🌍 3. Live Daily Registry", "🪪 4. Refer Card Print"
     ])
 
+    # 🚨 TAB 1: ACTION DESK (Full List Correction)
     with tab_action:
-        st.subheader("🎯 Filtered Action Desk")
-        # Individual Filters
+        st.subheader("🎯 Full Action Desk (Pending Cases)")
         a_f1, a_f2 = st.columns(2)
-        with a_f1: a_team = st.selectbox("👤 Team:", ["-- All --"] + team_options, key="act_team")
-        with a_f2: a_gen = st.selectbox("⚖️ Gender:", ["-- All --", "Male", "Female"], key="act_gen")
+        with a_f1: a_team = st.selectbox("👤 Filter by Team:", ["-- All --"] + team_options, key="act_team")
+        with a_f2: a_gen = st.selectbox("⚖️ Filter by Gender:", ["-- All --", "Male", "Female"], key="act_gen")
 
         if not df_4d.empty:
             df_hist = df_4d.copy()
             df_hist.columns = df_hist.columns.str.strip()
             
+            # Apply Filters
             if a_team != "-- All --":
                 t_col = next((c for c in df_hist.columns if 'TEAM' in c.upper()), "TEAM")
                 df_hist = df_hist[df_hist[t_col].astype(str).str.upper() == a_team.upper()]
@@ -1127,15 +1127,23 @@ elif menu == "3. 4D Defect Registry":
                 g_col = next((c for c in df_hist.columns if any(k in c.upper() for k in ['GENDER', 'SEX'])), "GENDER")
                 df_hist = df_hist[df_hist[g_col].astype(str).str.upper().str.startswith(a_gen[0])]
             
+            # Identify All Pending (Overdue + Unscheduled)
             df_hist['Parsed_Next_Date'] = pd.to_datetime(df_hist.get('Next Follow-Up Date', ''), errors='coerce', dayfirst=True)
             import datetime
             today_ts = pd.Timestamp(datetime.date.today())
-            overdue = df_hist[(df_hist['Parsed_Next_Date'] <= today_ts) & (df_hist['Current Status'].astype(str).str.upper() != 'CURED/RESOLVED')]
             
-            st.metric("🔴 Overdue Tasks", len(overdue))
-            st.dataframe(overdue[['NAME', 'VILLAGE', '4D', 'Current Status', 'Next Follow-Up Date']], use_container_width=True, hide_index=True)
+            # Full Actionable List: Overdue OR No Date set (excluding Cured)
+            full_action_list = df_hist[
+                (df_hist['Current Status'].astype(str).str.upper() != 'CURED/RESOLVED') & 
+                ((df_hist['Parsed_Next_Date'] <= today_ts) | (df_hist['Parsed_Next_Date'].isna()))
+            ]
+            
+            st.write(f"Showing **{len(full_action_list)}** total children requiring follow-up.")
+            st.dataframe(full_action_list[['NAME', 'VILLAGE', '4D', 'Current Status', 'Next Follow-Up Date']], 
+                         use_container_width=True, hide_index=True)
         else: st.info("Historical data is empty.")
 
+    # 📞 TAB 2: LOGGER
     with tab_logger:
         st.subheader("📞 Case Update Logger")
         l_f1, l_f2 = st.columns(2)
@@ -1163,7 +1171,7 @@ elif menu == "3. 4D Defect Registry":
                         new_stat = st.selectbox("Status:", ["Under Treatment", "Referred to CHC", "Surgery Scheduled", "Cured/Resolved"])
                         nxt_dt = st.date_input("Next Follow-up")
                         rems = st.text_input("Remarks")
-                        if st.form_submit_button("💾 Save to Sheet"):
+                        if st.form_submit_button("💾 Save Update"):
                             try:
                                 ws = spreadsheet.worksheet("4d_list")
                                 all_v = ws.get_all_values(); heads = all_v[0]
@@ -1180,49 +1188,57 @@ elif menu == "3. 4D Defect Registry":
                             except Exception as e: st.error(f"Error: {e}")
             else: st.success("No active cases found.")
 
+    # 🌍 TAB 3: LIVE REGISTRY (No Team Filter, Added Inst Filter)
     with tab_live:
         st.subheader("🌍 Live Daily Defect Registry")
         r_f1, r_f2 = st.columns(2)
-        with r_f1: r_team = st.selectbox("👤 Team:", ["-- All --"] + team_options, key="reg_team")
-        with r_f2: r_gen = st.selectbox("⚖️ Gender:", ["-- All --", "Male", "Female"], key="reg_gen")
-
-        df_live = pd.DataFrame(all_live_defects)
-        if not df_live.empty:
-            if r_team != "-- All --": df_live = df_live[df_live['Team'].astype(str).str.upper() == r_team.upper()]
-            if r_gen != "-- All --": df_live = df_live[df_live['Gender'] == r_gen]
+        
+        df_live_base = pd.DataFrame(all_live_defects)
+        
+        if not df_live_base.empty:
+            # 🚀 Filter by Institution (School/Anganwadi)
+            inst_options = sorted(list(df_live_base['Institution'].unique()))
+            with r_f1: r_inst = st.selectbox("🏢 Institution:", ["-- All --"] + inst_options, key="reg_inst")
+            with r_f2: r_gen = st.selectbox("⚖️ Gender:", ["-- All --", "Male", "Female"], key="reg_gen_live")
             
-            st.dataframe(df_live[['Date', 'Name', 'Institution', 'Condition', 'Contact', 'Gender']], use_container_width=True, hide_index=True)
-            st.download_button("⬇️ Download Today's Registry", df_live.to_csv(index=False).encode('utf-8-sig'), "Daily_Defects.csv")
+            df_live_filtered = df_live_base.copy()
+            if r_inst != "-- All --": df_live_filtered = df_live_filtered[df_live_filtered['Institution'] == r_inst]
+            if r_gen != "-- All --": df_live_filtered = df_live_filtered[df_live_filtered['Gender'] == r_gen]
+            
+            st.write(f"Showing **{len(df_live_filtered)}** defects screened today.")
+            st.dataframe(df_live_filtered[['Date', 'Name', 'Institution', 'Condition', 'Contact', 'Gender']], 
+                         use_container_width=True, hide_index=True)
         else: st.info("No defects screened today.")
 
+    # 🪪 TAB 4: REFER CARD (No Team Filter, Institution + Gender only)
     with tab_card:
         st.subheader("🪪 Official Refer Card Center")
-        c_f1, c_f2 = st.columns(2)
-        with c_f1: c_team = st.selectbox("👤 Team:", ["-- All --"] + team_options, key="card_team")
-        with c_f2: c_gen = st.selectbox("⚖️ Gender:", ["-- All --", "Male", "Female"], key="card_gen")
+        df_card_base = pd.DataFrame(all_live_defects)
+        
+        if not df_card_base.empty:
+            c_f1, c_f2 = st.columns(2)
+            # Filter logic
+            inst_list_card = sorted(list(df_card_base['Institution'].unique()))
+            with c_f1: sel_inst_card = st.selectbox("🏢 Institution:", ["-- All --"] + inst_list_card, key="card_inst")
+            with c_f2: c_gen_card = st.selectbox("⚖️ Gender:", ["-- All --", "Male", "Female"], key="card_gen")
 
-        df_card = pd.DataFrame(all_live_defects)
-        if not df_card.empty:
-            if c_team != "-- All --": df_card = df_card[df_card['Team'].astype(str).str.upper() == c_team.upper()]
-            if c_gen != "-- All --": df_card = df_card[df_card['Gender'] == c_gen]
-            
-            # 🚀 NEW: Specific Institution filter inside Card tab
-            unique_inst = sorted(list(df_card['Institution'].unique()))
-            sel_inst = st.selectbox("🏢 Specific School/Anganwadi:", ["-- All --"] + unique_inst, key="card_inst")
-            if sel_inst != "-- All --": df_card = df_card[df_card['Institution'] == sel_inst]
+            df_card_filtered = df_card_base.copy()
+            if sel_inst_card != "-- All --": df_card_filtered = df_card_filtered[df_card_filtered['Institution'] == sel_inst_card]
+            if c_gen_card != "-- All --": df_card_filtered = df_card_filtered[df_card_filtered['Gender'] == c_gen_card]
 
-            display_map = {f"{r['Name']} ({r['Institution']})": r for _, r in df_card.iterrows()}
+            display_map = {f"{r['Name']} ({r['Institution']})": r for _, r in df_card_filtered.iterrows()}
             sel_c = st.selectbox("Select Child to Print:", ["-- Select --"] + sorted(list(display_map.keys())))
             
             if sel_c != "-- Select --":
                 p = display_map[sel_c]
-                with st.form("print_refer"):
+                with st.form("print_refer_final"):
                     st.write(f"📝 Referral Details for {p['Name']}")
                     f_col1, f_col2 = st.columns(2)
                     with f_col1: p['Parent_Name'] = st.text_input("Father", value=p['Father'])
                     with f_col2: p['Contact_Num'] = st.text_input("Mobile", value=p['Contact'])
                     p['Clinical_Findings'] = st.text_area("Diagnosis", value=p['Condition'])
                     p['Referred_To'] = st.text_input("Refer To", value="CIVIL HOSPITAL JUNAGADH")
+                    
                     if st.form_submit_button("🖨️ Generate PDF"):
                         p['Age'] = get_age(p['DOB']); p['MO_Name'] = "Dr. NIHAR UPADHYAY"
                         pdf_b = generate_refer_card(p)
