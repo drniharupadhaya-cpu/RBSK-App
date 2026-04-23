@@ -229,11 +229,12 @@ def load_all_data():
     df_q_perf = safe_load("Q_Performance")
     df_q_loc = safe_load("Q_Location_4D")
     df_q_demo = safe_load("Q_Demo_4D")
-    df_team_4d = get_sheet_data("Team_4D_Report")
+    df_team_4d = safe_load("Team_4D_Report")
     df_hbnc = safe_load("hbnc_screenings") # 🚀 Added Module 5 to the fast-cache!
 
-    return df_4d, df_anemia, df_directory, df_aw_contacts, df_staff, df_aw_master, df_all_students, df_q_perf, df_q_loc, df_q_demo, df_hbnc
-
+    return df_4d, df_anemia, df_directory, df_aw_contacts, df_staff, df_aw_master, df_all_students, df_q_perf, df_q_loc, df_q_demo, df_team_4d, df_hbnc
+    # 🚀 FIX 2: Ensure it is unpacked correctly where you call the function
+    df_4d, df_anemia, df_directory, df_aw_contacts, df_staff, df_aw_master, df_all_students, df_q_perf, df_q_loc, df_q_demo, df_team_4d, df_hbnc = load_data()
 try:
     spreadsheet = get_spreadsheet() 
     df_4d, df_anemia, df_directory, df_aw_contacts, df_staff, df_aw_master, df_all_students, df_q_perf, df_q_loc, df_q_demo, df_hbnc = load_all_data() 
