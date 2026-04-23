@@ -1016,16 +1016,17 @@ elif menu == "2. Child Screening":
 # MODULE 3: 4D DEFECT REGISTRY & CASE MANAGEMENT
 # ==========================================
 elif menu == "3. 4D Defect Registry":
-    render_header("4D Defect Command Center", "Advanced Clinical Registry with Anemia Tracking", "📋", "#8b5cf6")
+    render_header("4D Defect Command Center", "Clinical Registry & Refer Card Generator", "📋", "#8b5cf6")
 
     if st.button("🔄 Sync & Refresh Database"):
         try: get_daily_logs.clear()
         except: st.cache_data.clear()
         st.toast("Database refreshed!", icon="✅")
+        import time
         time.sleep(0.5)
         st.rerun()
 
-    # 🚀 NEW: Build Team Lookup locally so this module works independently!
+    # 🚀 Build Team Lookup locally
     team_lookup = {}
     if not df_aw.empty:
         aw_loc_key = next((c for c in df_aw.columns if any(k in str(c).upper() for k in ["INSTITUTE", "AWC", "CENTER", "AWC NAME"])), None)
@@ -1042,7 +1043,6 @@ elif menu == "3. 4D Defect Registry":
     # GLOBAL ANEMIA LOGIC ENGINE
     def get_anemia_status(hb_val):
         try:
-            # Clean the string in case there are units like 'g/dl'
             clean_hb = ''.join(c for c in str(hb_val) if c.isdigit() or c == '.')
             hb = float(clean_hb)
             if hb <= 0: return "" 
@@ -1057,7 +1057,8 @@ elif menu == "3. 4D Defect Registry":
     aw_logs, sch_logs, df_combined_daily = get_daily_logs()
     
     # --- GLOBAL FILTERS: TEAM & GENDER ---
-    team_list = sorted(list(set(team_lookup.values())))
+    # 🚀 FIX: Removing blank/NaN rows from the team list
+    team_list = sorted([str(x).strip() for x in set(team_lookup.values()) if str(x).strip() and str(x).lower() != 'nan'])
     
     st.markdown("### 🎯 Set Your Work Desk")
     f1, f2 = st.columns(2)
@@ -1082,26 +1083,22 @@ elif menu == "3. 4D Defect Registry":
             gender_daily_col = next((c for c in df.columns if any(k in c.lower() for k in ['gender', 'sex'])), None)
             
             for _, row in df.iterrows():
-                # A. Calculate Anemia
                 hb_val = row[hb_col] if hb_col else 0
                 anemia_status = get_anemia_status(hb_val)
                 
-                # B. The Triple Check Trigger
                 has_disease = is_significant(row[d_col]) if d_col else False
                 has_status = is_significant(row[s_col]) if s_col else False
                 has_anemia = anemia_status != "" and "Normal" not in anemia_status
                 
                 if has_disease or has_status or has_anemia:
-                    # C. Map to Team
                     inst_name = str(row[inst_col]).strip() if inst_col else "Unknown"
                     mapped_team = team_lookup.get(inst_name, "Unassigned")
                     
-                    # D. Standardize Gender
                     raw_g = str(row[gender_daily_col]).upper() if gender_daily_col else "U"
                     clean_g = "Male" if raw_g.startswith('M') else "Female" if raw_g.startswith('F') else "Unknown"
 
-                    # E. Apply Desk Filters
-                    team_match = (selected_team == "-- All Teams --" or mapped_team == selected_team)
+                    # 🚀 FIX: Bulletproof Team/Gender Filtering
+                    team_match = (selected_team == "-- All Teams --" or str(mapped_team).strip().upper() == str(selected_team).strip().upper())
                     gender_match = (selected_gender == "-- All Genders --" or clean_g == selected_gender)
 
                     if team_match and gender_match:
@@ -1119,10 +1116,11 @@ elif menu == "3. 4D Defect Registry":
                             "Condition": " + ".join(cond_list),
                             "Contact": str(row.get('Contact', row.get('Mobile No', 'N/A'))),
                             "DOB": str(row.get('DOB', 'N/A')),
+                            "Father": str(row.get('Father', row.get('Parent Name', 'N/A'))),
                             "Type": source_type
                         })
 
-    # --- PROCESS HISTORICAL MASTER (Tab 5) ---
+    # Historical filtering for Tab 1 & 2
     if not df_4d.empty:
         df_hist = df_4d.copy()
         df_hist.columns = df_hist.columns.str.strip()
@@ -1130,7 +1128,7 @@ elif menu == "3. 4D Defect Registry":
         h_g_col = next((c for c in df_hist.columns if any(k in c.upper() for k in ['GENDER', 'SEX'])), None)
         
         if selected_team != "-- All Teams --" and h_t_col:
-            df_hist = df_hist[df_hist[h_t_col].astype(str).str.strip() == selected_team]
+            df_hist = df_hist[df_hist[h_t_col].astype(str).str.strip().str.upper() == str(selected_team).upper()]
         if selected_gender != "-- All Genders --" and h_g_col:
             g_char = selected_gender[0]
             df_hist = df_hist[df_hist[h_g_col].astype(str).str.upper().str.startswith(g_char)]
@@ -1139,9 +1137,9 @@ elif menu == "3. 4D Defect Registry":
     else:
         df_hist = pd.DataFrame()
 
-    # --- TAB RENDERING ---
-    tab_action, tab_logger, tab_live, tab_card, tab_master = st.tabs([
-        "🚨 1. Action Desk", "📞 2. Follow-Up Logger", "🌍 3. Live Daily Registry", "🪪 4. Refer Card Print", "🗄️ 5. Master Database"
+    # --- UPDATED TABS (Removed Master) ---
+    tab_action, tab_logger, tab_live, tab_card = st.tabs([
+        "🚨 1. Action Desk", "📞 2. Follow-Up Logger", "🌍 3. Live Daily Registry", "🪪 4. Refer Card Print"
     ])
 
     with tab_action:
@@ -1168,7 +1166,6 @@ elif menu == "3. 4D Defect Registry":
                 if sel_kid != "-- Select --":
                     k_name = sel_kid.split(" 🩺 ")[0].strip()
                     k_disease = sel_kid.split(" 🩺 ")[1].split(" 📍 ")[0].strip()
-                    
                     with st.form("logger_form"):
                         new_stat = st.selectbox("Status:", ["Under Treatment", "Referred to CHC", "Surgery Scheduled", "Cured/Resolved"])
                         nxt_dt = st.date_input("Next Date")
@@ -1178,23 +1175,17 @@ elif menu == "3. 4D Defect Registry":
                                 ws = spreadsheet.worksheet("4d_list")
                                 all_vals = ws.get_all_values()
                                 headers = all_vals[0]
-                                name_idx = headers.index("NAME")
-                                d_idx = headers.index("4D")
-                                status_idx = headers.index("Current Status")
-                                date_idx = headers.index("Next Follow-Up Date")
-                                remarks_idx = headers.index("Remarks") if "Remarks" in headers else None
-
+                                name_idx, d_idx = headers.index("NAME"), headers.index("4D")
+                                stat_idx, date_idx = headers.index("Current Status"), headers.index("Next Follow-Up Date")
+                                rem_idx = headers.index("Remarks") if "Remarks" in headers else None
                                 for i, row in enumerate(all_vals):
                                     if i > 0 and str(row[name_idx]).strip() == k_name and str(row[d_idx]).strip() == k_disease:
-                                        ws.update_cell(i+1, status_idx + 1, new_stat)
+                                        ws.update_cell(i+1, stat_idx + 1, new_stat)
                                         ws.update_cell(i+1, date_idx + 1, "" if new_stat == "Cured/Resolved" else str(nxt_dt))
-                                        if remarks_idx:
-                                            ws.update_cell(i+1, remarks_idx + 1, rems)
+                                        if rem_idx: ws.update_cell(i+1, rem_idx + 1, rems)
                                         break
-                                st.success("Case updated successfully!")
-                                st.cache_data.clear()
-                                time.sleep(0.5)
-                                st.rerun()
+                                st.success("Case updated!")
+                                st.cache_data.clear(); time.sleep(0.5); st.rerun()
                             except Exception as e: st.error(f"Error: {e}")
         else: st.success("No active cases.")
 
@@ -1202,29 +1193,52 @@ elif menu == "3. 4D Defect Registry":
         st.subheader("🌍 Today's Screened Defects & Anemia Cases")
         if all_live_defects:
             df_live = pd.DataFrame(all_live_defects)
-            st.write(f"Showing **{len(df_live)}** live cases for selected Desk.")
+            st.write(f"Showing **{len(df_live)}** live cases for selected Team/Gender.")
             st.dataframe(df_live[['Date', 'Name', 'Institution', 'Condition', 'Contact', 'Type']], use_container_width=True, hide_index=True)
         else:
-            st.info("No defects matching your filters found in today's logs.")
+            st.info("No live defects found matching your current filters.")
 
     with tab_card:
         st.subheader("🪪 Refer Card Print")
         if all_live_defects:
-            display_map = {f"{d['Name']} ({d['Institution']})": d for d in all_live_defects}
+            # 🚀 NEW: Filter by Institution INSIDE the Refer Card Tab
+            inst_list = sorted(list(set([d['Institution'] for d in all_live_defects])))
+            selected_inst_card = st.selectbox("🏢 Filter by School/Anganwadi:", ["-- All Institutions --"] + inst_list)
+            
+            card_eligible_kids = all_live_defects
+            if selected_inst_card != "-- All Institutions --":
+                card_eligible_kids = [d for d in all_live_defects if d['Institution'] == selected_inst_card]
+
+            display_map = {f"{d['Name']} ({d['Institution']})": d for d in card_eligible_kids}
             sel_card = st.selectbox("Select Child for Refer Card:", ["-- Select --"] + sorted(list(display_map.keys())))
+            
             if sel_card != "-- Select --":
                 p_data = display_map[sel_card]
-                st.info(f"Preparing Referral for {p_data['Name']}...")
-                # (Existing PDF Print logic goes here as usual)
+                st.markdown(f"### 📋 Referral Details: {p_data['Name']}")
+                
+                with st.form("refer_card_form"):
+                    c1, c2 = st.columns(2)
+                    with c1: f_name = st.text_input("Father's Name", value=p_data.get('Father', ''))
+                    with c2: mob = st.text_input("Mobile", value=p_data.get('Contact', ''))
+                    
+                    clin_find = st.text_area("Clinical Findings", value=p_data['Condition'])
+                    ref_to = st.text_input("Referred To", value="CIVIL HOSPITAL JUNAGADH")
+                    
+                    if st.form_submit_button("🖨️ Generate PDF Refer Card"):
+                        # Ensure data is ready for PDF function
+                        p_data['Parent_Name'] = f_name
+                        p_data['Contact_Num'] = mob
+                        p_data['Clinical_Findings'] = clin_find
+                        p_data['Referred_To'] = ref_to
+                        p_data['Age'] = get_age(p_data['DOB'])
+                        p_data['MO_Name'] = "Dr. NIHAR UPADHYAY"
+                        
+                        pdf_bytes = generate_refer_card(p_data)
+                        import base64
+                        b64 = base64.b64encode(pdf_bytes).decode()
+                        st.markdown(f'<a href="data:application/pdf;base64,{b64}" download="Refer_{p_data["Name"]}.pdf" style="display:block;padding:10px;background:#3b82f6;color:white;text-align:center;border-radius:5px;text-decoration:none;">📄 Download PDF Card</a>', unsafe_allow_html=True)
         else:
-            st.warning("No children in registry.")
-
-    with tab_master:
-        st.subheader("🗄️ Historical Database (Filtered)")
-        if not df_hist.empty:
-            st.write(f"Showing **{len(df_hist)}** records for your selection.")
-            st.dataframe(df_hist.drop(columns=['Parsed_Next_Date'], errors='ignore'), use_container_width=True, hide_index=True)
-            st.download_button("⬇️ Download CSV", df_hist.to_csv(index=False).encode('utf-8-sig'), "Master_4D_Filtered.csv")
+            st.warning("No children in registry matching current Team/Gender filters.")
 # ==========================================
 # MODULE 4: VISUAL ANALYSIS
 # ==========================================
