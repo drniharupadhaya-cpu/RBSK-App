@@ -232,13 +232,16 @@ def load_all_data():
     df_team_4d = safe_load("Team_4D_Report")
     df_hbnc = safe_load("hbnc_screenings") # 🚀 Added Module 5 to the fast-cache!
 
+    # Return exactly 12 items
     return df_4d, df_anemia, df_directory, df_aw_contacts, df_staff, df_aw_master, df_all_students, df_q_perf, df_q_loc, df_q_demo, df_team_4d, df_hbnc
-    # 🚀 FIX 2: Ensure it is unpacked correctly where you call the function
-    df_4d, df_anemia, df_directory, df_aw_contacts, df_staff, df_aw_master, df_all_students, df_q_perf, df_q_loc, df_q_demo, df_team_4d, df_hbnc = load_data()
+
 try:
     spreadsheet = get_spreadsheet() 
-    df_4d, df_anemia, df_directory, df_aw_contacts, df_staff, df_aw_master, df_all_students, df_q_perf, df_q_loc, df_q_demo, df_hbnc = load_all_data() 
     
+    # 🔴 THE FIX IS HERE: We unpack exactly 12 variables in the same order they were returned!
+    df_4d, df_anemia, df_directory, df_aw_contacts, df_staff, df_aw_master, df_all_students, df_q_perf, df_q_loc, df_q_demo, df_team_4d, df_hbnc = load_all_data() 
+    
+    # These safe aliases ensure Modules 1, 2, and 3 don't throw NameErrors
     df_aw = df_aw_master
     df_students = df_all_students
     df_schools = df_directory
@@ -246,6 +249,9 @@ try:
 except Exception as e:
     if "429" in str(e) or "Quota exceeded" in str(e):
         st.error("🚦 Whoa there! Google is enforcing a speed limit. Please wait exactly 60 seconds and refresh the page!")
+        st.stop()
+    else:
+        st.error(f"An error occurred while loading data: {e}")
         st.stop()
 
 # ==========================================
