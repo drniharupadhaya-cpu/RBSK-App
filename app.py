@@ -18,7 +18,7 @@ import numpy as np # Added globally for maximum speed
 # ==========================================
 # MASTER DATA ENGINE (Optimized for Speed & Multiple Users)
 # ==========================================
-@st.cache_data(ttl=600)
+@st.cache_data(ttl=86400)
 def get_daily_logs():
     """Fetches daily screenings ONCE and shares it with Modules 1, 3, and 12."""
     try:
