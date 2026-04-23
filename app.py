@@ -2734,7 +2734,7 @@ elif menu == "12. Automated State Report":
 
     tab_form3, tab_scoreboard = st.tabs(["📄 Form III (Govt Export)", "🎯 Live Scoreboard (Target vs. Achievement)"])
 
-    # 🚀 NEW: Fetch Master Mapping globally so both tabs run lightning fast!
+    # 🚀 Fetch Master Mapping globally so both tabs run lightning fast!
     with st.spinner("Synchronizing Master Team Databases..."):
         try:
             master_aw = pd.DataFrame(spreadsheet.worksheet("aw new data").get_all_records())
@@ -2746,6 +2746,19 @@ elif menu == "12. Automated State Report":
         def find_m_col(df, keys):
             return next((c for c in df.columns if any(k in str(c).upper() for k in keys)), None)
 
+        # 🧹 THE FIX: GHOST ROW PURGER 🧹
+        # This explicitly deletes empty rows from Google Sheets so they aren't counted in your target!
+        if not master_aw.empty:
+            aw_name_col = find_m_col(master_aw, ["NAME", "CHILD", "STUDENT"])
+            if aw_name_col:
+                master_aw = master_aw[master_aw[aw_name_col].astype(str).str.strip() != '']
+                
+        if not master_sch.empty:
+            sch_name_col = find_m_col(master_sch, ["NAME", "CHILD", "STUDENT"])
+            if sch_name_col:
+                master_sch = master_sch[master_sch[sch_name_col].astype(str).str.strip() != '']
+
+        # Now map the clean data
         aw_loc_key = find_m_col(master_aw, ["INSTITUTE", "AWC", "CENTER", "AWC NAME"])
         aw_team_key = find_m_col(master_aw, ["TEAM"])
         aw_gender_key = find_m_col(master_aw, ["GENDER", "SEX"])
@@ -2862,7 +2875,6 @@ elif menu == "12. Automated State Report":
 
                 st.divider()
 
-                # 🚀 NEW: Split Form III by Team!
                 teams_to_show = ["TEAM-1240315", "TEAM-1240309", "Unassigned"]
                 
                 for team in teams_to_show:
@@ -2909,7 +2921,6 @@ elif menu == "12. Automated State Report":
                                 
                             t_diseases = team_df[team_df[disease_col].apply(is_real_disease)]
                             if not t_diseases.empty:
-                                # 🚀 NEW: Advanced 4D Demographic Matrix
                                 d_counts = t_diseases.groupby([disease_col, 'Govt_Age_Bucket', 'Clean_Gender']).size().reset_index(name='Count')
                                 d_counts.columns = ['Condition', 'Age Group', 'Gender', 'Count']
                                 d_counts['Gender'] = d_counts['Gender'].map({'M': 'Boys', 'F': 'Girls', 'U': 'Unknown'}).fillna('Unknown')
@@ -2923,7 +2934,7 @@ elif menu == "12. Automated State Report":
                 
                 export_df = pd.DataFrame()
                 export_df['Screening Date'] = report_df[date_col].dt.strftime('%d-%m-%Y')
-                export_df['Assigned Team'] = report_df['Mapped_Team']  # 🚀 NEW: Added Team to CSV
+                export_df['Assigned Team'] = report_df['Mapped_Team'] 
                 export_df['Source'] = report_df['Source']
                 export_df['Institution'] = report_df['Official_Institution'] 
                 export_df['Child Name'] = report_df['Official_Child_Name']   
@@ -2983,7 +2994,6 @@ elif menu == "12. Automated State Report":
         try:
             with st.spinner("Calculating Taluka Matrix, Cycles, and Achievements..."):
                 
-                # 🚀 Data already fetched and mapped globally at the top!
                 if not df_combined.empty and date_col:
                     df_combined['Screening_Month'] = df_combined[date_col].dt.month
                     df_combined['Cycle'] = df_combined['Screening_Month'].apply(lambda m: 'Cycle 1' if 4 <= m <= 9 else 'Cycle 2')
