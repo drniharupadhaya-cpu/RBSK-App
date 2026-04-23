@@ -1456,30 +1456,15 @@ elif menu == "3. 4D Defect Registry":
 # MODULE 4: VISUAL ANALYSIS
 # ==========================================
 elif menu == "4. Visual Analysis":
-    render_header("Visual Analytics", "Quarterly Zero-Lag Performance & Epidemiological Mapping", "🗺️", "#f97316")
-    st.write("Welcome to the Zero-Lag Command Center. This dashboard processes your Quarterly State Reports for maximum speed and deep insights.")
-
-    # 🚀 BULLETPROOF DATA LOADING: Fetching the data locally so it never fails!
-    with st.spinner("Loading analytical data..."):
-        try: df_q_perf = get_sheet_data("Q_Performance")
-        except: df_q_perf = pd.DataFrame()
-        
-        try: df_q_loc = get_sheet_data("Q_Location_4D")
-        except: df_q_loc = pd.DataFrame()
-        
-        try: df_q_demo = get_sheet_data("Q_Demo_4D")
-        except: df_q_demo = pd.DataFrame()
-        
-        try: df_team_4d = get_sheet_data("Team_4D_Report")
-        except: df_team_4d = pd.DataFrame()
-
-    # Import required visualization libraries locally to prevent missing imports
     import plotly.express as px
     import plotly.graph_objects as go
     import numpy as np
+    
+    render_header("Visual Analytics", "Quarterly Zero-Lag Performance & Epidemiological Mapping", "🗺️", "#f97316")
+    st.write("Welcome to the Zero-Lag Command Center. This dashboard processes your Quarterly State Reports for maximum speed and deep insights.")
 
     tab_coverage, tab_hotspot, tab_radar, tab_team = st.tabs([
-        "🎯 Coverage Matrix", "📍 Disease Hotspot", "🧬 Demographic Radar", "👥 Team Performance Matrix"
+        "🎯 Coverage & Velocity Matrix", "📍 Disease Hotspot Mapper", "🧬 Epidemiological Radar", "👥 Team Performance Matrix"
     ])
 
     with tab_coverage:
@@ -1506,7 +1491,7 @@ elif menu == "4. Visual Analysis":
                              color_discrete_map={'Total Screened': '#10b981', 'Total Registered': '#3b82f6'})
             st.plotly_chart(fig_cov, use_container_width=True)
         else:
-            st.warning("⚠️ Waiting for valid data in the 'Q_Performance' sheet.")
+            st.warning("⚠️ Waiting for valid data in the 'Q_Performance' tab.")
 
     with tab_hotspot:
         st.subheader("Geographical Disease Hotspots")
@@ -1535,7 +1520,7 @@ elif menu == "4. Visual Analysis":
                 else:
                     st.success(f"✅ Incredible! Zero reported cases of **{selected_disease}** across all villages!")
         else:
-            st.warning("⚠️ Waiting for valid data in the 'Q_Location_4D' sheet.")
+            st.warning("⚠️ Waiting for valid data in the 'Q_Location_4D' tab.")
 
     with tab_radar:
         st.subheader("Demographic Disease Radar (Age & Gender)")
@@ -1576,12 +1561,19 @@ elif menu == "4. Visual Analysis":
                 else:
                     st.success(f"✅ No demographic cases found for **{selected_demo_disease}**!")
         else:
-            st.warning("⚠️ Waiting for valid data in the 'Q_Demo_4D' sheet.")
+            st.warning("⚠️ Waiting for valid data in the 'Q_Demo_4D' tab.")
 
-    # 🚀 TEAM PERFORMANCE MATRIX
+    # 🚀 NEW: TEAM PERFORMANCE MATRIX
     with tab_team:
         st.subheader("👥 Operational Workforce & Team Performance Matrix")
         st.write("Track productivity, efficiency, and clinical detection quality across all specific RBSK Teams.")
+
+        # Safe fetch for Team Data
+        try:
+            if 'df_team_4d' not in globals() and 'df_team_4d' not in locals():
+                df_team_4d = get_sheet_data("Team_4D_Report")
+        except Exception:
+            df_team_4d = pd.DataFrame()
 
         if not df_team_4d.empty:
             df_t = df_team_4d.copy()
@@ -1672,7 +1664,7 @@ elif menu == "4. Visual Analysis":
                 st.plotly_chart(fig_scatter, use_container_width=True)
 
         else:
-            st.warning("⚠️ Could not locate 'Team_4D_Report' sheet in your Google Sheets database. Please verify the sheet name!")
+            st.warning("⚠️ Could not locate 'Team_4D_Report' sheet in your Google Sheets database. Make sure you added `df_team_4d = get_sheet_data('Team_4D_Report')` at the top of your app file!")
 
 # ==========================================
 # MODULE 5: HBNC NEWBORN VISIT (Zero-Lag Micro-Cache)
