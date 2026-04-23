@@ -1013,12 +1013,12 @@ elif menu == "2. Child Screening":
             st.warning(f"No {view_category} found assigned to {selected_team}. Make sure the master database contains the exact team name.")
    
 # ==========================================
-# MODULE 3: 4D DEFECT REGISTRY & CASE MANAGEMENT (Emoji-Anchor Edition)
+# MODULE 3: 4D DEFECT REGISTRY & CASE MANAGEMENT
 # ==========================================
 elif menu == "3. 4D Defect Registry":
-    render_header("4D Defect Command Center", "Track live referrals, manage 5-year case history, and generate official print cards", "📋", "#8b5cf6")
+    render_header("4D Defect Command Center", "Simplified Case Management by Team & Gender", "📋", "#8b5cf6")
 
-    if st.button("🔄 Sync & Refresh Data"):
+    if st.button("🔄 Sync & Refresh Database"):
         try: get_daily_logs.clear()
         except: st.cache_data.clear()
         st.toast("Database refreshed!", icon="✅")
@@ -1026,61 +1026,74 @@ elif menu == "3. 4D Defect Registry":
         st.rerun()
 
     aw_logs, sch_logs, df_combined = get_daily_logs()
-    all_defects = []
+    
+    # --- GLOBAL FILTERS: TEAM & GENDER ---
+    if not df_4d.empty:
+        df_4d.columns = df_4d.columns.str.strip()
+        
+        # Identify Columns
+        team_col = next((c for c in df_4d.columns if 'TEAM' in c.upper()), None)
+        gender_col = next((c for c in df_4d.columns if any(k in c.upper() for k in ['GENDER', 'SEX'])), None)
+        
+        st.markdown("### 🎯 Set Your Work Desk")
+        f1, f2 = st.columns(2)
+        
+        with f1:
+            team_list = sorted([str(x) for x in df_4d[team_col].unique() if str(x) not in ['nan', '']]) if team_col else []
+            selected_team = st.selectbox("👤 Select Your Team:", ["-- All Teams --"] + team_list)
+        
+        with f2:
+            # Standardizing Gender Options
+            selected_gender = st.selectbox("⚖️ Filter by Gender:", ["-- All Genders --", "Male", "Female"])
 
+        # 🚀 APPLY FILTERS TO WORKING DATAFRAME
+        df_working = df_4d.copy()
+        
+        if selected_team != "-- All Teams --":
+            df_working = df_working[df_working[team_col] == selected_team]
+        
+        if selected_gender != "-- All Genders --":
+            if gender_col:
+                g_char = selected_gender[0].upper() # 'M' or 'F'
+                df_working = df_working[df_working[gender_col].astype(str).str.upper().str.startswith(g_char)]
+            else:
+                st.warning("⚠️ 'GENDER' column not found in '4d_list' sheet.")
+
+        df_working['Parsed_Next_Date'] = pd.to_datetime(df_working.get('Next Follow-Up Date', ''), errors='coerce', dayfirst=True)
+    else:
+        df_working = pd.DataFrame()
+        st.error("⚠️ The '4d_list' sheet is empty or could not be found.")
+
+    # Process Daily Logs for the "Live Registry" (Today's Screenings)
+    all_defects = []
     def is_real_defect(val):
         v = str(val).strip().lower()
-        return v not in ['', 'nan', 'none', 'no', 'null', 'na', 'n/a', 'false', 'normal', '-', 'absent', 'out of bounds']
+        return v not in ['', 'nan', 'none', 'no', 'null', 'na', 'n/a', 'false', 'normal', '-', 'absent']
 
-    # 🚀 VECTORIZED SPEED UPGRADE
     for df_type, df in [("Anganwadi", aw_logs), ("School", sch_logs)]:
         if not df.empty:
-            df.columns = [str(c).strip() for c in df.columns]
-            
-            disease_col = next((c for c in df.columns if c.lower() in ['disease', 'diseases', '4d']), None)
-            status_col = next((c for c in df.columns if c.lower() in ['status', 'sam', 'mam']), None)
-            
+            d_col = next((c for c in df.columns if c.lower() in ['disease', 'diseases', '4d']), None)
+            s_col = next((c for c in df.columns if c.lower() in ['status', 'sam', 'mam']), None)
             mask = pd.Series(False, index=df.index)
-            if disease_col: mask = mask | df[disease_col].apply(is_real_defect)
-            if status_col: mask = mask | df[status_col].apply(is_real_defect)
-            
+            if d_col: mask = mask | df[d_col].apply(is_real_defect)
+            if s_col: mask = mask | df[s_col].apply(is_real_defect)
             sick_kids = df[mask]
-            
             for _, row in sick_kids.iterrows():
-                d_val = str(row[disease_col]).strip() if disease_col else ""
-                s_val = str(row[status_col]).strip() if status_col else ""
-                
-                condition_parts = []
-                if is_real_defect(s_val): condition_parts.append(s_val)
-                if is_real_defect(d_val): condition_parts.append(d_val)
-                
                 def get_val(search_terms, fallback="Unknown"):
                     for col in df.columns:
                         if any(term in col.lower() for term in search_terms): return str(row[col])
                     return fallback
-
                 all_defects.append({
                     "Date": get_val(['date', 'screening']),
                     "Name": get_val(['name', 'beneficiary', 'student']),
                     "Institution": get_val(['inst', 'school', 'awc']),
-                    "Condition": " + ".join(condition_parts),
-                    "Contact": get_val(['contact', 'mobile', 'phone', 'techo']),
+                    "Condition": f"{str(row[d_col]) if d_col else ''} {str(row[s_col]) if s_col else ''}".strip(),
+                    "Contact": get_val(['contact', 'mobile', 'phone']),
                     "Gender": get_val(['gender', 'sex'], "N/A"),
                     "DOB": get_val(['dob', 'birth'], "N/A"),
-                    "Father": get_val(['father', 'parent', 'mother'], "N/A"),
+                    "Father": get_val(['father', 'parent'], "N/A"),
                     "Type": df_type
                 })
-
-    import datetime
-    today = datetime.date.today()
-    today_ts = pd.Timestamp(today) 
-    
-    if not df_4d.empty:
-        df_4d.columns = df_4d.columns.str.strip()
-        df_working = df_4d.copy()
-        df_working['Parsed_Next_Date'] = pd.to_datetime(df_working.get('Next Follow-Up Date', ''), errors='coerce', dayfirst=True)
-    else:
-        df_working = pd.DataFrame()
 
     tab_action, tab_logger, tab_live, tab_card, tab_master = st.tabs([
         "🚨 1. Action Desk", 
@@ -1091,218 +1104,139 @@ elif menu == "3. 4D Defect Registry":
     ])
 
     with tab_action:
-        st.subheader("🎯 Today's Action Desk")
-        st.write("Historical 4D cases that need immediate follow-up.")
-
+        st.subheader("🎯 Filtered Action Desk")
         if not df_working.empty:
-            overdue_mask = (df_working['Parsed_Next_Date'] <= today_ts) & (df_working.get('Current Status', '').astype(str).str.upper() != 'CURED/RESOLVED')
-            df_action = df_working[overdue_mask].copy()
-            
-            unscheduled_mask = df_working['Parsed_Next_Date'].isna() & (df_working.get('Current Status', '').astype(str).str.upper() != 'CURED/RESOLVED')
-            df_new = df_working[unscheduled_mask].copy()
+            today_ts = pd.Timestamp(datetime.date.today())
+            overdue = df_working[(df_working['Parsed_Next_Date'] <= today_ts) & (df_working['Current Status'].astype(str).str.upper() != 'CURED/RESOLVED')]
+            unscheduled = df_working[df_working['Parsed_Next_Date'].isna() & (df_working['Current Status'].astype(str).str.upper() != 'CURED/RESOLVED')]
 
-            col1, col2 = st.columns(2)
-            col1.metric("🔴 Urgent / Overdue Follow-ups", len(df_action))
-            col2.metric("🟡 Unscheduled / Needs Assessment", len(df_new))
+            c1, c2 = st.columns(2)
+            c1.metric("🔴 Overdue Follow-ups", len(overdue))
+            c2.metric("🟡 Needs Assessment", len(unscheduled))
 
-            st.divider()
-            if not df_action.empty:
-                st.error(f"🚨 **{len(df_action)} Children require immediate contact!**")
-                cols_to_show = [c for c in ['NAME', 'VILLAGE', '4D', 'MOBILE NO', 'Current Status', 'Next Follow-Up Date'] if c in df_action.columns]
-                st.dataframe(df_action[cols_to_show], use_container_width=True, hide_index=True)
-            else:
-                st.success("🎉 No overdue follow-ups! You are completely caught up.")
-
-            if not df_new.empty:
-                st.warning(f"⚠️ **{len(df_new)} Children have no follow-up date scheduled.**")
-                cols_to_show2 = [c for c in ['NAME', 'VILLAGE', '4D', 'SCREENING DATE', 'AW/SCHOOL NAME'] if c in df_new.columns]
-                st.dataframe(df_new[cols_to_show2], use_container_width=True, hide_index=True)
+            if not overdue.empty:
+                st.error("🚨 These children need immediate contact!")
+                st.dataframe(overdue[['NAME', 'VILLAGE', '4D', 'Current Status', 'Next Follow-Up Date']], use_container_width=True, hide_index=True)
+            if not unscheduled.empty:
+                st.warning("⚠️ No follow-up date has been scheduled for these children.")
+                st.dataframe(unscheduled[['NAME', 'VILLAGE', '4D', 'SCREENING DATE']], use_container_width=True, hide_index=True)
         else:
-            st.warning("⚠️ No historical data found in the '4d_list' tab.")
+            st.info("No pending cases found for this specific Team/Gender selection.")
 
     with tab_logger:
-        st.subheader("📞 Log a Follow-Up Contact")
-        
+        st.subheader("📞 Log Case Update")
         if not df_working.empty:
-            active_kids = df_working[df_working.get('Current Status', '').astype(str).str.upper() != 'CURED/RESOLVED']
-            
+            active_kids = df_working[df_working['Current Status'].astype(str).str.upper() != 'CURED/RESOLVED']
             if not active_kids.empty:
-                kid_options = []
-                for _, r in active_kids.iterrows():
-                    # 🚀 EMOJI ANCHOR FIX: Bulletproof string building!
-                    kid_options.append(f"{r.get('NAME', 'Unknown')} 🩺 {r.get('4D', 'Unknown')} 📍 {r.get('VILLAGE', 'Unknown')} 📞 Ph: {r.get('MOBILE NO', 'N/A')}")
-                
-                selected_kid_str = st.selectbox("Select Child for Follow-up:", ["-- Select --"] + sorted(kid_options))
+                # Building selections with Emoji Anchor for precision
+                kid_options = [f"{r['NAME']} 🩺 {r['4D']} 📍 {r['VILLAGE']}" for _, r in active_kids.iterrows()]
+                selected_kid_str = st.selectbox("Select Child to update:", ["-- Select --"] + sorted(kid_options))
 
                 if selected_kid_str != "-- Select --":
-                    # 🚀 EMOJI ANCHOR PARSING: It will never get confused by parenthesis again!
-                    exact_name = selected_kid_str.split(" 🩺 ")[0].strip()
-                    exact_disease = selected_kid_str.split(" 🩺 ")[1].split(" 📍 ")[0].strip()
+                    k_name = selected_kid_str.split(" 🩺 ")[0].strip()
+                    k_disease = selected_kid_str.split(" 🩺 ")[1].split(" 📍 ")[0].strip()
                     
-                    matched_rows = df_working[
-                        (df_working['NAME'].astype(str).str.strip() == exact_name) & 
-                        (df_working['4D'].astype(str).str.strip() == exact_disease)
-                    ]
-                    
-                    if not matched_rows.empty:
-                        target_row = matched_rows.iloc[0]
-                        st.info(f"**Current Status:** {target_row.get('Current Status', 'None')} | **Last Scheduled:** {target_row.get('Next Follow-Up Date', 'None')}")
+                    target_row = df_working[(df_working['NAME'].astype(str).str.strip() == k_name) & 
+                                            (df_working['4D'].astype(str).str.strip() == k_disease)].iloc[0]
 
-                        with st.form("followup_form"):
-                            st.write("### Update Case File")
-                            f_col1, f_col2 = st.columns(2)
-                            with f_col1: contact_method = st.radio("Contact Method:", ["📞 Telephonic", "🏠 Physical Visit"], horizontal=True)
-                            with f_col2: new_status = st.selectbox("New Case Status:", ["Pending Assessment", "Under Treatment", "Referred to CHC", "Surgery Scheduled", "Cured/Resolved"], index=1)
-                            
-                            remarks = st.text_input("Doctor/Staff Remarks & Advice given today:")
-                            new_date = st.date_input("Schedule NEXT Follow-Up Date (Leave as today if Cured)")
-                            submit_followup = st.form_submit_button("💾 Save to Master Database")
-
-                        if submit_followup:
+                    with st.form("quick_log_form"):
+                        st.info(f"📍 **Village:** {target_row.get('VILLAGE', 'N/A')} | 📱 **Contact:** {target_row.get('MOBILE NO', 'N/A')}")
+                        f_col1, f_col2 = st.columns(2)
+                        with f_col1: new_status = st.selectbox("Update Status:", ["Under Treatment", "Referred to CHC", "Surgery Scheduled", "Cured/Resolved"])
+                        with f_col2: next_date = st.date_input("Schedule Next Follow-Up")
+                        
+                        remarks = st.text_area("Remarks / Notes from call:")
+                        
+                        if st.form_submit_button("💾 Save to Master Sheet"):
                             try:
-                                ws_4d = spreadsheet.worksheet("4d_list")
-                                all_recs = ws_4d.get_all_values()
-                                headers = all_recs[0]
-                                
-                                status_idx = headers.index("Current Status") if "Current Status" in headers else None
-                                date_idx = headers.index("Next Follow-Up Date") if "Next Follow-Up Date" in headers else None
+                                ws = spreadsheet.worksheet("4d_list")
+                                all_vals = ws.get_all_values()
+                                headers = all_vals[0]
+                                name_idx, d_idx = headers.index("NAME"), headers.index("4D")
+                                status_idx, date_idx = headers.index("Current Status"), headers.index("Next Follow-Up Date")
                                 remarks_idx = headers.index("Remarks") if "Remarks" in headers else None
-                                
-                                if status_idx is None or date_idx is None:
-                                    st.error("⚠️ Ensure your Google Sheet has exact columns named 'Current Status' and 'Next Follow-Up Date'")
-                                    st.stop()
 
-                                row_to_update = None
-                                for i, r in enumerate(all_recs):
-                                    if len(r) > headers.index("NAME") and str(r[headers.index("NAME")]).strip() == exact_name and str(r[headers.index("4D")]).strip() == exact_disease:
-                                        row_to_update = i + 1; break
+                                row_updated = False
+                                for i, row in enumerate(all_vals):
+                                    if i > 0 and str(row[name_idx]).strip() == k_name and str(row[d_idx]).strip() == k_disease:
+                                        ws.update_cell(i+1, status_idx + 1, new_status)
+                                        ws.update_cell(i+1, date_idx + 1, "" if new_status == "Cured/Resolved" else str(next_date))
+                                        if remarks_idx:
+                                            old_rem = str(row[remarks_idx])
+                                            new_rem = f"{old_rem} | [{datetime.date.today()}] {remarks}" if old_rem else f"[{datetime.date.today()}] {remarks}"
+                                            ws.update_cell(i+1, remarks_idx + 1, new_rem)
+                                        row_updated = True
+                                        break
                                 
-                                if row_to_update:
-                                    ws_4d.update_cell(row_to_update, status_idx + 1, new_status)
-                                    final_date = "" if new_status == "Cured/Resolved" else str(new_date)
-                                    ws_4d.update_cell(row_to_update, date_idx + 1, final_date)
-                                    if remarks_idx is not None:
-                                        ws_4d.update_cell(row_to_update, remarks_idx + 1, f"[{today}] {contact_method}: {remarks}")
-
-                                    st.toast(f"✅ Successfully updated Case File for {exact_name}!", icon="🎉")
+                                if row_updated:
+                                    st.success(f"Case file for {k_name} updated successfully!")
                                     st.cache_data.clear()
                                     time.sleep(0.5)
                                     st.rerun()
-                                else:
-                                    st.error("Could not find this specific child in the Google Sheet.")
-                            except Exception as e: st.error(f"Error saving to Google Sheets: {e}")
-                            
-                    else:
-                        st.error(f"⚠️ Could not find the exact record for '{exact_name}'. The database might have hidden formatting issues.")
+                            except Exception as e: st.error(f"Save failed: {e}")
             else:
-                st.success("No active cases found! Everyone is cured.")
+                st.success("🎉 No active cases for this selection!")
 
     with tab_live:
         st.subheader("🌍 Today's Screened Defects")
         if all_defects:
-            df_display = pd.DataFrame(all_defects)
-            c1, c2 = st.columns(2)
-            c1.metric("Total Referrals Today", len(all_defects))
-            c2.info("💡 Pro-tip: You can call parents using the 'Contact' column on mobile.")
-            st.dataframe(df_display[['Date', 'Name', 'Institution', 'Condition', 'Contact']], use_container_width=True, hide_index=True)
+            df_live = pd.DataFrame(all_defects)
+            st.dataframe(df_live[['Date', 'Name', 'Institution', 'Condition', 'Contact']], use_container_width=True, hide_index=True)
         else:
             st.info("Registry empty. Start screening in Module 2!")
 
     with tab_card:
-        st.subheader("🪪 Print Official Refer Cards")
+        st.subheader("🪪 Refer Card Print")
         if all_defects:
-            # 🚀 NEW FEATURE: Extract unique institutions for the filter
-            unique_institutions = sorted(list(set([str(d['Institution']).strip() for d in all_defects if str(d['Institution']).strip() != ""])))
+            unique_insts = sorted(list(set([str(d['Institution']).strip() for d in all_defects if str(d['Institution']).strip() != ""])))
+            sel_inst = st.selectbox("🏢 Filter List by Institution:", ["All Institutions"] + unique_insts)
             
-            # Institution Filter UI
-            selected_inst = st.selectbox("🏢 Filter by Institution (Optional):", ["All Institutions"] + unique_institutions)
+            f_defects = [d for d in all_defects if sel_inst == "All Institutions" or str(d['Institution']).strip() == sel_inst]
             
-            # Filter the defects list based on selection
-            filtered_defects = all_defects
-            if selected_inst != "All Institutions":
-                filtered_defects = [d for d in all_defects if str(d['Institution']).strip() == selected_inst]
+            display_map = {f"{d['Name']} ({d['Institution']})": d for d in f_defects}
+            sel_child_str = st.selectbox("Select Child for Refer Card:", ["-- Select --"] + list(display_map.keys()))
+
+            if sel_child_str != "-- Select --":
+                p_data = display_map[sel_child_str]
+                p_data['Age'] = get_age(p_data.get('DOB', ''))
                 
-            if not filtered_defects:
-                st.warning(f"No children found in {selected_inst}.")
-            else:
-                display_names = {f"{d['Name']} ({d['Institution']})": d['Name'] for d in filtered_defects}
-                sel_display = st.selectbox("Select Child for Refer Card:", ["-- Select --"] + list(display_names.keys()))
-                
-                if sel_display != "-- Select --":
-                    actual_name = display_names[sel_display]
-                    p_data = next(item for item in filtered_defects if item["Name"] == actual_name)
-                    p_data['Age'] = get_age(p_data.get('DOB', ''))
+                with st.form("print_form"):
+                    st.write(f"### Preparing Referral for: {p_data['Name']}")
+                    c1, c2, c3 = st.columns(3)
+                    with c1: p_data['Parent_Name'] = st.text_input("Father's Name", value=p_data.get('Father', ''))
+                    with c2: p_data['Mother'] = st.text_input("Mother's Name")
+                    with c3: p_data['Contact_Num'] = st.text_input("Contact Number", value=p_data.get('Contact', ''))
                     
-                    st.markdown(f"### 🪪 Preparing Card for: **{actual_name}**")
-                    st.info(f"**Child Age:** {p_data['Age']} | **Condition:** {p_data.get('Condition', 'Unknown')}")
+                    p_data['Village'] = st.text_input("Village / Address", value=p_data.get('Institution', ''))
+                    p_data['Clinical_Findings'] = st.text_area("4D Condition Details", value=p_data.get('Condition', ''))
                     
-                    with st.form("refer_card_print_form"):
-                        st.write("### 📝 Doctor's Clinical Referral Details")
-                        
-                        c1, c2, c3 = st.columns(3)
-                        with c1: p_data['Parent_Name'] = st.text_input("Father's Name", value=p_data.get('Father', ''))
-                        with c2: p_data['Mother'] = st.text_input("Mother's Name", placeholder="Enter Mother's Name")
-                        with c3: p_data['Contact_Num'] = st.text_input("Contact Number", value=p_data.get('Contact', ''), max_chars=10)
-                        
-                        c4, c5 = st.columns(2)
-                        with c4: p_data['Village'] = st.text_input("Village / City", value=p_data.get('Institution', ''))
-                        with c5: p_data['School_Status'] = st.selectbox("Child Status", ["School Going", "Not School Going", "Anganwadi"])
-                        
-                        st.divider()
-                        
-                        p_data['Clinical_Findings'] = st.text_area("Medical Condition / 4D", value=p_data.get('Condition', ''))
-                        
-                        c6, c7 = st.columns(2)
-                        with c6: p_data['Treatment_Given'] = st.text_input("Primary Treatment Given", value="Counselling and Referral")
-                        with c7: p_data['Referred_To'] = st.text_input("Referred To (Hospital)", value="CIVIL HOSPITAL JUNAGADH")
-                        
-                        c8, c9 = st.columns(2)
-                        with c8: p_data['MO_Name'] = st.text_input("Medical Officer Name", value="Dr. NIHAR UPADHYAY")
-                        with c9: p_data['Date'] = st.date_input("Official Referral Date")
-                            
-                        prepare_pdf = st.form_submit_button("🖨️ Generate Official Card & Stamp")
+                    c4, c5 = st.columns(2)
+                    with c4: p_data['Referred_To'] = st.text_input("Referred To", value="CIVIL HOSPITAL JUNAGADH")
+                    with c5: p_data['MO_Name'] = st.text_input("Medical Officer", value="Dr. NIHAR UPADHYAY")
                     
-                    if prepare_pdf:
-                        pdf_bytes = generate_refer_card(p_data) 
-                        st.success(f"✅ PDF Prepared for {actual_name}!")
-                        
+                    if st.form_submit_button("🖨️ Generate PDF Refer Card"):
+                        pdf_bytes = generate_refer_card(p_data)
                         import base64
                         b64 = base64.b64encode(pdf_bytes).decode()
-                        
-                        html_button = f'''
-                            <a href="data:application/pdf;base64,{b64}" download="Refer_{actual_name}.pdf" target="_blank" 
-                               style="display: inline-block; padding: 12px 24px; background-color: #3b82f6; color: white; 
-                               text-decoration: none; border-radius: 8px; font-weight: bold; text-align: center; width: 100%;">
-                               📄 Tap Here to View / Download PDF
-                            </a>
-                        '''
-                        st.markdown(html_button, unsafe_allow_html=True)
-                        st.caption("💡 **Mobile Users:** The PDF will open safely in a new window. When you are done, simply close the PDF to return to the app!")                
-        
+                        html = f'<a href="data:application/pdf;base64,{b64}" download="Refer_{p_data["Name"]}.pdf" style="display: block; padding: 10px; background: #3b82f6; color: white; text-align: center; border-radius: 5px; text-decoration: none;">📄 Download PDF Card</a>'
+                        st.markdown(html, unsafe_allow_html=True)
         else:
-            st.warning("No children found in daily registry to generate a card. Screen children in Module 2 first.")
+            st.warning("No screening records found today.")
 
     with tab_master:
-        st.subheader("🗄️ Search the Historical Database (2021-Present)")
-        
+        st.subheader("🗄️ Historical Database (Filtered)")
         if not df_working.empty:
-            search_query = st.text_input("🔍 Search by Name, Village, or Disease:")
-            if search_query:
-                mask = np.column_stack([df_4d[col].astype(str).str.contains(search_query, case=False, na=False) for col in df_4d.columns])
-                df_display = df_4d.loc[mask.any(axis=1)]
-            else:
-                df_display = df_4d
-                
-            st.write(f"Showing **{len(df_display)}** records.")
-            st.dataframe(df_display, use_container_width=True)
+            search = st.text_input("🔍 Search within this filtered list:")
+            df_final = df_working.copy()
+            if search:
+                mask = np.column_stack([df_final[col].astype(str).str.contains(search, case=False, na=False) for col in df_final.columns])
+                df_final = df_final.loc[mask.any(axis=1)]
             
-            csv_4d = df_display.to_csv(index=False).encode('utf-8-sig')
-            st.download_button(
-                label="⬇️ Download Filtered Report (CSV)",
-                data=csv_4d,
-                file_name=f"4D_Master_Report_{today}.csv",
-                mime="text/csv"
-            )
+            st.write(f"Showing **{len(df_final)}** records.")
+            st.dataframe(df_final.drop(columns=['Parsed_Next_Date'], errors='ignore'), use_container_width=True, hide_index=True)
+            
+            csv_out = df_final.to_csv(index=False).encode('utf-8-sig')
+            st.download_button("⬇️ Download Filtered Master (CSV)", csv_out, "Master_4D_Filtered.csv")
 # ==========================================
 # MODULE 4: VISUAL ANALYSIS
 # ==========================================
