@@ -1459,6 +1459,25 @@ elif menu == "4. Visual Analysis":
     render_header("Visual Analytics", "Quarterly Zero-Lag Performance & Epidemiological Mapping", "🗺️", "#f97316")
     st.write("Welcome to the Zero-Lag Command Center. This dashboard processes your Quarterly State Reports for maximum speed and deep insights.")
 
+    # 🚀 BULLETPROOF DATA LOADING: Fetching the data locally so it never fails!
+    with st.spinner("Loading analytical data..."):
+        try: df_q_perf = get_sheet_data("Q_Performance")
+        except: df_q_perf = pd.DataFrame()
+        
+        try: df_q_loc = get_sheet_data("Q_Location_4D")
+        except: df_q_loc = pd.DataFrame()
+        
+        try: df_q_demo = get_sheet_data("Q_Demo_4D")
+        except: df_q_demo = pd.DataFrame()
+        
+        try: df_team_4d = get_sheet_data("Team_4D_Report")
+        except: df_team_4d = pd.DataFrame()
+
+    # Import required visualization libraries locally to prevent missing imports
+    import plotly.express as px
+    import plotly.graph_objects as go
+    import numpy as np
+
     tab_coverage, tab_hotspot, tab_radar, tab_team = st.tabs([
         "🎯 Coverage Matrix", "📍 Disease Hotspot", "🧬 Demographic Radar", "👥 Team Performance Matrix"
     ])
@@ -1487,7 +1506,7 @@ elif menu == "4. Visual Analysis":
                              color_discrete_map={'Total Screened': '#10b981', 'Total Registered': '#3b82f6'})
             st.plotly_chart(fig_cov, use_container_width=True)
         else:
-            st.warning("⚠️ Waiting for valid data in the 'Q_Performance' tab.")
+            st.warning("⚠️ Waiting for valid data in the 'Q_Performance' sheet.")
 
     with tab_hotspot:
         st.subheader("Geographical Disease Hotspots")
@@ -1516,7 +1535,7 @@ elif menu == "4. Visual Analysis":
                 else:
                     st.success(f"✅ Incredible! Zero reported cases of **{selected_disease}** across all villages!")
         else:
-            st.warning("⚠️ Waiting for valid data in the 'Q_Location_4D' tab.")
+            st.warning("⚠️ Waiting for valid data in the 'Q_Location_4D' sheet.")
 
     with tab_radar:
         st.subheader("Demographic Disease Radar (Age & Gender)")
@@ -1557,15 +1576,14 @@ elif menu == "4. Visual Analysis":
                 else:
                     st.success(f"✅ No demographic cases found for **{selected_demo_disease}**!")
         else:
-            st.warning("⚠️ Waiting for valid data in the 'Q_Demo_4D' tab.")
+            st.warning("⚠️ Waiting for valid data in the 'Q_Demo_4D' sheet.")
 
-    # 🚀 NEW: TEAM PERFORMANCE MATRIX
+    # 🚀 TEAM PERFORMANCE MATRIX
     with tab_team:
         st.subheader("👥 Operational Workforce & Team Performance Matrix")
         st.write("Track productivity, efficiency, and clinical detection quality across all specific RBSK Teams.")
 
-        # Ensure df_team_4d exists
-        if 'df_team_4d' in locals() and not df_team_4d.empty:
+        if not df_team_4d.empty:
             df_t = df_team_4d.copy()
             
             # Clean data: Remove TOTAL rows so graphs aren't skewed
@@ -1583,21 +1601,19 @@ elif menu == "4. Visual Analysis":
                     df_t[c] = pd.to_numeric(df_t[c].astype(str).str.replace(',', ''), errors='coerce').fillna(0)
 
             # --- Calculate Globals for Teams ---
-            df_t['Combined Registered'] = df_t['Total No. of Children (AWC)'] + df_t['Total No. of Children (School)']
-            df_t['Combined Screened'] = df_t['Screened (AWC)'] + df_t['Screened (School)']
+            df_t['Combined Registered'] = df_t.get('Total No. of Children (AWC)', 0) + df_t.get('Total No. of Children (School)', 0)
+            df_t['Combined Screened'] = df_t.get('Screened (AWC)', 0) + df_t.get('Screened (School)', 0)
             df_t['Combined Screening %'] = np.where(df_t['Combined Registered'] > 0, (df_t['Combined Screened'] / df_t['Combined Registered']) * 100, 0)
             
-            df_t['Combined 4D Found'] = df_t['TOTAL 4D ANGANVADI'] + df_t['TOAL 4D SCHOOL']
+            df_t['Combined 4D Found'] = df_t.get('TOTAL 4D ANGANVADI', 0) + df_t.get('TOAL 4D SCHOOL', 0)
             df_t['Combined Detection %'] = np.where(df_t['Combined Screened'] > 0, (df_t['Combined 4D Found'] / df_t['Combined Screened']) * 100, 0)
             
-            df_t['School Screening %'] = np.where(df_t['Total No. of Children (School)'] > 0, (df_t['Screened (School)'] / df_t['Total No. of Children (School)']) * 100, 0)
+            df_t['School Screening %'] = np.where(df_t.get('Total No. of Children (School)', 0) > 0, (df_t.get('Screened (School)', 0) / df_t.get('Total No. of Children (School)', 0)) * 100, 0)
 
             # 1. 📊 RAW DATA TABLE
             st.markdown("### 📋 Team Raw Data Table")
             st.dataframe(df_t, use_container_width=True, hide_index=True)
             st.divider()
-
-            import plotly.graph_objects as go
 
             # 2. 🏆 The Screening Leaderboard (Bar + Line)
             st.markdown("### 🏆 Overall Screening Leaderboard")
@@ -1617,10 +1633,10 @@ elif menu == "4. Visual Analysis":
 
             # 3. 🧬 The 4D Clinical Breakdown (Stacked Bar)
             st.markdown("### 🧬 4D Clinical Profile by Team")
-            df_t['Total Defects'] = df_t['Defect at birth (AWC)'] + df_t['Defect at birth (School)']
-            df_t['Total Deficiencies'] = df_t['Deficiencies (AWC)'] + df_t['Deficiencies (School)']
-            df_t['Total Diseases'] = df_t['Diseases (AWC)'] + df_t['Diseases (School)']
-            df_t['Total Delays'] = df_t['Developmental Delay (AWC)'] + df_t['Developmental Delay (School)']
+            df_t['Total Defects'] = df_t.get('Defect at birth (AWC)', 0) + df_t.get('Defect at birth (School)', 0)
+            df_t['Total Deficiencies'] = df_t.get('Deficiencies (AWC)', 0) + df_t.get('Deficiencies (School)', 0)
+            df_t['Total Diseases'] = df_t.get('Diseases (AWC)', 0) + df_t.get('Diseases (School)', 0)
+            df_t['Total Delays'] = df_t.get('Developmental Delay (AWC)', 0) + df_t.get('Developmental Delay (School)', 0)
 
             fig_stack = go.Figure(data=[
                 go.Bar(name='Defects at Birth', x=df_t['Team ID'], y=df_t['Total Defects'], marker_color='#f87171'),
@@ -1637,7 +1653,7 @@ elif menu == "4. Visual Analysis":
             with c1:
                 st.markdown("### 🏫 Operational Focus: AWC vs School")
                 fig_focus = go.Figure(data=[
-                    go.Bar(name='AWC Screening %', x=df_t['Team ID'], y=df_t['SCREENING PERCENTAGE'], marker_color='#f472b6'),
+                    go.Bar(name='AWC Screening %', x=df_t['Team ID'], y=df_t.get('SCREENING PERCENTAGE', 0), marker_color='#f472b6'),
                     go.Bar(name='School Screening %', x=df_t['Team ID'], y=df_t['School Screening %'], marker_color='#60a5fa')
                 ])
                 fig_focus.update_layout(barmode='group', title="Screening Percentage Comparison", yaxis=dict(range=[0, 100]))
@@ -1656,7 +1672,7 @@ elif menu == "4. Visual Analysis":
                 st.plotly_chart(fig_scatter, use_container_width=True)
 
         else:
-            st.warning("⚠️ Could not locate Team_4D_Report data. Please ensure 'df_team_4d' is loaded correctly at the top of your app.")
+            st.warning("⚠️ Could not locate 'Team_4D_Report' sheet in your Google Sheets database. Please verify the sheet name!")
 
 # ==========================================
 # MODULE 5: HBNC NEWBORN VISIT (Zero-Lag Micro-Cache)
