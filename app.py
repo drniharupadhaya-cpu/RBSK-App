@@ -1016,7 +1016,7 @@ elif menu == "2. Child Screening":
 # MODULE 3: 4D DEFECT REGISTRY & CASE MANAGEMENT
 # ==========================================
 elif menu == "3. 4D Defect Registry":
-    render_header("4D Defect Command Center", "Clinical Registry & Refer Card Generator", "📋", "#8b5cf6")
+    render_header("4D Defect Command Center", "Clinical Registry & Enhanced Refer Card Generator", "📋", "#8b5cf6")
 
     # 🔄 SYNC BUTTON
     if st.button("🔄 Sync & Refresh Database"):
@@ -1120,7 +1120,6 @@ elif menu == "3. 4D Defect Registry":
         df_hist = df_4d.copy()
         df_hist.columns = df_hist.columns.str.strip()
         
-        # Safely ensure required columns exist for the Data Editor to work smoothly
         for req_col in ['Current Status', 'Next Follow-Up Date', 'Remarks']:
             if req_col not in df_hist.columns:
                 df_hist[req_col] = ''
@@ -1164,10 +1163,10 @@ elif menu == "3. 4D Defect Registry":
                          use_container_width=True, hide_index=True)
         else: st.info("Historical data is empty.")
 
-    # 📞 TAB 2: FOLLOW-UP LOGGER (INTERACTIVE TABLE)
+    # 📞 TAB 2: FOLLOW-UP LOGGER (INTERACTIVE TABLE WITH DATE PICKER)
     with tab_logger:
         st.subheader("📞 Interactive Case Logger")
-        st.write("Double-click any cell in the **Current Status**, **Next Follow-Up Date**, or **Remarks** columns below to edit them instantly!")
+        st.write("Double-click any cell below to edit! The **Date** column will now open a calendar.")
         
         l_f1, l_f2 = st.columns(2)
         with l_f1: l_team = st.selectbox("👤 Filter by Team:", ["-- All --"] + hist_team_options, key="log_team")
@@ -1182,43 +1181,58 @@ elif menu == "3. 4D Defect Registry":
                 g_col = next((c for c in df_log_pool.columns if any(k in c.upper() for k in ['GENDER', 'SEX'])), None)
                 if g_col: df_log_pool = df_log_pool[df_log_pool[g_col].astype(str).str.upper().str.startswith(l_gen[0])]
             
-            # Reset index so we can accurately track changes
             df_log_pool = df_log_pool.reset_index(drop=True)
             
             if not df_log_pool.empty:
-                # Setup editable vs disabled columns
+                # 🚀 NEW: Convert to proper Datetime objects for the Calendar UI
+                df_log_pool['Next Follow-Up Date'] = pd.to_datetime(df_log_pool['Next Follow-Up Date'], errors='coerce', dayfirst=True).dt.date
+                
                 editable_columns = ["Current Status", "Next Follow-Up Date", "Remarks"]
                 disabled_columns = [c for c in df_log_pool.columns if c not in editable_columns]
                 
-                # Render interactive Data Editor
+                # Render interactive Data Editor with Custom Config
                 edited_df = st.data_editor(
                     df_log_pool,
                     disabled=disabled_columns,
                     use_container_width=True,
                     hide_index=True,
-                    key="interactive_logger"
+                    key="interactive_logger",
+                    column_config={
+                        "Next Follow-Up Date": st.column_config.DateColumn(
+                            "Next Follow-Up Date",
+                            help="Select the next follow-up date",
+                            format="DD/MM/YYYY",
+                            step=1,
+                        ),
+                        "Current Status": st.column_config.SelectboxColumn(
+                            "Current Status",
+                            options=["Under Treatment", "Referred to CHC", "Surgery Scheduled", "Cured/Resolved"]
+                        )
+                    }
                 )
                 
-                # Detect changes row by row
                 changes = []
                 for i in range(len(df_log_pool)):
                     old_stat = str(df_log_pool.loc[i, 'Current Status']).strip()
                     new_stat = str(edited_df.loc[i, 'Current Status']).strip()
+                    
                     old_date = str(df_log_pool.loc[i, 'Next Follow-Up Date']).strip()
                     new_date = str(edited_df.loc[i, 'Next Follow-Up Date']).strip()
+                    
                     old_rem = str(df_log_pool.loc[i, 'Remarks']).strip()
                     new_rem = str(edited_df.loc[i, 'Remarks']).strip()
                     
                     if old_stat != new_stat or old_date != new_date or old_rem != new_rem:
+                        # Clean Date strings to avoid saving 'NaT' to Google Sheets
+                        save_date = new_date if new_date not in ['NaT', 'None', ''] else ''
                         changes.append({
                             'name': str(edited_df.loc[i, 'NAME']).strip(),
                             '4d': str(edited_df.loc[i, '4D']).strip(),
                             'status': new_stat if new_stat != 'nan' else '',
-                            'date': new_date if new_date != 'nan' else '',
+                            'date': save_date,
                             'remarks': new_rem if new_rem != 'nan' else ''
                         })
                 
-                # If changes detected, trigger Save logic
                 if changes:
                     st.warning(f"⚠️ You have un-saved changes for {len(changes)} child(ren)!")
                     if st.button("💾 Save All Changes to Master Sheet"):
@@ -1234,7 +1248,6 @@ elif menu == "3. 4D Defect Registry":
                                 dt_idx = heads.index("Next Follow-Up Date") if "Next Follow-Up Date" in heads else None
                                 r_idx = heads.index("Remarks") if "Remarks" in heads else None
                                 
-                                # Update sheet for every changed row
                                 for ch in changes:
                                     for i, row in enumerate(all_v):
                                         if i > 0 and str(row[n_idx]).strip() == ch['name'] and str(row[d_idx]).strip() == ch['4d']:
@@ -1275,7 +1288,7 @@ elif menu == "3. 4D Defect Registry":
                          use_container_width=True, hide_index=True)
         else: st.info("No defects screened today.")
 
-    # 🪪 TAB 4: REFER CARD PRINT (Redesigned Auto-Fill Form)
+    # 🪪 TAB 4: REFER CARD PRINT (Redesigned Auto-Fill Form & PDF)
     with tab_card:
         st.subheader("🪪 Official Refer Card Center")
         df_card_base = pd.DataFrame(all_live_defects)
@@ -1336,20 +1349,84 @@ elif menu == "3. 4D Defect Registry":
                         refer_options = ["DEIC", "CMTC", "SDH", "PHC", "GATHANI HOSPITAL", "JAY AMBE CHAPARDA HOSPITAL"]
                         selected_refer_to = st.selectbox("Referred To (Editable)", refer_options)
                     
-                    if st.form_submit_button("🖨️ Generate PDF Refer Card"):
-                        # Attach locked data and new remarks
-                        p['Age'] = get_age(p['DOB'])
-                        p['Parent_Name'] = p['Father']
-                        p['Contact_Num'] = p['Contact']
-                        p['Clinical_Findings'] = p['Condition']
-                        p['Remarks'] = team_remarks
-                        p['Referred_To'] = selected_refer_to
-                        p['MO_Name'] = "Dr. NIHAR UPADHYAY"
+                    if st.form_submit_button("🖨️ Generate Professional PDF Refer Card"):
                         
-                        pdf_b = generate_refer_card(p)
-                        import base64
-                        b64 = base64.b64encode(pdf_b).decode()
-                        st.markdown(f'<a href="data:application/pdf;base64,{b64}" download="Refer_{p["Name"]}.pdf" style="display:block;padding:10px;background:#3b82f6;color:white;text-align:center;border-radius:5px;text-decoration:none;">📄 Click Here to Download PDF Card</a>', unsafe_allow_html=True)
+                        # 🚀 NEW: Standalone PDF generation for highly detailed report
+                        def generate_enhanced_refer_card(data):
+                            try:
+                                from fpdf import FPDF
+                                pdf = FPDF()
+                                pdf.add_page()
+                                
+                                # Header
+                                pdf.set_font("Arial", 'B', 16)
+                                pdf.cell(0, 10, "RASHTRIYA BAL SWASTHYA KARYAKRAM (RBSK)", ln=True, align='C')
+                                pdf.set_font("Arial", 'B', 12)
+                                pdf.cell(0, 10, "Official Clinical Referral & Case Management Card", ln=True, align='C')
+                                pdf.ln(5)
+                                
+                                def add_row(col1, val1, col2, val2):
+                                    pdf.set_font("Arial", 'B', 10)
+                                    pdf.cell(40, 8, col1, border=1)
+                                    pdf.set_font("Arial", '', 10)
+                                    pdf.cell(55, 8, str(val1), border=1)
+                                    pdf.set_font("Arial", 'B', 10)
+                                    pdf.cell(40, 8, col2, border=1)
+                                    pdf.set_font("Arial", '', 10)
+                                    pdf.cell(55, 8, str(val2), border=1, ln=True)
+
+                                # Section 1. Demographics
+                                pdf.set_fill_color(220, 230, 245)
+                                pdf.set_font("Arial", 'B', 11)
+                                pdf.cell(0, 8, " 1. Child Demographics & Details", border=1, fill=True, ln=True)
+                                add_row("Name:", data.get('Name', 'N/A'), "Gender:", data.get('Gender', 'N/A'))
+                                add_row("DOB / Age:", f"{data.get('DOB', 'N/A')} ({get_age(data.get('DOB', ''))})", "Father Name:", data.get('Father', 'N/A'))
+                                add_row("Institution:", data.get('Institution', 'N/A'), "Contact No:", data.get('Contact', 'N/A'))
+                                add_row("Screening Date:", data.get('Date', 'N/A'), "Class / Team:", f"{data.get('Class', 'N/A')} / {data.get('Team', 'N/A')}")
+                                pdf.ln(5)
+
+                                # Section 2. Vitals
+                                pdf.set_font("Arial", 'B', 11)
+                                pdf.cell(0, 8, " 2. Screening Vitals & Anthropometry", border=1, fill=True, ln=True)
+                                add_row("Height (cm):", data.get('Height', 'N/A'), "Weight (kg):", data.get('Weight', 'N/A'))
+                                add_row("Hemoglobin (Hb):", data.get('Hb', 'N/A'), "MUAC (AW):", data.get('MUAC', 'N/A'))
+                                pdf.ln(5)
+
+                                # Section 3. Clinical
+                                pdf.set_font("Arial", 'B', 11)
+                                pdf.cell(0, 8, " 3. Clinical Diagnosis & Team Remarks", border=1, fill=True, ln=True)
+                                pdf.set_font("Arial", 'B', 10)
+                                pdf.cell(40, 14, "Conditions / 4D:", border=1)
+                                pdf.set_font("Arial", '', 10)
+                                pdf.multi_cell(150, 14, str(data.get('Condition', 'N/A')), border=1)
+                                
+                                pdf.set_font("Arial", 'B', 10)
+                                pdf.cell(40, 14, "Team Remarks:", border=1)
+                                pdf.set_font("Arial", '', 10)
+                                pdf.multi_cell(150, 14, str(team_remarks if team_remarks else 'No remarks provided.'), border=1)
+                                pdf.ln(5)
+
+                                # Section 4. Referral Action
+                                pdf.set_font("Arial", 'B', 11)
+                                pdf.cell(0, 8, " 4. Referral Action", border=1, fill=True, ln=True)
+                                add_row("Referred To:", selected_refer_to, "Medical Officer:", "Dr. NIHAR UPADHYAY")
+                                
+                                # Footer
+                                pdf.ln(15)
+                                pdf.set_font("Arial", 'I', 9)
+                                pdf.cell(0, 10, "Authorized by RBSK Health Department. Generated Electronically.", align='C')
+
+                                return pdf.output(dest='S').encode('latin1')
+                            except Exception as e:
+                                st.error(f"Error generating PDF: {e}")
+                                return b""
+
+                        # Generate & Download
+                        pdf_b = generate_enhanced_refer_card(p)
+                        if pdf_b:
+                            import base64
+                            b64 = base64.b64encode(pdf_b).decode()
+                            st.markdown(f'<a href="data:application/pdf;base64,{b64}" download="Refer_{p["Name"]}.pdf" style="display:block;padding:12px;background:#2563eb;color:white;text-align:center;font-weight:bold;border-radius:6px;text-decoration:none;">📄 Click Here to Download PDF Referral Card</a>', unsafe_allow_html=True)
         else: st.warning("No children available to print cards matching current filters.")
 # ==========================================
 # MODULE 4: VISUAL ANALYSIS
