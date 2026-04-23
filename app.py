@@ -1028,7 +1028,7 @@ elif menu == "3. 4D Defect Registry":
         st.rerun()
 
     # --- 1. DATA PRE-PROCESSING ---
-    # Build Team Lookup (Independent Mapping)
+    # Build Team Lookup for Daily Registry (Tabs 3 & 4)
     team_lookup = {}
     if not df_aw.empty:
         aw_loc_key = next((c for c in df_aw.columns if any(k in str(c).upper() for k in ["INSTITUTE", "AWC", "CENTER", "AWC NAME"])), None)
@@ -1042,9 +1042,6 @@ elif menu == "3. 4D Defect Registry":
         if sch_loc_key and sch_team_key:
             team_lookup.update(dict(zip(df_directory[sch_loc_key].astype(str).str.strip(), df_directory[sch_team_key].astype(str).str.strip())))
 
-    # Clean Team List for historical tabs
-    team_options = sorted([str(x).strip() for x in set(team_lookup.values()) if str(x).strip() and str(x).lower() != 'nan'])
-
     # Anemia Logic
     def get_anemia_status(hb_val):
         try:
@@ -1056,6 +1053,13 @@ elif menu == "3. 4D Defect Registry":
             elif 10.0 <= hb <= 10.9: return "🔵 Mild Anemia"
             else: return "Normal"
         except: return ""
+
+    def get_val_from_row(row, cols, search_terms, default="N/A"):
+        for c in cols:
+            if any(term in c.lower() for term in search_terms):
+                val = str(row[c]).strip()
+                return val if val.lower() not in ['nan', ''] else default
+        return default
 
     # Fetch Daily Logs for Live Tabs
     aw_logs, sch_logs, _ = get_daily_logs()
@@ -1099,43 +1103,60 @@ elif menu == "3. 4D Defect Registry":
                         "Condition": " + ".join(cond_list),
                         "Contact": str(row.get('Contact', row.get('Mobile No', 'N/A'))),
                         "DOB": str(row.get('DOB', 'N/A')),
-                        "Father": str(row.get('Father', 'N/A')),
+                        "Father": str(row.get('Father', row.get('Parent Name', 'N/A'))),
+                        "Height": get_val_from_row(row, df.columns, ['height', 'ht', 'ઊંચાઈ']),
+                        "Weight": get_val_from_row(row, df.columns, ['weight', 'wt', 'વજન']),
+                        "MUAC": get_val_from_row(row, df.columns, ['muac']) if source_type == "Anganwadi" else "N/A",
+                        "Hb": str(hb_val) if hb_val != 0 else "N/A",
+                        "Class": get_val_from_row(row, df.columns, ['class', 'std', 'standard', 'ધોરણ']) if source_type == "School" else "N/A",
                         "Type": source_type
                     })
 
-    # --- 2. TABBED INTERFACE ---
+    # --- 2. PREP HISTORICAL DATA (For Tabs 1 & 2) ---
+    df_hist = pd.DataFrame()
+    hist_team_options = []
+    
+    if not df_4d.empty:
+        df_hist = df_4d.copy()
+        df_hist.columns = df_hist.columns.str.strip()
+        
+        # Safely ensure required columns exist for the Data Editor to work smoothly
+        for req_col in ['Current Status', 'Next Follow-Up Date', 'Remarks']:
+            if req_col not in df_hist.columns:
+                df_hist[req_col] = ''
+                
+        t_col = next((c for c in df_hist.columns if 'TEAM' in c.upper()), None)
+        if t_col:
+            hist_team_options = sorted([str(x).strip() for x in df_hist[t_col].unique() if str(x).strip() and str(x).lower() not in ['nan', 'none']])
+
+    # --- 3. TABBED INTERFACE ---
     tab_action, tab_logger, tab_live, tab_card = st.tabs([
         "🚨 1. Action Desk", "📞 2. Follow-Up Logger", "🌍 3. Live Daily Registry", "🪪 4. Refer Card Print"
     ])
 
-    # 🚨 TAB 1: ACTION DESK (Full List Correction)
+    # 🚨 TAB 1: ACTION DESK
     with tab_action:
         st.subheader("🎯 Full Action Desk (Pending Cases)")
         a_f1, a_f2 = st.columns(2)
-        with a_f1: a_team = st.selectbox("👤 Filter by Team:", ["-- All --"] + team_options, key="act_team")
+        with a_f1: a_team = st.selectbox("👤 Filter by Team:", ["-- All --"] + hist_team_options, key="act_team")
         with a_f2: a_gen = st.selectbox("⚖️ Filter by Gender:", ["-- All --", "Male", "Female"], key="act_gen")
 
-        if not df_4d.empty:
-            df_hist = df_4d.copy()
-            df_hist.columns = df_hist.columns.str.strip()
+        if not df_hist.empty:
+            df_act = df_hist.copy()
             
-            # Apply Filters
-            if a_team != "-- All --":
-                t_col = next((c for c in df_hist.columns if 'TEAM' in c.upper()), "TEAM")
-                df_hist = df_hist[df_hist[t_col].astype(str).str.upper() == a_team.upper()]
+            if a_team != "-- All --" and t_col:
+                df_act = df_act[df_act[t_col].astype(str).str.upper().str.strip() == a_team.upper()]
             if a_gen != "-- All --":
-                g_col = next((c for c in df_hist.columns if any(k in c.upper() for k in ['GENDER', 'SEX'])), "GENDER")
-                df_hist = df_hist[df_hist[g_col].astype(str).str.upper().str.startswith(a_gen[0])]
+                g_col = next((c for c in df_act.columns if any(k in c.upper() for k in ['GENDER', 'SEX'])), None)
+                if g_col: df_act = df_act[df_act[g_col].astype(str).str.upper().str.startswith(a_gen[0])]
             
-            # Identify All Pending (Overdue + Unscheduled)
-            df_hist['Parsed_Next_Date'] = pd.to_datetime(df_hist.get('Next Follow-Up Date', ''), errors='coerce', dayfirst=True)
+            df_act['Parsed_Next_Date'] = pd.to_datetime(df_act.get('Next Follow-Up Date', ''), errors='coerce', dayfirst=True)
             import datetime
             today_ts = pd.Timestamp(datetime.date.today())
             
-            # Full Actionable List: Overdue OR No Date set (excluding Cured)
-            full_action_list = df_hist[
-                (df_hist['Current Status'].astype(str).str.upper() != 'CURED/RESOLVED') & 
-                ((df_hist['Parsed_Next_Date'] <= today_ts) | (df_hist['Parsed_Next_Date'].isna()))
+            full_action_list = df_act[
+                (df_act['Current Status'].astype(str).str.upper() != 'CURED/RESOLVED') & 
+                ((df_act['Parsed_Next_Date'] <= today_ts) | (df_act['Parsed_Next_Date'].isna()))
             ]
             
             st.write(f"Showing **{len(full_action_list)}** total children requiring follow-up.")
@@ -1143,52 +1164,97 @@ elif menu == "3. 4D Defect Registry":
                          use_container_width=True, hide_index=True)
         else: st.info("Historical data is empty.")
 
-    # 📞 TAB 2: LOGGER
+    # 📞 TAB 2: FOLLOW-UP LOGGER (INTERACTIVE TABLE)
     with tab_logger:
-        st.subheader("📞 Case Update Logger")
+        st.subheader("📞 Interactive Case Logger")
+        st.write("Double-click any cell in the **Current Status**, **Next Follow-Up Date**, or **Remarks** columns below to edit them instantly!")
+        
         l_f1, l_f2 = st.columns(2)
-        with l_f1: l_team = st.selectbox("👤 Team:", ["-- All --"] + team_options, key="log_team")
-        with l_f2: l_gen = st.selectbox("⚖️ Gender:", ["-- All --", "Male", "Female"], key="log_gen")
+        with l_f1: l_team = st.selectbox("👤 Filter by Team:", ["-- All --"] + hist_team_options, key="log_team")
+        with l_f2: l_gen = st.selectbox("⚖️ Filter by Gender:", ["-- All --", "Male", "Female"], key="log_gen")
 
-        if not df_4d.empty:
-            df_log_pool = df_4d.copy()
-            if l_team != "-- All --": 
-                t_col = next((c for c in df_log_pool.columns if 'TEAM' in c.upper()), "TEAM")
-                df_log_pool = df_log_pool[df_log_pool[t_col].astype(str).str.upper() == l_team.upper()]
-            if l_gen != "-- All --":
-                g_col = next((c for c in df_log_pool.columns if any(k in c.upper() for k in ['GENDER', 'SEX'])), "GENDER")
-                df_log_pool = df_log_pool[df_log_pool[g_col].astype(str).str.upper().str.startswith(l_gen[0])]
+        if not df_hist.empty:
+            df_log_pool = df_hist.copy()
             
-            active = df_log_pool[df_log_pool['Current Status'].astype(str).str.upper() != 'CURED/RESOLVED']
-            if not active.empty:
-                kid_options = [f"{r['NAME']} | {r['4D']} | {r['VILLAGE']}" for _, r in active.iterrows()]
-                sel_kid = st.selectbox("Search & Select Child:", ["-- Select --"] + sorted(kid_options))
+            if l_team != "-- All --" and t_col: 
+                df_log_pool = df_log_pool[df_log_pool[t_col].astype(str).str.upper().str.strip() == l_team.upper()]
+            if l_gen != "-- All --":
+                g_col = next((c for c in df_log_pool.columns if any(k in c.upper() for k in ['GENDER', 'SEX'])), None)
+                if g_col: df_log_pool = df_log_pool[df_log_pool[g_col].astype(str).str.upper().str.startswith(l_gen[0])]
+            
+            # Reset index so we can accurately track changes
+            df_log_pool = df_log_pool.reset_index(drop=True)
+            
+            if not df_log_pool.empty:
+                # Setup editable vs disabled columns
+                editable_columns = ["Current Status", "Next Follow-Up Date", "Remarks"]
+                disabled_columns = [c for c in df_log_pool.columns if c not in editable_columns]
                 
-                if sel_kid != "-- Select --":
-                    k_name, k_d = sel_kid.split(" | ")[0], sel_kid.split(" | ")[1]
-                    with st.form("logger_update"):
-                        st.markdown(f"**Updating:** {k_name}")
-                        new_stat = st.selectbox("Status:", ["Under Treatment", "Referred to CHC", "Surgery Scheduled", "Cured/Resolved"])
-                        nxt_dt = st.date_input("Next Follow-up")
-                        rems = st.text_input("Remarks")
-                        if st.form_submit_button("💾 Save Update"):
-                            try:
+                # Render interactive Data Editor
+                edited_df = st.data_editor(
+                    df_log_pool,
+                    disabled=disabled_columns,
+                    use_container_width=True,
+                    hide_index=True,
+                    key="interactive_logger"
+                )
+                
+                # Detect changes row by row
+                changes = []
+                for i in range(len(df_log_pool)):
+                    old_stat = str(df_log_pool.loc[i, 'Current Status']).strip()
+                    new_stat = str(edited_df.loc[i, 'Current Status']).strip()
+                    old_date = str(df_log_pool.loc[i, 'Next Follow-Up Date']).strip()
+                    new_date = str(edited_df.loc[i, 'Next Follow-Up Date']).strip()
+                    old_rem = str(df_log_pool.loc[i, 'Remarks']).strip()
+                    new_rem = str(edited_df.loc[i, 'Remarks']).strip()
+                    
+                    if old_stat != new_stat or old_date != new_date or old_rem != new_rem:
+                        changes.append({
+                            'name': str(edited_df.loc[i, 'NAME']).strip(),
+                            '4d': str(edited_df.loc[i, '4D']).strip(),
+                            'status': new_stat if new_stat != 'nan' else '',
+                            'date': new_date if new_date != 'nan' else '',
+                            'remarks': new_rem if new_rem != 'nan' else ''
+                        })
+                
+                # If changes detected, trigger Save logic
+                if changes:
+                    st.warning(f"⚠️ You have un-saved changes for {len(changes)} child(ren)!")
+                    if st.button("💾 Save All Changes to Master Sheet"):
+                        try:
+                            with st.spinner("Saving changes to Google Sheets..."):
                                 ws = spreadsheet.worksheet("4d_list")
-                                all_v = ws.get_all_values(); heads = all_v[0]
-                                n_idx, d_idx = heads.index("NAME"), heads.index("4D")
-                                s_idx, dt_idx = heads.index("Current Status"), heads.index("Next Follow-Up Date")
+                                all_v = ws.get_all_values()
+                                heads = all_v[0]
+                                
+                                n_idx = heads.index("NAME")
+                                d_idx = heads.index("4D")
+                                s_idx = heads.index("Current Status") if "Current Status" in heads else None
+                                dt_idx = heads.index("Next Follow-Up Date") if "Next Follow-Up Date" in heads else None
                                 r_idx = heads.index("Remarks") if "Remarks" in heads else None
-                                for i, row in enumerate(all_v):
-                                    if i > 0 and str(row[n_idx]).strip() == k_name and str(row[d_idx]).strip() == k_d:
-                                        ws.update_cell(i+1, s_idx+1, new_stat)
-                                        ws.update_cell(i+1, dt_idx+1, "" if new_stat == "Cured/Resolved" else str(nxt_dt))
-                                        if r_idx: ws.update_cell(i+1, r_idx+1, rems)
-                                        break
-                                st.success("Updated!"); st.cache_data.clear(); time.sleep(0.5); st.rerun()
-                            except Exception as e: st.error(f"Error: {e}")
-            else: st.success("No active cases found.")
+                                
+                                # Update sheet for every changed row
+                                for ch in changes:
+                                    for i, row in enumerate(all_v):
+                                        if i > 0 and str(row[n_idx]).strip() == ch['name'] and str(row[d_idx]).strip() == ch['4d']:
+                                            if s_idx is not None: ws.update_cell(i+1, s_idx+1, ch['status'])
+                                            if dt_idx is not None: ws.update_cell(i+1, dt_idx+1, ch['date'])
+                                            if r_idx is not None: ws.update_cell(i+1, r_idx+1, ch['remarks'])
+                                            break
+                                st.success("All updates saved successfully!")
+                                st.cache_data.clear()
+                                import time
+                                time.sleep(0.5)
+                                st.rerun()
+                        except Exception as e:
+                            st.error(f"Error saving to sheet: {e}")
+            else:
+                st.success("No children found for this specific filter.")
+        else:
+            st.info("Historical data is empty.")
 
-    # 🌍 TAB 3: LIVE REGISTRY (No Team Filter, Added Inst Filter)
+    # 🌍 TAB 3: LIVE REGISTRY
     with tab_live:
         st.subheader("🌍 Live Daily Defect Registry")
         r_f1, r_f2 = st.columns(2)
@@ -1196,7 +1262,6 @@ elif menu == "3. 4D Defect Registry":
         df_live_base = pd.DataFrame(all_live_defects)
         
         if not df_live_base.empty:
-            # 🚀 Filter by Institution (School/Anganwadi)
             inst_options = sorted(list(df_live_base['Institution'].unique()))
             with r_f1: r_inst = st.selectbox("🏢 Institution:", ["-- All --"] + inst_options, key="reg_inst")
             with r_f2: r_gen = st.selectbox("⚖️ Gender:", ["-- All --", "Male", "Female"], key="reg_gen_live")
@@ -1210,14 +1275,13 @@ elif menu == "3. 4D Defect Registry":
                          use_container_width=True, hide_index=True)
         else: st.info("No defects screened today.")
 
-    # 🪪 TAB 4: REFER CARD (No Team Filter, Institution + Gender only)
+    # 🪪 TAB 4: REFER CARD PRINT (Redesigned Auto-Fill Form)
     with tab_card:
         st.subheader("🪪 Official Refer Card Center")
         df_card_base = pd.DataFrame(all_live_defects)
         
         if not df_card_base.empty:
             c_f1, c_f2 = st.columns(2)
-            # Filter logic
             inst_list_card = sorted(list(df_card_base['Institution'].unique()))
             with c_f1: sel_inst_card = st.selectbox("🏢 Institution:", ["-- All --"] + inst_list_card, key="card_inst")
             with c_f2: c_gen_card = st.selectbox("⚖️ Gender:", ["-- All --", "Male", "Female"], key="card_gen")
@@ -1231,21 +1295,62 @@ elif menu == "3. 4D Defect Registry":
             
             if sel_c != "-- Select --":
                 p = display_map[sel_c]
+                
                 with st.form("print_refer_final"):
-                    st.write(f"📝 Referral Details for {p['Name']}")
-                    f_col1, f_col2 = st.columns(2)
-                    with f_col1: p['Parent_Name'] = st.text_input("Father", value=p['Father'])
-                    with f_col2: p['Contact_Num'] = st.text_input("Mobile", value=p['Contact'])
-                    p['Clinical_Findings'] = st.text_area("Diagnosis", value=p['Condition'])
-                    p['Referred_To'] = st.text_input("Refer To", value="CIVIL HOSPITAL JUNAGADH")
+                    st.write(f"### 📋 Auto-Filled Screening Details for {p['Name']}")
+                    st.caption("Data is pulled directly from the screening sheet. Please verify and add remarks.")
                     
-                    if st.form_submit_button("🖨️ Generate PDF"):
-                        p['Age'] = get_age(p['DOB']); p['MO_Name'] = "Dr. NIHAR UPADHYAY"
+                    # Row 1
+                    r1_1, r1_2, r1_3 = st.columns(3)
+                    with r1_1: st.text_input("Screening Date", value=p['Date'], disabled=True)
+                    with r1_2: st.text_input("Institution", value=p['Institution'], disabled=True)
+                    with r1_3: st.text_input("Gender", value=p['Gender'], disabled=True)
+                    
+                    # Row 2
+                    r2_1, r2_2, r2_3 = st.columns(3)
+                    with r2_1: st.text_input("DOB", value=p['DOB'], disabled=True)
+                    with r2_2: st.text_input("Father Name", value=p['Father'], disabled=True)
+                    with r2_3: st.text_input("Contact", value=p['Contact'], disabled=True)
+                    
+                    # Row 3 (Vitals)
+                    r3_1, r3_2, r3_3 = st.columns(3)
+                    with r3_1: st.text_input("Height (cm)", value=p.get('Height', 'N/A'), disabled=True)
+                    with r3_2: st.text_input("Weight (kg)", value=p.get('Weight', 'N/A'), disabled=True)
+                    with r3_3: st.text_input("Hb (g/dL)", value=p.get('Hb', 'N/A'), disabled=True)
+                    
+                    # Row 4 (Extras)
+                    r4_1, r4_2 = st.columns(2)
+                    with r4_1: st.text_input("MUAC (Anganwadi)", value=p.get('MUAC', 'N/A'), disabled=True)
+                    with r4_2: st.text_input("Class (School)", value=p.get('Class', 'N/A'), disabled=True)
+                    
+                    st.text_area("Diseases / Conditions Found", value=p['Condition'], disabled=True)
+                    
+                    st.divider()
+                    st.write("### ✍️ Team Actions")
+                    
+                    # The ONLY editable fields
+                    action_c1, action_c2 = st.columns(2)
+                    with action_c1:
+                        team_remarks = st.text_area("Doctor / Team Remarks (Editable)", placeholder="Add any specific clinical advice or notes here...")
+                    with action_c2:
+                        refer_options = ["DEIC", "CMTC", "SDH", "PHC", "GATHANI HOSPITAL", "JAY AMBE CHAPARDA HOSPITAL"]
+                        selected_refer_to = st.selectbox("Referred To (Editable)", refer_options)
+                    
+                    if st.form_submit_button("🖨️ Generate PDF Refer Card"):
+                        # Attach locked data and new remarks
+                        p['Age'] = get_age(p['DOB'])
+                        p['Parent_Name'] = p['Father']
+                        p['Contact_Num'] = p['Contact']
+                        p['Clinical_Findings'] = p['Condition']
+                        p['Remarks'] = team_remarks
+                        p['Referred_To'] = selected_refer_to
+                        p['MO_Name'] = "Dr. NIHAR UPADHYAY"
+                        
                         pdf_b = generate_refer_card(p)
                         import base64
                         b64 = base64.b64encode(pdf_b).decode()
-                        st.markdown(f'<a href="data:application/pdf;base64,{b64}" download="Refer_{p["Name"]}.pdf" style="display:block;padding:10px;background:#3b82f6;color:white;text-align:center;border-radius:5px;text-decoration:none;">📄 Download PDF Card</a>', unsafe_allow_html=True)
-        else: st.warning("No children available to print cards.")
+                        st.markdown(f'<a href="data:application/pdf;base64,{b64}" download="Refer_{p["Name"]}.pdf" style="display:block;padding:10px;background:#3b82f6;color:white;text-align:center;border-radius:5px;text-decoration:none;">📄 Click Here to Download PDF Card</a>', unsafe_allow_html=True)
+        else: st.warning("No children available to print cards matching current filters.")
 # ==========================================
 # MODULE 4: VISUAL ANALYSIS
 # ==========================================
