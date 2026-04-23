@@ -1465,16 +1465,41 @@ elif menu == "4. Visual Analysis":
     render_header("Visual Analytics", "Quarterly Zero-Lag Performance & Epidemiological Mapping", "🗺️", "#f97316")
     st.write("Welcome to the Zero-Lag Command Center. This dashboard processes your Quarterly State Reports for maximum speed and deep insights.")
 
-    tab_coverage, tab_hotspot, tab_radar, tab_team = st.tabs([
+    # 🛡️ THE IRONCLAD DATA SAFEGUARD 🛡️
+    # This prevents NameErrors completely! If your global variables are missing, it safely fetches them.
+    m4_perf = globals().get('df_q_perf', pd.DataFrame())
+    if m4_perf.empty:
+        try: m4_perf = get_sheet_data("Q_Performance")
+        except: pass
+
+    m4_loc = globals().get('df_q_loc', pd.DataFrame())
+    if m4_loc.empty:
+        try: m4_loc = get_sheet_data("Q_Location_4D")
+        except: pass
+
+    m4_demo = globals().get('df_q_demo', pd.DataFrame())
+    if m4_demo.empty:
+        try: m4_demo = get_sheet_data("Q_Demo_4D")
+        except: pass
+
+    m4_team = globals().get('df_team_4d', pd.DataFrame())
+    if m4_team.empty:
+        try: m4_team = get_sheet_data("Team_4D_Report")
+        except: pass
+
+
+    # --- TABS ---
+    tab_coverage, tab_hotspot, tab_radar, tab_team_perf = st.tabs([
         "🎯 Coverage & Velocity Matrix", "📍 Disease Hotspot Mapper", "🧬 Epidemiological Radar", "👥 Team Performance Matrix"
     ])
 
+    # 🎯 TAB 1: COVERAGE
     with tab_coverage:
         st.subheader("Village-Wise Screening Coverage")
         st.write("Identifies which villages have the largest gap between registered children and actual screenings.")
         
-        if not df_q_perf.empty and 'Location Name' in df_q_perf.columns:
-            perf_df = df_q_perf.copy()
+        if not m4_perf.empty and 'Location Name' in m4_perf.columns:
+            perf_df = m4_perf.copy()
             
             cols_to_clean = ['Registered Children', 'AWC Screened In First Half', 'Registered Students', 'Students Screened']
             for col in cols_to_clean:
@@ -1493,14 +1518,15 @@ elif menu == "4. Visual Analysis":
                              color_discrete_map={'Total Screened': '#10b981', 'Total Registered': '#3b82f6'})
             st.plotly_chart(fig_cov, use_container_width=True)
         else:
-            st.warning("⚠️ Waiting for valid data in the 'Q_Performance' sheet.")
+            st.warning("⚠️ Waiting for valid data. Please ensure 'Q_Performance' sheet exists.")
 
+    # 📍 TAB 2: HOTSPOT
     with tab_hotspot:
         st.subheader("Geographical Disease Hotspots")
         st.write("Select a specific disease to instantly see which villages have the highest case counts.")
         
-        if not df_q_loc.empty and 'Location Name' in df_q_loc.columns:
-            loc_df = df_q_loc.copy()
+        if not m4_loc.empty and 'Location Name' in m4_loc.columns:
+            loc_df = m4_loc.copy()
             
             exclude_cols = ['Sr. No.', 'Parent Location', 'Location Name', 'Total Number of Registered Children', 'Total No of Children Screened']
             disease_cols = [c for c in loc_df.columns if c not in exclude_cols and 'Total' not in c]
@@ -1522,14 +1548,15 @@ elif menu == "4. Visual Analysis":
                 else:
                     st.success(f"✅ Incredible! Zero reported cases of **{selected_disease}** across all villages!")
         else:
-            st.warning("⚠️ Waiting for valid data in the 'Q_Location_4D' sheet.")
+            st.warning("⚠️ Waiting for valid data. Please ensure 'Q_Location_4D' sheet exists.")
 
+    # 🧬 TAB 3: RADAR
     with tab_radar:
         st.subheader("Demographic Disease Radar (Age & Gender)")
         st.write("Analyze how specific defects impact different age brackets and genders.")
         
-        if not df_q_demo.empty and 'Defects' in df_q_demo.columns:
-            demo_df = df_q_demo.copy()
+        if not m4_demo.empty and 'Defects' in m4_demo.columns:
+            demo_df = m4_demo.copy()
             demo_df = demo_df[~demo_df['Defects'].astype(str).str.contains('Total', na=False, case=False)]
 
             selected_demo_disease = st.selectbox("🧬 Select Disease to Analyze:", sorted(demo_df['Defects'].unique()))
@@ -1563,15 +1590,15 @@ elif menu == "4. Visual Analysis":
                 else:
                     st.success(f"✅ No demographic cases found for **{selected_demo_disease}**!")
         else:
-            st.warning("⚠️ Waiting for valid data in the 'Q_Demo_4D' sheet.")
+            st.warning("⚠️ Waiting for valid data. Please ensure 'Q_Demo_4D' sheet exists.")
 
-    # 🚀 TEAM PERFORMANCE MATRIX
-    with tab_team:
+    # 👥 TAB 4: TEAM PERFORMANCE MATRIX
+    with tab_team_perf:
         st.subheader("👥 Operational Workforce & Team Performance Matrix")
         st.write("Track productivity, efficiency, and clinical detection quality across all specific RBSK Teams.")
 
-        if not df_team_4d.empty:
-            df_t = df_team_4d.copy()
+        if not m4_team.empty:
+            df_t = m4_team.copy()
             
             # Clean data: Remove TOTAL rows so graphs aren't skewed
             df_t = df_t[~df_t['Team ID'].astype(str).str.contains("TOTAL", case=False, na=False)]
@@ -1659,7 +1686,7 @@ elif menu == "4. Visual Analysis":
                 st.plotly_chart(fig_scatter, use_container_width=True)
 
         else:
-            st.warning("⚠️ Could not locate 'Team_4D_Report' sheet in your Google Sheets database. Make sure you spelled the sheet name correctly!")
+            st.warning("⚠️ Could not locate the 'Team_4D_Report' sheet. Make sure you spelled the sheet name exactly as 'Team_4D_Report' in Google Sheets!")
 # ==========================================
 # MODULE 5: HBNC NEWBORN VISIT (Zero-Lag Micro-Cache)
 # ==========================================
