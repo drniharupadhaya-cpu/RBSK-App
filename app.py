@@ -1028,7 +1028,6 @@ elif menu == "3. 4D Defect Registry":
         st.rerun()
 
     # --- 1. DATA PRE-PROCESSING ---
-    # Build Team Lookup for Daily Registry (Tabs 3 & 4)
     team_lookup = {}
     if not df_aw.empty:
         aw_loc_key = next((c for c in df_aw.columns if any(k in str(c).upper() for k in ["INSTITUTE", "AWC", "CENTER", "AWC NAME"])), None)
@@ -1042,7 +1041,6 @@ elif menu == "3. 4D Defect Registry":
         if sch_loc_key and sch_team_key:
             team_lookup.update(dict(zip(df_directory[sch_loc_key].astype(str).str.strip(), df_directory[sch_team_key].astype(str).str.strip())))
 
-    # Anemia Logic
     def get_anemia_status(hb_val):
         try:
             clean_hb = ''.join(c for c in str(hb_val) if c.isdigit() or c == '.')
@@ -1061,7 +1059,6 @@ elif menu == "3. 4D Defect Registry":
                 return val if val.lower() not in ['nan', ''] else default
         return default
 
-    # Fetch Daily Logs for Live Tabs
     aw_logs, sch_logs, _ = get_daily_logs()
 
     def is_significant(val):
@@ -1163,10 +1160,10 @@ elif menu == "3. 4D Defect Registry":
                          use_container_width=True, hide_index=True)
         else: st.info("Historical data is empty.")
 
-    # 📞 TAB 2: FOLLOW-UP LOGGER (INTERACTIVE TABLE WITH DATE PICKER)
+    # 📞 TAB 2: FOLLOW-UP LOGGER (FORM WRAPPED FOR SPEED)
     with tab_logger:
         st.subheader("📞 Interactive Case Logger")
-        st.write("Double-click any cell below to edit! The **Date** column will now open a calendar.")
+        st.write("Double-click any cell below to edit! Edits will not save or reload the app until you click the save button.")
         
         l_f1, l_f2 = st.columns(2)
         with l_f1: l_team = st.selectbox("👤 Filter by Team:", ["-- All --"] + hist_team_options, key="log_team")
@@ -1184,84 +1181,84 @@ elif menu == "3. 4D Defect Registry":
             df_log_pool = df_log_pool.reset_index(drop=True)
             
             if not df_log_pool.empty:
-                # 🚀 NEW: Convert to proper Datetime objects for the Calendar UI
                 df_log_pool['Next Follow-Up Date'] = pd.to_datetime(df_log_pool['Next Follow-Up Date'], errors='coerce', dayfirst=True).dt.date
                 
                 editable_columns = ["Current Status", "Next Follow-Up Date", "Remarks"]
                 disabled_columns = [c for c in df_log_pool.columns if c not in editable_columns]
                 
-                # Render interactive Data Editor with Custom Config
-                edited_df = st.data_editor(
-                    df_log_pool,
-                    disabled=disabled_columns,
-                    use_container_width=True,
-                    hide_index=True,
-                    key="interactive_logger",
-                    column_config={
-                        "Next Follow-Up Date": st.column_config.DateColumn(
-                            "Next Follow-Up Date",
-                            help="Select the next follow-up date",
-                            format="DD/MM/YYYY",
-                            step=1,
-                        ),
-                        "Current Status": st.column_config.SelectboxColumn(
-                            "Current Status",
-                            options=["Under Treatment", "Referred to CHC", "Surgery Scheduled", "Cured/Resolved"]
-                        )
-                    }
-                )
-                
-                changes = []
-                for i in range(len(df_log_pool)):
-                    old_stat = str(df_log_pool.loc[i, 'Current Status']).strip()
-                    new_stat = str(edited_df.loc[i, 'Current Status']).strip()
+                # 🚀 FAST FIX: Wrapped in a form so edits don't trigger reruns!
+                with st.form("logger_editor_form"):
+                    edited_df = st.data_editor(
+                        df_log_pool,
+                        disabled=disabled_columns,
+                        use_container_width=True,
+                        hide_index=True,
+                        key="interactive_logger",
+                        column_config={
+                            "Next Follow-Up Date": st.column_config.DateColumn(
+                                "Next Follow-Up Date",
+                                help="Select the next follow-up date",
+                                format="DD/MM/YYYY",
+                                step=1,
+                            ),
+                            "Current Status": st.column_config.SelectboxColumn(
+                                "Current Status",
+                                options=["Under Treatment", "Referred to CHC", "Surgery Scheduled", "Cured/Resolved"]
+                            )
+                        }
+                    )
                     
-                    old_date = str(df_log_pool.loc[i, 'Next Follow-Up Date']).strip()
-                    new_date = str(edited_df.loc[i, 'Next Follow-Up Date']).strip()
+                    submit_edits = st.form_submit_button("💾 Save All Changes to Master Sheet", type="primary")
                     
-                    old_rem = str(df_log_pool.loc[i, 'Remarks']).strip()
-                    new_rem = str(edited_df.loc[i, 'Remarks']).strip()
-                    
-                    if old_stat != new_stat or old_date != new_date or old_rem != new_rem:
-                        # Clean Date strings to avoid saving 'NaT' to Google Sheets
-                        save_date = new_date if new_date not in ['NaT', 'None', ''] else ''
-                        changes.append({
-                            'name': str(edited_df.loc[i, 'NAME']).strip(),
-                            '4d': str(edited_df.loc[i, '4D']).strip(),
-                            'status': new_stat if new_stat != 'nan' else '',
-                            'date': save_date,
-                            'remarks': new_rem if new_rem != 'nan' else ''
-                        })
-                
-                if changes:
-                    st.warning(f"⚠️ You have un-saved changes for {len(changes)} child(ren)!")
-                    if st.button("💾 Save All Changes to Master Sheet"):
-                        try:
-                            with st.spinner("Saving changes to Google Sheets..."):
-                                ws = spreadsheet.worksheet("4d_list")
-                                all_v = ws.get_all_values()
-                                heads = all_v[0]
-                                
-                                n_idx = heads.index("NAME")
-                                d_idx = heads.index("4D")
-                                s_idx = heads.index("Current Status") if "Current Status" in heads else None
-                                dt_idx = heads.index("Next Follow-Up Date") if "Next Follow-Up Date" in heads else None
-                                r_idx = heads.index("Remarks") if "Remarks" in heads else None
-                                
-                                for ch in changes:
-                                    for i, row in enumerate(all_v):
-                                        if i > 0 and str(row[n_idx]).strip() == ch['name'] and str(row[d_idx]).strip() == ch['4d']:
-                                            if s_idx is not None: ws.update_cell(i+1, s_idx+1, ch['status'])
-                                            if dt_idx is not None: ws.update_cell(i+1, dt_idx+1, ch['date'])
-                                            if r_idx is not None: ws.update_cell(i+1, r_idx+1, ch['remarks'])
-                                            break
-                                st.success("All updates saved successfully!")
-                                st.cache_data.clear()
-                                import time
-                                time.sleep(0.5)
-                                st.rerun()
-                        except Exception as e:
-                            st.error(f"Error saving to sheet: {e}")
+                    if submit_edits:
+                        changes = []
+                        for i in range(len(df_log_pool)):
+                            old_stat = str(df_log_pool.loc[i, 'Current Status']).strip()
+                            new_stat = str(edited_df.loc[i, 'Current Status']).strip()
+                            old_date = str(df_log_pool.loc[i, 'Next Follow-Up Date']).strip()
+                            new_date = str(edited_df.loc[i, 'Next Follow-Up Date']).strip()
+                            old_rem = str(df_log_pool.loc[i, 'Remarks']).strip()
+                            new_rem = str(edited_df.loc[i, 'Remarks']).strip()
+                            
+                            if old_stat != new_stat or old_date != new_date or old_rem != new_rem:
+                                save_date = new_date if new_date not in ['NaT', 'None', ''] else ''
+                                changes.append({
+                                    'name': str(edited_df.loc[i, 'NAME']).strip(),
+                                    '4d': str(edited_df.loc[i, '4D']).strip(),
+                                    'status': new_stat if new_stat != 'nan' else '',
+                                    'date': save_date,
+                                    'remarks': new_rem if new_rem != 'nan' else ''
+                                })
+                        
+                        if changes:
+                            try:
+                                with st.spinner("Saving changes to Google Sheets..."):
+                                    ws = spreadsheet.worksheet("4d_list")
+                                    all_v = ws.get_all_values()
+                                    heads = all_v[0]
+                                    
+                                    n_idx = heads.index("NAME")
+                                    d_idx = heads.index("4D")
+                                    s_idx = heads.index("Current Status") if "Current Status" in heads else None
+                                    dt_idx = heads.index("Next Follow-Up Date") if "Next Follow-Up Date" in heads else None
+                                    r_idx = heads.index("Remarks") if "Remarks" in heads else None
+                                    
+                                    for ch in changes:
+                                        for i, row in enumerate(all_v):
+                                            if i > 0 and str(row[n_idx]).strip() == ch['name'] and str(row[d_idx]).strip() == ch['4d']:
+                                                if s_idx is not None: ws.update_cell(i+1, s_idx+1, ch['status'])
+                                                if dt_idx is not None: ws.update_cell(i+1, dt_idx+1, ch['date'])
+                                                if r_idx is not None: ws.update_cell(i+1, r_idx+1, ch['remarks'])
+                                                break
+                                    st.success(f"Successfully updated {len(changes)} child(ren)!")
+                                    st.cache_data.clear()
+                                    import time
+                                    time.sleep(0.5)
+                                    st.rerun()
+                            except Exception as e:
+                                st.error(f"Error saving to sheet: {e}")
+                        else:
+                            st.info("No edits detected. Nothing to save.")
             else:
                 st.success("No children found for this specific filter.")
         else:
@@ -1288,7 +1285,7 @@ elif menu == "3. 4D Defect Registry":
                          use_container_width=True, hide_index=True)
         else: st.info("No defects screened today.")
 
-    # 🪪 TAB 4: REFER CARD PRINT (Redesigned Auto-Fill Form & PDF)
+    # 🪪 TAB 4: REFER CARD PRINT
     with tab_card:
         st.subheader("🪪 Official Refer Card Center")
         df_card_base = pd.DataFrame(all_live_defects)
@@ -1341,7 +1338,6 @@ elif menu == "3. 4D Defect Registry":
                     st.divider()
                     st.write("### ✍️ Team Actions")
                     
-                    # The ONLY editable fields
                     action_c1, action_c2 = st.columns(2)
                     with action_c1:
                         team_remarks = st.text_area("Doctor / Team Remarks (Editable)", placeholder="Add any specific clinical advice or notes here...")
@@ -1351,7 +1347,6 @@ elif menu == "3. 4D Defect Registry":
                     
                     if st.form_submit_button("🖨️ Generate Professional PDF Refer Card"):
                         
-                        # 🚀 NEW: Standalone PDF generation for highly detailed report
                         def generate_enhanced_refer_card(data):
                             try:
                                 from fpdf import FPDF
@@ -1416,12 +1411,17 @@ elif menu == "3. 4D Defect Registry":
                                 pdf.set_font("Arial", 'I', 9)
                                 pdf.cell(0, 10, "Authorized by RBSK Health Department. Generated Electronically.", align='C')
 
-                                return pdf.output(dest='S').encode('latin1')
+                                # 🚀 FAST FIX: Handle Bytearray Encoding Smoothly
+                                pdf_out = pdf.output()
+                                if type(pdf_out) == str:
+                                    return pdf_out.encode('latin1')
+                                else:
+                                    return bytes(pdf_out)
+                                    
                             except Exception as e:
                                 st.error(f"Error generating PDF: {e}")
                                 return b""
 
-                        # Generate & Download
                         pdf_b = generate_enhanced_refer_card(p)
                         if pdf_b:
                             import base64
