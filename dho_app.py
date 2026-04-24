@@ -41,7 +41,7 @@ credentials = Credentials.from_service_account_info(skey, scopes=scopes)
 client = gspread.authorize(credentials)
 
 # -----------------------------------------
-# GOOGLE DRIVE PHOTO UPLOADER (PERSONAL ACCOUNT BYPASS)
+# GOOGLE DRIVE PHOTO UPLOADER (BYPASS 403 ERROR)
 # -----------------------------------------
 @st.cache_resource
 def get_drive_service():
@@ -54,28 +54,24 @@ def upload_photo_to_drive(uploaded_file, child_name, disease):
     try:
         drive_service = get_drive_service()
         
-        # 🔴 YOUR FOLDER ID (Confirmed from previous step)
-        FOLDER_ID = "1yxpJtX_4PV10vC7wrmguuH598fV5vwkU" 
+        # 🚀 THE FIX: We don't specify a "parents" folder. 
+        # This forces the file into the Service Account's own 15GB free storage, 
+        # which bypasses the personal Gmail 403 Quota error!
         
         file_extension = uploaded_file.name.split('.')[-1]
         new_file_name = f"{child_name}_{disease}_{datetime.datetime.now().strftime('%Y%m%d')}.{file_extension}"
         
-        file_metadata = {
-            'name': new_file_name,
-            'parents': [FOLDER_ID]
-        }
-        
+        file_metadata = {'name': new_file_name}
         media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue()), mimetype=uploaded_file.type, resumable=True)
         
-        # 🚀 STEP 1: Create the file in your folder
+        # Upload to Service Account Root
         file = drive_service.files().create(
             body=file_metadata, 
             media_body=media, 
             fields='id, webViewLink'
         ).execute()
         
-        # 🚀 STEP 2: Transfer "Ownership" feel by giving permission to everyone 
-        # This prevents the Service Account Quota from being hit
+        # Make it public so the DHO can click the link in the sheet
         drive_service.permissions().create(
             fileId=file.get('id'),
             body={'type': 'anyone', 'role': 'reader'}
@@ -83,9 +79,8 @@ def upload_photo_to_drive(uploaded_file, child_name, disease):
         
         return file.get('webViewLink')
     except Exception as e:
-        # If it still fails, it might be because the folder wasn't shared correctly with the service email
-        st.error(f"Photo Upload Failed: {e}")
-        return "Upload Error"
+        st.error(f"⚠️ Photo Logic Error: {e}")
+        return "Upload Failed"
 
 # -----------------------------------------
 # DATA MINING ENGINE (HISTORIC DATA)
@@ -212,33 +207,23 @@ elif menu == "📈 3. Deep Monthly Data Mining":
         st.dataframe(df_monthly, use_container_width=True, hide_index=True)
 
 # -----------------------------------------
-# MODULE 4: NEW CASE REGISTRATION (CLEAN 2026-27)
+# MODULE 4: NEW CASE REGISTRATION (FIXED)
 # -----------------------------------------
 elif menu == "➕ 4. New Case Registration":
-    st.markdown('<p class="big-font">➕ Register New Birth Defect Case</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-font">Seamlessly adding to the 2026-27 Live Database.</p>', unsafe_allow_html=True)
+    st.markdown('<p class="big-font">➕ Register New Birth Defect Case (2026-27)</p>', unsafe_allow_html=True)
     
     c1, c2 = st.columns(2)
     with c1:
         st.write("### 👤 Child Demographics")
         taluka = st.selectbox("🌍 Taluka", ["Junagadh", "Vanthali", "Manavadar", "Keshod", "Mangrol", "Maliya", "Mendarada", "Visavadar", "Bhesan"])
         
-        # 🚀 UPDATED DROPDOWN LIST AS REQUESTED
+        # 🚀 UPDATED CONDITION LIST AS REQUESTED
         disease = st.selectbox("🦠 Detected Condition", [
-            "Congenital Heart Disease (CHD)", 
-            "Cleft Lip / Palate", 
-            "Club Foot", 
-            "Congenital Deafness", 
-            "Congenital Cataract", 
-            "Microcephaly", 
-            "Macrocephaly", 
-            "Congenital Ear Problems", 
-            "Neck and Face Defects", 
-            "Congenital Eye Problems", 
-            "ROP", 
-            "DOWN'S SYNDROME", 
-            "THALESSEMIA", 
-            "CANCER"
+            "Congenital Heart Disease (CHD)", "Cleft Lip / Palate", "Club Foot", 
+            "Congenital Deafness", "Congenital Cataract", "Microcephaly", 
+            "Macrocephaly", "Congenital Ear Problems", "Neck and Face Defects", 
+            "Congenital Eye Problems", "ROP", "DOWN'S SYNDROME", 
+            "THALESSEMIA", "CANCER"
         ])
         
         child_name = st.text_input("📝 Child's Full Name")
@@ -250,13 +235,18 @@ elif menu == "➕ 4. New Case Registration":
         st.write("### 🏥 Clinical & Referral Details")
         screening_date = st.date_input("🗓️ Date of Screening", value=datetime.date.today())
         team_num = st.text_input("🚑 Team Number (e.g., 1240315)")
-        institution = st.selectbox("🏫 Institution Type", ["AWC (Anganwadi)", "School", "PHC / Delivery Point"])
-        referral_base = st.selectbox("🏥 Referral Location", ["DEIC", "SDH", "U.N. MEHTA", "AHMEDABAD CIVIL", "RAJKOT CIVIL", "OTHER PRIVATE HOSPITAL", "OTHER TRUST HOSPITAL", "OTHER NGO", "OTHER (Type Manually)"])
+        institution = st.selectbox("🏫 Institution Type", ["AWC (Anganwadi)", "School", "Delivery Point / PHC"])
+        
+        referral_base = st.selectbox("🏥 Referral Location", [
+            "DEIC", "SDH", "U.N. MEHTA", "AHMEDABAD CIVIL", "RAJKOT CIVIL", 
+            "OTHER PRIVATE HOSPITAL", "OTHER TRUST HOSPITAL", "OTHER NGO", "OTHER (Type Manually)"
+        ])
         
         if "OTHER" in referral_base:
             referral_exact = st.text_input("⚠️ Specify Hospital Name:")
             final_referral = f"{referral_base} - {referral_exact}"
-        else: final_referral = referral_base
+        else:
+            final_referral = referral_base
             
         status = st.selectbox("🚦 Intervention Status", ["PENDING", "WAITING FOR APPROVAL", "ON TREATMENT", "COMPLETED", "REFUSAL", "MIGRATION", "DEATH"])
         follow_up = st.date_input("⏰ Next Follow-Up Date")
@@ -268,12 +258,11 @@ elif menu == "➕ 4. New Case Registration":
         if child_name.strip() == "" or contact.strip() == "":
             st.error("⚠️ Child Name and Contact are required!")
         else:
-            with st.spinner("Processing registration and photo..."):
+            with st.spinner("Uploading to Secure Cloud..."):
                 try:
-                    # Upload photo
+                    # Photo is saved to Service Account storage (fixes 403)
                     photo_url = upload_photo_to_drive(photo_file, child_name, disease)
                     
-                    # Log to Google Sheet
                     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     new_row = [
                         timestamp, taluka, disease, child_name, gender, 
@@ -284,13 +273,10 @@ elif menu == "➕ 4. New Case Registration":
                     ws = client.open("NEW BIRTH DEFECT TOTAL 2025-26 for app").worksheet("APP_LIVE_REGISTRATIONS")
                     ws.append_row(new_row)
                     
-                    st.success(f"✅ Registered {child_name} successfully!")
+                    st.success(f"✅ Successfully registered {child_name} into 2026-27 cycle!")
                     st.balloons()
                 except Exception as e:
                     st.error(f"❌ Error: {e}")
 
-# -----------------------------------------
-# MODULE 5 Placeholder
-# -----------------------------------------
 elif menu == "🎯 5. Live Cycle Analytics (Coming Soon)":
     st.info("This module will read from 'APP_LIVE_REGISTRATIONS' for the 2026-27 cycle.")
