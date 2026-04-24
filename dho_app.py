@@ -4,6 +4,10 @@ import plotly.express as px
 import gspread
 from google.oauth2.service_account import Credentials
 import json
+import io
+import datetime
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
 
 # -----------------------------------------
 # PAGE CONFIGURATION
@@ -35,6 +39,49 @@ else:
 
 credentials = Credentials.from_service_account_info(skey, scopes=scopes)
 client = gspread.authorize(credentials)
+
+# -----------------------------------------
+# GOOGLE DRIVE PHOTO UPLOADER
+# -----------------------------------------
+@st.cache_resource
+def get_drive_service():
+    # Uses the same credentials you already set up for Google Sheets
+    return build('drive', 'v3', credentials=credentials)
+
+def upload_photo_to_drive(uploaded_file, child_name, disease):
+    if uploaded_file is None:
+        return "No Photo"
+    
+    try:
+        drive_service = get_drive_service()
+        
+        # 🔴 PASTE YOUR GOOGLE DRIVE FOLDER ID HERE:
+        FOLDER_ID = "1yxpJtX_4PV10vC7wrmguuH598fV5vwkU" 
+        
+        # Create a clean file name
+        file_extension = uploaded_file.name.split('.')[-1]
+        new_file_name = f"{child_name}_{disease}_{datetime.datetime.now().strftime('%Y%m%d')}.{file_extension}"
+        
+        file_metadata = {
+            'name': new_file_name,
+            'parents': [FOLDER_ID]
+        }
+        
+        media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue()), mimetype=uploaded_file.type, resumable=True)
+        
+        # Upload the file
+        file = drive_service.files().create(body=file_metadata, media_body=media, fields='id, webViewLink').execute()
+        
+        # Make the file viewable to anyone with the link
+        drive_service.permissions().create(
+            fileId=file.get('id'),
+            body={'type': 'anyone', 'role': 'reader'}
+        ).execute()
+        
+        return file.get('webViewLink') # Returns the clickable URL
+    except Exception as e:
+        st.error(f"Photo Upload Failed: {e}")
+        return "Upload Error"
 
 # -----------------------------------------
 # DATA MINING ENGINE (BULLETPROOF ACCURACY)
@@ -149,9 +196,13 @@ st.sidebar.image("https://upload.wikimedia.org/wikipedia/commons/thumb/f/fe/Seal
 st.sidebar.title("Command Center")
 st.sidebar.markdown("---")
 menu = st.sidebar.radio("Analytical Modules:", [
+    "--- 📁 ARCHIVE: 2025-26 ---",
     "📊 1. District Burden Analytics", 
     "🚨 2. Triage & Child Search", 
-    "📈 3. Deep Monthly Data Mining"
+    "📈 3. Deep Monthly Data Mining",
+    "--- 🚀 LIVE: 2026-27 CYCLE ---",
+    "➕ 4. New Case Registration",
+    "🎯 5. Live Cycle Analytics (Coming Soon)"
 ])
 
 # -----------------------------------------
@@ -302,3 +353,83 @@ elif menu == "📈 3. Deep Monthly Data Mining":
 
         with st.expander("👀 View Raw Excel Data Sheet"):
             st.dataframe(df_monthly, use_container_width=True, hide_index=True)
+
+# -----------------------------------------
+# MODULE 4: NEW CASE REGISTRATION (LIVE 2026-27)
+# -----------------------------------------
+elif menu == "➕ 4. New Case Registration":
+    st.markdown('<p class="big-font">➕ Register New Birth Defect Case</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-font">Data entered here will be saved securely to the 2026-27 Live Database.</p>', unsafe_allow_html=True)
+    
+    # We use a standard layout (not st.form) so the dynamic "Other" box pops up instantly
+    c1, c2 = st.columns(2)
+    
+    with c1:
+        st.write("### 👤 Child Demographics")
+        taluka = st.selectbox("🌍 Taluka", ["Junagadh", "Vanthali", "Manavadar", "Keshod", "Mangrol", "Maliya", "Mendarada", "Visavadar", "Bhesan"])
+        disease = st.selectbox("🦠 Detected Condition (4D)", ["Congenital Heart Disease (CHD)", "Cleft Lip / Palate", "Club Foot", "Congenital Deafness", "Congenital Cataract", "Other Birth Defects"])
+        child_name = st.text_input("📝 Child's Full Name")
+        gender = st.selectbox("⚧️ Gender", ["Male", "Female"])
+        dob = st.date_input("🎂 Date of Birth", min_value=datetime.date(2008, 1, 1), max_value=datetime.date.today())
+        contact = st.text_input("📱 Guardian Contact Number", max_chars=10)
+        
+    with c2:
+        st.write("### 🏥 Clinical & Referral Details")
+        screening_date = st.date_input("🗓️ Date of Screening", value=datetime.date.today())
+        team_num = st.text_input("🚑 Team Number (e.g., 1240315)")
+        institution = st.selectbox("🏫 Institution Type", ["AWC (Anganwadi)", "School", "Delivery Point / PHC"])
+        
+        # Dynamic Referral Logic
+        referral_base = st.selectbox("🏥 Referral Location", [
+            "DEIC", "SDH", "U.N. MEHTA", "AHMEDABAD CIVIL", "RAJKOT CIVIL", 
+            "OTHER PRIVATE HOSPITAL", "OTHER TRUST HOSPITAL", "OTHER NGO", "OTHER (Type Manually)"
+        ])
+        
+        if "OTHER" in referral_base:
+            referral_exact = st.text_input("⚠️ Please specify the exact Hospital/NGO Name:")
+            final_referral = f"{referral_base} - {referral_exact}"
+        else:
+            final_referral = referral_base
+            
+        status = st.selectbox("🚦 Intervention Status", ["PENDING", "WAITING FOR APPROVAL", "ON TREATMENT", "COMPLETED", "REFUSAL", "MIGRATION", "DEATH"])
+        follow_up = st.date_input("⏰ Next Follow-Up Date")
+
+    st.write("### 📸 Clinical Evidence")
+    photo_file = st.file_uploader("Upload Child's Photo (JPG/PNG)", type=['jpg', 'jpeg', 'png'])
+
+    st.markdown("---")
+    
+    if st.button("🚀 Submit to Live Database", use_container_width=True, type="primary"):
+        if child_name.strip() == "" or contact.strip() == "":
+            st.error("⚠️ Child Name and Contact Number are required!")
+        else:
+            with st.spinner("Encrypting and uploading data to Google Cloud..."):
+                try:
+                    # 1. Upload Photo to Drive
+                    photo_url = upload_photo_to_drive(photo_file, child_name, disease)
+                    
+                    # 2. Prepare Data Row
+                    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    new_row = [
+                        timestamp, taluka, disease, child_name, gender, 
+                        str(dob), contact, str(screening_date), team_num, 
+                        institution, final_referral, status, str(follow_up), photo_url
+                    ]
+                    
+                    # 3. Push to Google Sheets
+                    sheet = client.open("NEW BIRTH DEFECT TOTAL 2025-26 for app")
+                    ws = sheet.worksheet("APP_LIVE_REGISTRATIONS")
+                    ws.append_row(new_row)
+                    
+                    st.success(f"✅ Successfully registered {child_name} into the 2026-27 Database!")
+                    st.balloons()
+                    
+                except Exception as e:
+                    st.error(f"❌ Database Error: {e}")
+
+# -----------------------------------------
+# MODULE 5 Placeholder
+# -----------------------------------------
+elif menu == "🎯 5. Live Cycle Analytics (Coming Soon)":
+    st.markdown('<p class="big-font">🎯 Live Cycle Analytics (2026-27)</p>', unsafe_allow_html=True)
+    st.info("This module is currently being built! It will read exclusively from the new 'APP_LIVE_REGISTRATIONS' sheet.")
