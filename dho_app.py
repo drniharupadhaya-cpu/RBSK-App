@@ -42,7 +42,8 @@ client = gspread.authorize(credentials)
 @st.cache_data(ttl=600)
 def load_and_mine_defect_data():
     try:
-        sheet = client.open("NEW BIRTH DEFECT TOTAL 2025-26")
+        # 🚀 Now connects to your newly prepared sheet
+        sheet = client.open("NEW BIRTH DEFECT TOTAL 2025-26 for app")
         
         conditions = {
             "Congenital Heart Disease (CHD)": "CHD",
@@ -63,7 +64,7 @@ def load_and_mine_defect_data():
                 df = pd.DataFrame(raw_tab)
                 
                 if not df.empty:
-                    # SMART DETECTION: Find the real header row (Row with Taluka, Name, etc.)
+                    # 1. Find the real header row
                     header_idx = 0
                     for i, row in df.iterrows():
                         row_str = str(row.values).upper()
@@ -71,22 +72,39 @@ def load_and_mine_defect_data():
                             header_idx = i
                             break
                     
-                    df.columns = [f"{c}_{i}" for i, c in enumerate(df.iloc[header_idx].astype(str))]
-                    df = df[header_idx+1:].dropna(how='all')
-                    all_children[condition_name] = df
+                    df.columns = [str(c).strip() for c in df.iloc[header_idx]]
+                    df = df.iloc[header_idx+1:].copy()
                     
-                    # 🚀 ABSOLUTE PRECISION EXTRACTION
-                    # Across all your sheets: Col 0=Taluka, Col 2=Name, Col 3=Gender, Col 5=Phone
-                    for _, row in df.iterrows():
-                        if len(row) > 5:
-                            taluka_raw = str(row.iloc[0]).strip().upper()
-                            name_val = str(row.iloc[2]).strip()
-                            gender_val = str(row.iloc[3]).strip().upper()
-                            phone_val = str(row.iloc[5]).strip()
+                    # 2. DYNAMIC COLUMN MATCHING (Fixes shifted columns)
+                    col_taluka, col_name, col_gender, col_phone = None, None, None, None
+                    
+                    for col in df.columns:
+                        col_upper = col.upper()
+                        if any(k in col_upper for k in ['TALUKA', 'તાલુકા']):
+                            col_taluka = col
+                        elif any(k in col_upper for k in ['NAME', 'નામ']) and col_name is None:
+                            col_name = col
+                        elif any(k in col_upper for k in ['M/F', 'સ્ત્રી', 'GENDER']):
+                            col_gender = col
+                        elif any(k in col_upper for k in ['MO. NO', 'કોન્ટેક્ટ', 'CONTACT', 'MOBILE']):
+                            col_phone = col
                             
-                            # Clean up Taluka names and filter out headers/empty rows
+                    if col_taluka and col_name:
+                        # 3. FIX MERGED CELLS (Forward Fill)
+                        df[col_taluka] = df[col_taluka].replace('', pd.NA).ffill()
+                        
+                        for _, row in df.iterrows():
+                            # Safely extract using the dynamically found column names
+                            taluka_raw = str(row[col_taluka]).strip() if pd.notna(row[col_taluka]) else ""
+                            name_val = str(row[col_name]).strip() if pd.notna(row[col_name]) else ""
+                            gender_val = str(row[col_gender]).strip().upper() if col_gender and pd.notna(row[col_gender]) else "U"
+                            phone_val = str(row[col_phone]).strip() if col_phone and pd.notna(row[col_phone]) else "N/A"
+                            
+                            # Clean up Taluka names
                             taluka_val = ''.join([i for i in taluka_raw if not i.isdigit()]).replace('.', '').strip()
-                            if taluka_val in ['', 'NAN', 'NONE', 'TALUKA', 'તાલુકા']: continue
+                            
+                            # Filter out headers, totals, and empty rows
+                            if taluka_val.upper() in ['', 'NAN', 'NONE', 'TALUKA', 'તાલુકા', 'TOTAL', 'ટોટલ']: continue
                             if len(name_val) < 2 or 'NAME' in name_val.upper() or 'નામ' in name_val: continue
                             if phone_val == "": phone_val = "N/A"
                             
@@ -97,7 +115,11 @@ def load_and_mine_defect_data():
                                 'Gender': gender_val,
                                 'Contact': phone_val
                             })
-            except Exception:
+                            
+                    all_children[condition_name] = df
+                    
+            except Exception as e:
+                # Silently skip missing tabs
                 pass
                 
         df_master = pd.DataFrame(master_list)
