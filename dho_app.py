@@ -66,7 +66,7 @@ credentials = Credentials.from_service_account_info(skey, scopes=scopes)
 client = gspread.authorize(credentials)
 
 # -----------------------------------------
-# PHOTO ENGINE
+# PRISTINE PHOTO ENGINE
 # -----------------------------------------
 def process_photo_to_string(uploaded_file):
     if uploaded_file is None: return "No Photo"
@@ -80,7 +80,7 @@ def process_photo_to_string(uploaded_file):
     except Exception as e: return f"Error: {e}"
 
 # -----------------------------------------
-# DATA MINING ENGINE
+# DATA ENGINES
 # -----------------------------------------
 @st.cache_data(ttl=600)
 def load_and_mine_defect_data():
@@ -111,7 +111,7 @@ def load_and_mine_defect_data():
                         master_list.append({'Taluka': t_val, 'Disease': c_name, 'Child Name': n_val})
             except: pass
         return pd.DataFrame(master_list)
-    except Exception as e: return pd.DataFrame()
+    except: return pd.DataFrame()
 
 @st.cache_data(ttl=600)
 def load_monthly_covered_data(month_tab):
@@ -131,11 +131,10 @@ def load_live_app_data():
         return df
     except: return pd.DataFrame()
 
-# Initial Data Load
 df_master = load_and_mine_defect_data()
 
 # -----------------------------------------
-# SIDEBAR
+# SIDEBAR NAVIGATION
 # -----------------------------------------
 st.sidebar.markdown(f"👤 **User:** {st.session_state['taluka_name']}")
 if st.sidebar.button("Logout"):
@@ -154,7 +153,7 @@ menu = st.sidebar.radio("Command Center Modules:", [
 ])
 
 # -----------------------------------------
-# MODULE 1 & 2 ARCHIVE
+# MODULE 1: DISTRICT BURDEN ANALYTICS (Archive)
 # -----------------------------------------
 if menu == "📊 1. District Burden Analytics":
     st.markdown('<p class="big-font">District Archive Analytics</p>', unsafe_allow_html=True)
@@ -163,10 +162,10 @@ if menu == "📊 1. District Burden Analytics":
         with f1:
             all_t = sorted(list(df_master['Taluka'].unique()))
             def_t = [st.session_state['taluka_name']] if st.session_state['user_role'] == "Taluka" and st.session_state['taluka_name'] in all_t else all_t
-            sel_t = st.multiselect("Talukas:", all_t, default=def_t)
+            sel_t = st.multiselect("Filter by Talukas:", all_t, default=def_t)
         with f2:
             all_d = sorted(list(df_master['Disease'].unique()))
-            sel_d = st.multiselect("Diseases:", all_d, default=all_d)
+            sel_d = st.multiselect("Filter by Diseases:", all_d, default=all_d)
         
         fil_df = df_master[(df_master['Taluka'].isin(sel_t)) & (df_master['Disease'].isin(sel_d))]
         st.write("### 🏥 Total Burden")
@@ -177,107 +176,156 @@ if menu == "📊 1. District Burden Analytics":
             with cols[i]: st.markdown(f'<div class="kpi-card"><div class="kpi-title">{disease}</div><div class="kpi-value">{val}</div></div>', unsafe_allow_html=True)
         st.dataframe(pd.crosstab(fil_df['Taluka'], fil_df['Disease'], margins=True), use_container_width=True)
 
+# -----------------------------------------
+# MODULE 2: MASTER TRIAGE (Archive)
+# -----------------------------------------
 elif menu == "🚨 2. Triage & Child Search":
     st.markdown('<p class="big-font">Master Search Engine</p>', unsafe_allow_html=True)
     if not df_master.empty:
         col1, col2, col3 = st.columns(3)
-        with col1: f_t = st.selectbox("Taluka:", ["All"] + sorted(list(df_master['Taluka'].unique())))
-        with col2: f_d = st.selectbox("Disease:", ["All"] + list(df_master['Disease'].unique()))
-        with col3: s_n = st.text_input("Name:")
+        with col1:
+            all_t = sorted(list(df_master['Taluka'].unique()))
+            def_idx = all_t.index(st.session_state['taluka_name']) + 1 if st.session_state['user_role'] == "Taluka" and st.session_state['taluka_name'] in all_t else 0
+            f_t = st.selectbox("🌍 Select Taluka", ["All"] + all_t, index=def_idx)
+        with col2: f_d = st.selectbox("🦠 Select Disease", ["All"] + sorted(list(df_master['Disease'].unique())))
+        with col3: s_n = st.text_input("🔍 Search by Name")
         fdf = df_master.copy()
         if f_t != "All": fdf = fdf[fdf['Taluka'] == f_t]
         if f_d != "All": fdf = fdf[fdf['Disease'] == f_d]
         if s_n: fdf = fdf[fdf['Child Name'].str.contains(s_n, case=False, na=False)]
         st.dataframe(fdf, use_container_width=True, hide_index=True)
 
+# -----------------------------------------
+# MODULE 3: DEEP DATA MINING (FIXED)
+# -----------------------------------------
 elif menu == "📈 3. Deep Monthly Data Mining":
-    st.markdown('<p class="big-font">Deep Monthly Performance Mining</p>', unsafe_allow_html=True)
+    st.markdown('<p class="big-font">Deep District Performance Mining</p>', unsafe_allow_html=True)
     months = ["MAR 26", "FEB 26", "JAN 26", "DEC 25", "NOV 25", "OCT 25", "SEP 25", "AUG 25", "JUL 25", "JUN 25", "MAY 25", "APR 25"]
     c1, c2 = st.columns(2)
-    with c1: sel_m = st.selectbox("Month:", months, index=10)
+    with c1: sel_m = st.selectbox("📅 Select Reporting Month:", months, index=10)
+    
     df_m = load_monthly_covered_data(sel_m)
     if not df_m.empty:
-        # Find Taluka columns automatically
-        t_cols = {str(df_m.iloc[0, i]).strip().upper().replace('TALUKA','').strip(): i for i in range(2, len(df_m.columns)) if 'TALUKA' in str(df_m.iloc[0,i]).upper()}
-        metrics = [str(df_m.iloc[r, 1]).strip() for r in range(3, len(df_m)) if len(str(df_m.iloc[r,1]).strip()) > 5]
-        with c2: sel_met = st.selectbox("Metric:", metrics)
+        # Improved Taluka detection logic
+        t_cols = {}
+        for r_idx in range(0, 5):
+            for c_idx, val in enumerate(df_m.iloc[r_idx]):
+                val_str = str(val).upper().replace('\n', ' ').strip()
+                if 'TALUKA' in val_str and 'TOTAL' not in val_str and c_idx > 1:
+                    t_name = val_str.replace('TALUKA', '').strip()
+                    if t_name: t_cols[t_name] = c_idx
         
+        # Pull clean metrics
+        metrics = [str(df_m.iloc[r, 1]).strip() for r in range(3, len(df_m)) if len(str(df_m.iloc[r, 1]).strip()) > 4]
+        with c2: sel_met = st.selectbox("🎯 Select Performance Metric:", sorted(list(set(metrics))))
+        
+        st.write("---")
         st.write("### 📍 Performance Filter")
         all_found_tals = list(t_cols.keys())
-        def_t = [st.session_state['taluka_name'].upper()] if st.session_state['user_role'] == "Taluka" and st.session_state['taluka_name'].upper() in all_found_tals else all_found_tals
-        sel_tals = st.multiselect("Compare Talukas:", all_found_tals, default=def_t)
+        def_mining_tals = [st.session_state['taluka_name'].upper()] if st.session_state['user_role'] == "Taluka" and st.session_state['taluka_name'].upper() in all_found_tals else all_found_tals
+        sel_mining_tals = st.multiselect("Compare Talukas:", all_found_tals, default=def_mining_tals)
         
+        # Build chart data
         res = []
         for r in range(3, len(df_m)):
-            if str(df_m.iloc[r,1]).strip() == sel_met:
+            if str(df_m.iloc[r, 1]).strip() == sel_met:
                 for t, idx in t_cols.items():
-                    if t in sel_tals: res.append({'Taluka': t, 'Val': pd.to_numeric(df_m.iloc[r, idx], errors='coerce')})
-        if res: st.plotly_chart(px.bar(pd.DataFrame(res), x='Taluka', y='Val', color='Taluka', text_auto=True), use_container_width=True)
+                    if t in sel_mining_tals:
+                        val = pd.to_numeric(df_m.iloc[r, idx], errors='coerce')
+                        res.append({'Taluka': t, 'Value': 0 if pd.isna(val) else val})
+                break
+        
+        if res:
+            fig = px.bar(pd.DataFrame(res), x='Taluka', y='Value', color='Taluka', title=f"{sel_met} Analysis", text_auto=True)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("Select a metric and talukas to view performance chart.")
 
 # -----------------------------------------
-# MODULE 4: NEW REGISTRATION (ROLE LOCKED)
+# MODULE 4: NEW CASE REGISTRATION (Role Locked)
 # -----------------------------------------
 elif menu == "➕ 4. New Case Registration":
-    st.markdown('<p class="big-font">➕ New Registration (2026-27)</p>', unsafe_allow_html=True)
+    st.markdown('<p class="big-font">➕ Register New Case (2026-27 Cycle)</p>', unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     with c1:
+        st.write("### 👤 Child Demographics")
         t_list = ["Junagadh", "Vanthali", "Manavadar", "Keshod", "Mangrol", "Maliya", "Mendarada", "Visavadar", "Bhesan"]
         if st.session_state['user_role'] == "Taluka": t_sel = st.selectbox("🌍 Taluka", [st.session_state['taluka_name']], disabled=True)
         else: t_sel = st.selectbox("🌍 Taluka", t_list)
-        dis = st.selectbox("🦠 Condition", ["CHD", "Cleft Lip", "Club Foot", "Deafness", "Cataract", "Microcephaly", "Macrocephaly", "Ear Defects", "Neck Defects", "Eye Defects", "ROP", "DOWN'S", "THALESSEMIA", "CANCER"])
-        nam = st.text_input("📝 Full Name")
+        dis = st.selectbox("🦠 Detected Condition", ["CHD", "Cleft Lip", "Club Foot", "Deafness", "Cataract", "Microcephaly", "Macrocephaly", "Ear Defects", "Neck Defects", "Eye Defects", "ROP", "DOWN'S", "THALESSEMIA", "CANCER"])
+        nam = st.text_input("📝 Child's Full Name")
         gen = st.selectbox("⚧️ Gender", ["Male", "Female"])
-        dob = st.date_input("🎂 DOB")
-        mob = st.text_input("📱 Contact", max_chars=10)
+        dob = st.date_input("🎂 Date of Birth", max_value=datetime.date.today())
+        mob = st.text_input("📱 Guardian Contact Number", max_chars=10)
     with c2:
-        scr = st.date_input("🗓️ Screening Date")
-        tm = st.text_input("🚑 Team #")
-        ins = st.selectbox("🏫 Inst.", ["AWC", "School", "PHC"])
-        ref = st.selectbox("🏥 Referral", ["DEIC", "SDH", "U.N. MEHTA", "AHMEDABAD CIVIL", "RAJKOT CIVIL", "OTHER"])
-        sta = st.selectbox("🚦 Status", ["PENDING", "ON TREATMENT", "COMPLETED", "DEATH"])
-        fup = st.date_input("⏰ Follow-up")
-    p_f = st.file_uploader("📸 Photo", type=['jpg', 'png', 'jpeg'])
-    if st.button("🚀 Submit"):
+        st.write("### 🏥 Clinical & Referral Details")
+        scr = st.date_input("🗓️ Screening Date", value=datetime.date.today())
+        tm = st.text_input("🚑 Team Number")
+        ins = st.selectbox("🏫 Institution", ["AWC", "School", "PHC"])
+        ref = st.selectbox("🏥 Referral Location", ["DEIC", "SDH", "U.N. MEHTA", "AHMEDABAD CIVIL", "RAJKOT CIVIL", "OTHER"])
+        sta = st.selectbox("🚦 Status", ["PENDING", "ON TREATMENT", "COMPLETED", "REFUSAL", "DEATH"])
+        fup = st.date_input("⏰ Next Follow-up")
+    
+    p_f = st.file_uploader("📸 Upload Clinical Photo", type=['jpg', 'png', 'jpeg'])
+    if st.button("🚀 Submit Registration", use_container_width=True, type="primary"):
         if nam and mob:
-            p_str = process_photo_to_string(p_f)
-            row = [str(datetime.datetime.now()), t_sel, dis, nam, gen, str(dob), mob, str(scr), tm, ins, ref, sta, str(fup), p_str]
-            client.open("NEW BIRTH DEFECT TOTAL 2025-26 for app").worksheet("APP_LIVE_REGISTRATIONS").append_row(row)
-            st.success("Registration Successful!"); st.balloons()
+            with st.spinner("Processing..."):
+                try:
+                    p_str = process_photo_to_string(p_f)
+                    row = [str(datetime.datetime.now()), t_sel, dis, nam, gen, str(dob), mob, str(scr), tm, ins, ref, sta, str(fup), p_str]
+                    client.open("NEW BIRTH DEFECT TOTAL 2025-26 for app").worksheet("APP_LIVE_REGISTRATIONS").append_row(row)
+                    st.success(f"Successfully registered {nam}!"); st.balloons()
+                except Exception as e: st.error(f"Error: {e}")
+        else: st.error("Please fill Name and Contact Number.")
 
 # -----------------------------------------
-# MODULE 5: LIVE ANALYTICS (WITH FILTERS & LEDGER)
+# MODULE 5: LIVE CYCLE ANALYTICS (Full Filters & Ledger)
 # -----------------------------------------
 elif menu == "🎯 5. Live Cycle Analytics":
-    st.markdown('<p class="big-font">🎯 Live Analytics (2026-27)</p>', unsafe_allow_html=True)
+    st.markdown('<p class="big-font">🎯 Live Analytics (2026-27 Cycle)</p>', unsafe_allow_html=True)
     df_l = load_live_app_data()
-    if df_l.empty: st.warning("Database empty.")
+    if df_l.empty: st.warning("No data found in the live registry.")
     else:
-        # Filters
-        f1, f2 = st.columns(2)
-        with f1:
+        st.write("### 🔍 Global Live Dashboard Filters")
+        fl1, fl2 = st.columns(2)
+        with fl1:
             l_t = sorted(list(df_l['Taluka'].unique()))
-            def_l_idx = l_t.index(st.session_state['taluka_name']) if st.session_state['user_role'] == "Taluka" and st.session_state['taluka_name'] in l_t else 0
-            sel_lt = st.selectbox("Dashboard Taluka:", ["All"] + l_t, index=def_l_idx if st.session_state['user_role'] == "Taluka" else 0)
-        with f2: sel_lc = st.selectbox("Dashboard Condition:", ["All"] + sorted(list(df_l['Condition'].unique())))
+            def_l_idx = l_t.index(st.session_state['taluka_name']) + 1 if st.session_state['user_role'] == "Taluka" and st.session_state['taluka_name'] in l_t else 0
+            sel_lt = st.selectbox("Filter Dashboard by Taluka:", ["All"] + l_t, index=def_l_idx if st.session_state['user_role'] == "Taluka" else 0)
+        with fl2:
+            sel_lc = st.selectbox("Filter Dashboard by Condition:", ["All"] + sorted(list(df_l['Condition'].unique())))
         
         ldf = df_l.copy()
         if sel_lt != "All": ldf = ldf[ldf['Taluka'] == sel_lt]
         if sel_lc != "All": ldf = ldf[ldf['Condition'] == sel_lc]
         
         k1, k2, k3 = st.columns(3)
-        with k1: st.markdown(f'<div class="kpi-card"><div class="kpi-title">Registered</div><div class="kpi-value">{len(ldf)}</div></div>', unsafe_allow_html=True)
-        with k2: st.markdown(f'<div class="kpi-card"><div class="kpi-title">Completed</div><div class="kpi-value">{len(ldf[ldf["Status"]=="COMPLETED"])}</div></div>', unsafe_allow_html=True)
-        with k3: st.markdown(f'<div class="kpi-card"><div class="kpi-title">Pending</div><div class="kpi-value">{len(ldf[ldf["Status"]!="COMPLETED"])}</div></div>', unsafe_allow_html=True)
+        with k1: st.markdown(f'<div class="kpi-card"><div class="kpi-title">Total Cases</div><div class="kpi-value">{len(ldf)}</div></div>', unsafe_allow_html=True)
+        with k2: st.markdown(f'<div class="kpi-card" style="border-left-color: #10B981;"><div class="kpi-title">Completed</div><div class="kpi-value">{len(ldf[ldf["Status"] == "COMPLETED"])}</div></div>', unsafe_allow_html=True)
+        with k3: st.markdown(f'<div class="kpi-card" style="border-left-color: #EF4444;"><div class="kpi-title">Active Pending</div><div class="kpi-value">{len(ldf[ldf["Status"] != "COMPLETED"])}</div></div>', unsafe_allow_html=True)
 
-        st.write("### 📜 Live Ledger")
+        st.write("---")
+        st.write("### 📜 2026-27 Registered Case Ledger")
         st.dataframe(ldf.drop(columns=['PhotoData']), use_container_width=True, hide_index=True)
 
-        st.write("### 🔍 Child Profile Viewer")
-        sel_c = st.selectbox("Select Child (Filtered):", ["--Select--"] + sorted(ldf['Child Name'].unique()))
-        if sel_c != "--Select--":
-            r = ldf[ldf['Child Name'] == sel_c].iloc[0]
+        st.write("---")
+        st.write("### 🔍 Search & View Digital Child Profile")
+        child_sel = st.selectbox("Select Child (Filtered List):", ["-- Select --"] + sorted(ldf['Child Name'].unique()))
+        if child_sel != "-- Select --":
+            r = ldf[ldf['Child Name'] == child_sel].iloc[0]
             p1, p2 = st.columns([1, 2])
-            with p1: 
-                if str(r['PhotoData']).startswith("data:image"): st.image(r['PhotoData'], use_container_width=True)
-                else: st.info("No Photo.")
-            with p2: st.markdown(f'<div class="patient-card"><b>Condition:</b> {r["Condition"]}<br><b>Status:</b> {r["Status"]}<br><b>Taluka:</b> {r["Taluka"]}</div>', unsafe_allow_html=True)
+            with p1:
+                if str(r['PhotoData']).startswith("data:image"): st.image(r['PhotoData'], use_container_width=True, caption=f"Patient: {child_sel}")
+                else: st.info("No clinical photo available.")
+            with p2:
+                st.markdown(f"""
+                <div class="patient-card">
+                    <h4>{r['Child Name']}</h4>
+                    <p><b>Condition:</b> {r['Condition']} | <b>Taluka:</b> {r['Taluka']}</p>
+                    <p><b>Gender:</b> {r['Gender']} | <b>DOB:</b> {r['DOB']}</p>
+                    <p><b>Contact:</b> {r['Contact']}</p>
+                    <p><b>Status:</b> <span style='color:red;'>{r['Status']}</span></p>
+                    <p><b>Referral:</b> {r['Referral Location']}</p>
+                    <p><b>Next Follow-up:</b> {r['Follow-up']}</p>
+                </div>
+                """, unsafe_allow_html=True)
