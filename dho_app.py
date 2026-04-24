@@ -21,6 +21,7 @@ st.markdown("""
     .kpi-card {background-color: #ffffff; padding: 20px; border-radius: 12px; border-left: 6px solid #3B82F6; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);}
     .kpi-title {color: #6B7280; font-size: 13px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;}
     .kpi-value {color: #111827; font-size: 36px; font-weight: 900;}
+    .patient-card {background-color: #f8fafc; padding: 20px; border-radius: 15px; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);}
     </style>
 """, unsafe_allow_html=True)
 
@@ -133,6 +134,22 @@ def load_monthly_covered_data(month_tab):
         return pd.DataFrame(ws.get_all_values())
     except: return pd.DataFrame()
 
+# 🚀 NEW: LIVE DATA ENGINE FOR 2026-27
+@st.cache_data(ttl=5)
+def load_live_app_data():
+    try:
+        sheet = client.open("NEW BIRTH DEFECT TOTAL 2025-26 for app")
+        ws = sheet.worksheet("APP_LIVE_REGISTRATIONS")
+        data = ws.get_all_values()
+        if len(data) < 1:
+            return pd.DataFrame()
+        # Create DF from rows. Since there might not be headers, we assign them.
+        df = pd.DataFrame(data)
+        df.columns = ["Timestamp", "Taluka", "Condition", "Child Name", "Gender", "DOB", "Contact", "Screening Date", "Team Number", "Institution", "Referral Location", "Status", "Follow-up", "PhotoData"]
+        return df
+    except:
+        return pd.DataFrame()
+
 # Load Data
 with st.spinner("Mining highly accurate data..."):
     dict_all_children, df_master = load_and_mine_defect_data()
@@ -150,7 +167,7 @@ menu = st.sidebar.radio("Analytical Modules:", [
     "📈 3. Deep Monthly Data Mining",
     "--- 🚀 LIVE: 2026-27 CYCLE ---",
     "➕ 4. New Case Registration",
-    "🎯 5. Live Cycle Analytics (Coming Soon)"
+    "🎯 5. Live Cycle Analytics"
 ])
 
 # -----------------------------------------
@@ -194,7 +211,7 @@ elif menu == "📈 3. Deep Monthly Data Mining":
         st.dataframe(df_monthly, use_container_width=True, hide_index=True)
 
 # -----------------------------------------
-# MODULE 4: NEW CASE REGISTRATION (ZERO-LAG ENGINE)
+# MODULE 4: NEW CASE REGISTRATION
 # -----------------------------------------
 elif menu == "➕ 4. New Case Registration":
     st.markdown('<p class="big-font">➕ Register New Birth Defect Case (2026-27)</p>', unsafe_allow_html=True)
@@ -204,16 +221,7 @@ elif menu == "➕ 4. New Case Registration":
     with c1:
         st.write("### 👤 Child Demographics")
         taluka = st.selectbox("🌍 Taluka", ["Junagadh", "Vanthali", "Manavadar", "Keshod", "Mangrol", "Maliya", "Mendarada", "Visavadar", "Bhesan"])
-        
-        # 🚀 UPDATED CONDITION LIST AS REQUESTED
-        disease = st.selectbox("🦠 Detected Condition", [
-            "Congenital Heart Disease (CHD)", "Cleft Lip / Palate", "Club Foot", 
-            "Congenital Deafness", "Congenital Cataract", "Microcephaly", 
-            "Macrocephaly", "Congenital Ear Problems", "Neck and Face Defects", 
-            "Congenital Eye Problems", "ROP", "DOWN'S SYNDROME", 
-            "THALESSEMIA", "CANCER"
-        ])
-        
+        disease = st.selectbox("🦠 Detected Condition", ["Congenital Heart Disease (CHD)", "Cleft Lip / Palate", "Club Foot", "Congenital Deafness", "Congenital Cataract", "Microcephaly", "Macrocephaly", "Congenital Ear Problems", "Neck and Face Defects", "Congenital Eye Problems", "ROP", "DOWN'S SYNDROME", "THALESSEMIA", "CANCER"])
         child_name = st.text_input("📝 Child's Full Name")
         gender = st.selectbox("⚧️ Gender", ["Male", "Female"])
         dob = st.date_input("🎂 Date of Birth", min_value=datetime.date(2008, 1, 1), max_value=datetime.date.today())
@@ -224,11 +232,7 @@ elif menu == "➕ 4. New Case Registration":
         screening_date = st.date_input("🗓️ Date of Screening", value=datetime.date.today())
         team_num = st.text_input("🚑 Team Number (e.g., 1240315)")
         institution = st.selectbox("🏫 Institution Type", ["AWC (Anganwadi)", "School", "PHC / Delivery Point"])
-        
-        referral_base = st.selectbox("🏥 Referral Location", [
-            "DEIC", "SDH", "U.N. MEHTA", "AHMEDABAD CIVIL", "RAJKOT CIVIL", 
-            "OTHER PRIVATE HOSPITAL", "OTHER TRUST HOSPITAL", "OTHER NGO", "OTHER (Type Manually)"
-        ])
+        referral_base = st.selectbox("🏥 Referral Location", ["DEIC", "SDH", "U.N. MEHTA", "AHMEDABAD CIVIL", "RAJKOT CIVIL", "OTHER PRIVATE HOSPITAL", "OTHER TRUST HOSPITAL", "OTHER NGO", "OTHER (Type Manually)"])
         
         if "OTHER" in referral_base:
             referral_exact = st.text_input("⚠️ Specify Hospital Name:")
@@ -248,28 +252,84 @@ elif menu == "➕ 4. New Case Registration":
         else:
             with st.spinner("Processing registration and optimizing photo..."):
                 try:
-                    # Optimized Internal Photo Storage
                     photo_data = process_photo_to_string(photo_file)
-                    
-                    # Prepare Data Row
                     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                    new_row = [
-                        timestamp, taluka, disease, child_name, gender, 
-                        str(dob), contact, str(screening_date), team_num, 
-                        institution, final_referral, status, str(follow_up), photo_data
-                    ]
-                    
-                    # Log to Google Sheet
+                    new_row = [timestamp, taluka, disease, child_name, gender, str(dob), contact, str(screening_date), team_num, institution, final_referral, status, str(follow_up), photo_data]
                     ws = client.open("NEW BIRTH DEFECT TOTAL 2025-26 for app").worksheet("APP_LIVE_REGISTRATIONS")
                     ws.append_row(new_row)
-                    
                     st.success(f"✅ Successfully registered {child_name} into 2026-27 cycle!")
                     st.balloons()
                 except Exception as e:
                     st.error(f"❌ Error: {e}")
 
 # -----------------------------------------
-# MODULE 5 Placeholder
+# MODULE 5: LIVE CYCLE ANALYTICS (2026-27)
 # -----------------------------------------
-elif menu == "🎯 5. Live Cycle Analytics (Coming Soon)":
-    st.info("This module will read from 'APP_LIVE_REGISTRATIONS' for the 2026-27 cycle.")
+elif menu == "🎯 5. Live Cycle Analytics":
+    st.markdown('<p class="big-font">🎯 Live Cycle Analytics (2026-27)</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-font">Dynamic Performance Tracking for the Current Fiscal Year.</p>', unsafe_allow_html=True)
+
+    df_live = load_live_app_data()
+
+    if df_live.empty or len(df_live) < 1:
+        st.warning("No data found in the 2026-27 Live Database. Please register cases in Module 4.")
+    else:
+        # TOP KPI ROW
+        total_live = len(df_live)
+        completed_live = len(df_live[df_live['Status'] == 'COMPLETED'])
+        pending_live = total_live - completed_live
+
+        k1, k2, k3 = st.columns(3)
+        with k1:
+            st.markdown(f'<div class="kpi-card" style="border-left-color: #3B82F6;"><div class="kpi-title">Total Registered (26-27)</div><div class="kpi-value">{total_live}</div></div>', unsafe_allow_html=True)
+        with k2:
+            st.markdown(f'<div class="kpi-card" style="border-left-color: #10B981;"><div class="kpi-title">Total Interventions Done</div><div class="kpi-value" style="color: #10B981;">{completed_live}</div></div>', unsafe_allow_html=True)
+        with k3:
+            st.markdown(f'<div class="kpi-card" style="border-left-color: #EF4444;"><div class="kpi-title">Total Active Pending</div><div class="kpi-value" style="color: #EF4444;">{pending_live}</div></div>', unsafe_allow_html=True)
+
+        st.write("---")
+
+        # CHARTS ROW
+        c1, c2 = st.columns(2)
+        with c1:
+            fig_status = px.pie(df_live, names='Status', title="Intervention Status Distribution", hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
+            st.plotly_chart(fig_status, use_container_width=True)
+        with c2:
+            fig_taluka = px.bar(df_live['Taluka'].value_counts().reset_index(), x='Taluka', y='count', title="Cases by Taluka", color='Taluka', text_auto=True)
+            st.plotly_chart(fig_taluka, use_container_width=True)
+
+        st.write("---")
+
+        # DIGITAL CHILD PROFILE VIEWER
+        st.write("### 🔍 Search & View Digital Child Profile")
+        search_list = sorted(df_live['Child Name'].unique())
+        selected_child = st.selectbox("Select Child to View Details & Clinical Photo:", ["-- Select Child --"] + search_list)
+
+        if selected_child != "-- Select Child --":
+            child_row = df_live[df_live['Child Name'] == selected_child].iloc[0]
+            
+            p1, p2 = st.columns([1, 2])
+            
+            with p1:
+                st.write("#### Clinical Photograph")
+                photo_str = str(child_row['PhotoData'])
+                if photo_str.startswith("data:image"):
+                    st.image(photo_str, use_container_width=True, caption=f"Photo: {selected_child}")
+                else:
+                    st.info("No photo available for this record.")
+            
+            with p2:
+                st.write(f"#### Case Details: {selected_child}")
+                st.markdown(f"""
+                <div class="patient-card">
+                    <p><b>Condition:</b> {child_row['Condition']}</p>
+                    <p><b>Taluka:</b> {child_row['Taluka']} | <b>Gender:</b> {child_row['Gender']}</p>
+                    <p><b>Date of Birth:</b> {child_row['DOB']}</p>
+                    <p><b>Mobile Number:</b> {child_row['Contact']}</p>
+                    <p><b>Referral Location:</b> {child_row['Referral Location']}</p>
+                    <p><b>Current Status:</b> <span style='color: #EF4444; font-weight: bold;'>{child_row['Status']}</span></p>
+                    <p><b>Next Follow-up Date:</b> {child_row['Follow-up']}</p>
+                    <hr>
+                    <p style='font-size: 12px; color: #64748b;'>Screened by Team {child_row['Team Number']} at {child_row['Institution']} on {child_row['Screening Date']}</p>
+                </div>
+                """, unsafe_allow_html=True)
