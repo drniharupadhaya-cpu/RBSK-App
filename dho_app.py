@@ -50,21 +50,12 @@ def process_photo_to_string(uploaded_file):
         return "No Photo"
     
     try:
-        # Open the image using PIL
         img = Image.open(uploaded_file)
-        
-        # Resize to a professional height (keeps file size tiny but clear)
         img.thumbnail((300, 300)) 
-        
-        # Convert to RGB (to handle PNG transparency if any)
         if img.mode in ("RGBA", "P"):
             img = img.convert("RGB")
-            
-        # Save to buffer
         buffer = io.BytesIO()
-        img.save(buffer, format="JPEG", quality=70) # 70% quality is perfect for app viewing
-        
-        # Encode to base64 string
+        img.save(buffer, format="JPEG", quality=70) 
         img_str = base64.b64encode(buffer.getvalue()).decode()
         return f"data:image/jpeg;base64,{img_str}"
     except Exception as e:
@@ -134,7 +125,6 @@ def load_monthly_covered_data(month_tab):
         return pd.DataFrame(ws.get_all_values())
     except: return pd.DataFrame()
 
-# 🚀 NEW: LIVE DATA ENGINE FOR 2026-27
 @st.cache_data(ttl=5)
 def load_live_app_data():
     try:
@@ -143,7 +133,6 @@ def load_live_app_data():
         data = ws.get_all_values()
         if len(data) < 1:
             return pd.DataFrame()
-        # Create DF from rows. Since there might not be headers, we assign them.
         df = pd.DataFrame(data)
         df.columns = ["Timestamp", "Taluka", "Condition", "Child Name", "Gender", "DOB", "Contact", "Screening Date", "Team Number", "Institution", "Referral Location", "Status", "Follow-up", "PhotoData"]
         return df
@@ -171,24 +160,41 @@ menu = st.sidebar.radio("Analytical Modules:", [
 ])
 
 # -----------------------------------------
-# MODULE 1, 2, 3 (HISTORIC)
+# MODULE 1: DISTRICT BURDEN ANALYTICS
 # -----------------------------------------
 if menu == "📊 1. District Burden Analytics":
     st.markdown('<p class="big-font">District Birth Defect Analytics</p>', unsafe_allow_html=True)
+    
     if not df_master.empty:
-        st.write("### 🏥 Total Active Cases by Category")
-        disease_counts = df_master['Disease'].value_counts()
+        # --- ADDED FILTERS ---
+        st.write("### 🔍 Global Archive Filters")
+        f_col1, f_col2 = st.columns(2)
+        with f_col1:
+            all_talukas = sorted(list(df_master['Taluka'].unique()))
+            sel_talukas = st.multiselect("Filter by Taluka:", all_talukas, default=all_talukas)
+        with f_col2:
+            all_diseases = sorted(list(df_master['Disease'].unique()))
+            sel_diseases = st.multiselect("Filter by Disease:", all_diseases, default=all_diseases)
+        
+        filtered_df = df_master[(df_master['Taluka'].isin(sel_talukas)) & (df_master['Disease'].isin(sel_diseases))]
+        
+        st.write("### 🏥 Active Cases by Category")
+        disease_counts = filtered_df['Disease'].value_counts()
         cols = st.columns(4)
         for i, (disease, val) in enumerate(disease_counts.items()):
             if i > 3: break
             colors = ["#3B82F6", "#EF4444", "#10B981", "#F59E0B"]
             with cols[i]:
                 st.markdown(f'<div class="kpi-card" style="border-left-color: {colors[i]};"><div class="kpi-title">{disease}</div><div class="kpi-value" style="color: {colors[i]};">{val}</div></div>', unsafe_allow_html=True)
+        
         st.markdown("<br>", unsafe_allow_html=True)
-        pivot_df = pd.crosstab(df_master['Taluka'], df_master['Disease'], margins=True, margins_name="District Total")
+        pivot_df = pd.crosstab(filtered_df['Taluka'], filtered_df['Disease'], margins=True, margins_name="Total")
         st.write("### 📍 Taluka-Wise Defect Pivot Table")
         st.dataframe(pivot_df.style.background_gradient(cmap='Blues', axis=0), use_container_width=True)
 
+# -----------------------------------------
+# MODULE 2: TRIAGE & CHILD SEARCH
+# -----------------------------------------
 elif menu == "🚨 2. Triage & Child Search":
     st.markdown('<p class="big-font">Master Triage & Search Engine</p>', unsafe_allow_html=True)
     if not df_master.empty:
@@ -196,19 +202,70 @@ elif menu == "🚨 2. Triage & Child Search":
         with col1: f_taluka = st.selectbox("🌍 Select Taluka", ["All Talukas"] + sorted(list(df_master['Taluka'].unique())))
         with col2: f_disease = st.selectbox("🦠 Select Disease", ["All Diseases"] + list(df_master['Disease'].unique()))
         with col3: search_name = st.text_input("🔍 Search by Child's Name")
+        
         filtered_df = df_master.copy()
         if f_taluka != "All Talukas": filtered_df = filtered_df[filtered_df['Taluka'] == f_taluka]
         if f_disease != "All Diseases": filtered_df = filtered_df[filtered_df['Disease'] == f_disease]
         if search_name: filtered_df = filtered_df[filtered_df['Child Name'].str.contains(search_name, case=False, na=False)]
+        
         st.dataframe(filtered_df, use_container_width=True, hide_index=True)
 
+# -----------------------------------------
+# MODULE 3: DEEP MONTHLY DATA MINING
+# -----------------------------------------
 elif menu == "📈 3. Deep Monthly Data Mining":
     st.markdown('<p class="big-font">Deep District Performance Mining</p>', unsafe_allow_html=True)
     months_available = ["MAR 26", "FEB 26", "JAN 26", "DEC 25", "NOV 25", "OCT 25", "SEP 25", "AUG 25", "JUL 25", "JUN 25", "MAY 25", "APR 25"]
-    selected_month = st.selectbox("📅 Select Reporting Month:", months_available, index=10)
+    
+    col_sel1, col_sel2 = st.columns(2)
+    with col_sel1:
+        selected_month = st.selectbox("📅 Select Reporting Month:", months_available, index=10)
+    
     df_monthly = load_monthly_covered_data(selected_month)
+    
     if not df_monthly.empty:
-        st.dataframe(df_monthly, use_container_width=True, hide_index=True)
+        # --- DYNAMIC MINING LOGIC ---
+        taluka_cols = {}
+        for r_idx in range(0, 4):
+            for c_idx, val in enumerate(df_monthly.iloc[r_idx]):
+                val_str = str(val).upper().replace('\n', ' ').strip()
+                if 'TALUKA' in val_str and 'TOTAL' not in val_str and c_idx > 1:
+                    t_name = val_str.replace('TALUKA', '').strip()
+                    if t_name not in taluka_cols: taluka_cols[t_name] = c_idx
+        
+        clean_metrics = []
+        for r_idx in range(3, len(df_monthly)):
+            metric_val = str(df_monthly.iloc[r_idx, 1]).strip()
+            if len(metric_val) > 5 and metric_val not in clean_metrics:
+                clean_metrics.append(metric_val)
+        
+        with col_sel2:
+            selected_metric = st.selectbox("🎯 Select Performance Metric (Disease/Metric):", clean_metrics if clean_metrics else ["None"])
+        
+        # --- ADDED TALUKA FILTER FOR CHART ---
+        st.write("---")
+        st.write("### 📍 Comparative Analysis Filter")
+        all_found_talukas = list(taluka_cols.keys())
+        sel_mining_talukas = st.multiselect("Filter Chart by Specific Talukas:", all_found_talukas, default=all_found_talukas)
+
+        if selected_metric != "None":
+            metric_data = []
+            for r_idx in range(3, len(df_monthly)):
+                if str(df_monthly.iloc[r_idx, 1]).strip() == selected_metric:
+                    for taluka, col_idx in taluka_cols.items():
+                        if taluka in sel_mining_talukas:
+                            raw_val = df_monthly.iloc[r_idx, col_idx]
+                            val = pd.to_numeric(raw_val, errors='coerce')
+                            metric_data.append({'Taluka': taluka, 'Value': 0 if pd.isna(val) else val})
+                    break
+            
+            chart_df = pd.DataFrame(metric_data)
+            if not chart_df.empty:
+                fig = px.bar(chart_df, x='Taluka', y='Value', color='Taluka', title=f"{selected_metric} Overview", text_auto=True)
+                st.plotly_chart(fig, use_container_width=True)
+
+        with st.expander("👀 View Raw Monthly Data Table"):
+            st.dataframe(df_monthly, use_container_width=True, hide_index=True)
 
 # -----------------------------------------
 # MODULE 4: NEW CASE REGISTRATION
@@ -237,8 +294,7 @@ elif menu == "➕ 4. New Case Registration":
         if "OTHER" in referral_base:
             referral_exact = st.text_input("⚠️ Specify Hospital Name:")
             final_referral = f"{referral_base} - {referral_exact}"
-        else:
-            final_referral = referral_base
+        else: final_referral = referral_base
             
         status = st.selectbox("🚦 Intervention Status", ["PENDING", "WAITING FOR APPROVAL", "ON TREATMENT", "COMPLETED", "REFUSAL", "MIGRATION", "DEATH"])
         follow_up = st.date_input("⏰ Next Follow-Up Date")
@@ -259,77 +315,80 @@ elif menu == "➕ 4. New Case Registration":
                     ws.append_row(new_row)
                     st.success(f"✅ Successfully registered {child_name} into 2026-27 cycle!")
                     st.balloons()
-                except Exception as e:
-                    st.error(f"❌ Error: {e}")
+                except Exception as e: st.error(f"❌ Error: {e}")
 
 # -----------------------------------------
-# MODULE 5: LIVE CYCLE ANALYTICS (2026-27)
+# MODULE 5: LIVE CYCLE ANALYTICS
 # -----------------------------------------
 elif menu == "🎯 5. Live Cycle Analytics":
     st.markdown('<p class="big-font">🎯 Live Cycle Analytics (2026-27)</p>', unsafe_allow_html=True)
-    st.markdown('<p class="sub-font">Dynamic Performance Tracking for the Current Fiscal Year.</p>', unsafe_allow_html=True)
-
     df_live = load_live_app_data()
 
-    if df_live.empty or len(df_live) < 1:
-        st.warning("No data found in the 2026-27 Live Database. Please register cases in Module 4.")
+    if df_live.empty:
+        st.warning("No data found in the 2026-27 Database.")
     else:
-        # TOP KPI ROW
-        total_live = len(df_live)
-        completed_live = len(df_live[df_live['Status'] == 'COMPLETED'])
-        pending_live = total_live - completed_live
+        # --- ADDED TOP FILTERS FOR MODULE 5 ---
+        st.write("### 🔍 Global Live Filters")
+        fl_col1, fl_col2 = st.columns(2)
+        with fl_col1:
+            l_talukas = ["All Talukas"] + sorted(list(df_live['Taluka'].unique()))
+            sel_l_taluka = st.selectbox("Filter Dashboard by Taluka:", l_talukas)
+        with fl_col2:
+            l_conditions = ["All Conditions"] + sorted(list(df_live['Condition'].unique()))
+            sel_l_cond = st.selectbox("Filter Dashboard by Condition:", l_conditions)
 
-        k1, k2, k3 = st.columns(3)
-        with k1:
-            st.markdown(f'<div class="kpi-card" style="border-left-color: #3B82F6;"><div class="kpi-title">Total Registered (26-27)</div><div class="kpi-value">{total_live}</div></div>', unsafe_allow_html=True)
-        with k2:
-            st.markdown(f'<div class="kpi-card" style="border-left-color: #10B981;"><div class="kpi-title">Total Interventions Done</div><div class="kpi-value" style="color: #10B981;">{completed_live}</div></div>', unsafe_allow_html=True)
-        with k3:
-            st.markdown(f'<div class="kpi-card" style="border-left-color: #EF4444;"><div class="kpi-title">Total Active Pending</div><div class="kpi-value" style="color: #EF4444;">{pending_live}</div></div>', unsafe_allow_html=True)
+        # Apply Filters to the dataframe
+        df_filtered_live = df_live.copy()
+        if sel_l_taluka != "All Talukas":
+            df_filtered_live = df_filtered_live[df_filtered_live['Taluka'] == sel_l_taluka]
+        if sel_l_cond != "All Conditions":
+            df_filtered_live = df_filtered_live[df_filtered_live['Condition'] == sel_l_cond]
+
+        # KPIs
+        t1, t2, t3 = st.columns(3)
+        total_l = len(df_filtered_live)
+        done_l = len(df_filtered_live[df_filtered_live['Status'] == 'COMPLETED'])
+        pending_l = total_l - done_l
+        
+        with t1: st.markdown(f'<div class="kpi-card" style="border-left-color: #3B82F6;"><div class="kpi-title">Total Registered</div><div class="kpi-value">{total_l}</div></div>', unsafe_allow_html=True)
+        with t2: st.markdown(f'<div class="kpi-card" style="border-left-color: #10B981;"><div class="kpi-title">Interventions Done</div><div class="kpi-value">{done_l}</div></div>', unsafe_allow_html=True)
+        with t3: st.markdown(f'<div class="kpi-card" style="border-left-color: #EF4444;"><div class="kpi-title">Total Pending</div><div class="kpi-value">{pending_l}</div></div>', unsafe_allow_html=True)
 
         st.write("---")
-
-        # CHARTS ROW
+        
+        # CHARTS
         c1, c2 = st.columns(2)
         with c1:
-            fig_status = px.pie(df_live, names='Status', title="Intervention Status Distribution", hole=0.4, color_discrete_sequence=px.colors.qualitative.Pastel)
-            st.plotly_chart(fig_status, use_container_width=True)
+            fig_p = px.pie(df_filtered_live, names='Status', title="Live Intervention Status", hole=0.4)
+            st.plotly_chart(fig_p, use_container_width=True)
         with c2:
-            fig_taluka = px.bar(df_live['Taluka'].value_counts().reset_index(), x='Taluka', y='count', title="Cases by Taluka", color='Taluka', text_auto=True)
-            st.plotly_chart(fig_taluka, use_container_width=True)
+            fig_b = px.bar(df_filtered_live['Taluka'].value_counts().reset_index(), x='Taluka', y='count', title="Cases by Taluka", color='Taluka')
+            st.plotly_chart(fig_b, use_container_width=True)
 
-        st.write("---")
+        # --- ADDED LIVE CASE LEDGER TABLE ---
+        st.write("### 📜 2026-27 Registered Case Ledger")
+        st.dataframe(df_filtered_live.drop(columns=['PhotoData']), use_container_width=True, hide_index=True)
 
-        # DIGITAL CHILD PROFILE VIEWER
+        # DIGITAL PROFILE VIEWER (Updated to follow filters)
         st.write("### 🔍 Search & View Digital Child Profile")
-        search_list = sorted(df_live['Child Name'].unique())
-        selected_child = st.selectbox("Select Child to View Details & Clinical Photo:", ["-- Select Child --"] + search_list)
+        search_list = sorted(df_filtered_live['Child Name'].unique())
+        selected_child = st.selectbox("Select Child (Filter applied):", ["-- Select Child --"] + search_list)
 
         if selected_child != "-- Select Child --":
-            child_row = df_live[df_live['Child Name'] == selected_child].iloc[0]
-            
+            child_row = df_filtered_live[df_filtered_live['Child Name'] == selected_child].iloc[0]
             p1, p2 = st.columns([1, 2])
-            
             with p1:
-                st.write("#### Clinical Photograph")
                 photo_str = str(child_row['PhotoData'])
-                if photo_str.startswith("data:image"):
-                    st.image(photo_str, use_container_width=True, caption=f"Photo: {selected_child}")
-                else:
-                    st.info("No photo available for this record.")
-            
+                if photo_str.startswith("data:image"): st.image(photo_str, use_container_width=True)
+                else: st.info("No photo available.")
             with p2:
-                st.write(f"#### Case Details: {selected_child}")
                 st.markdown(f"""
                 <div class="patient-card">
-                    <p><b>Condition:</b> {child_row['Condition']}</p>
-                    <p><b>Taluka:</b> {child_row['Taluka']} | <b>Gender:</b> {child_row['Gender']}</p>
-                    <p><b>Date of Birth:</b> {child_row['DOB']}</p>
-                    <p><b>Mobile Number:</b> {child_row['Contact']}</p>
-                    <p><b>Referral Location:</b> {child_row['Referral Location']}</p>
-                    <p><b>Current Status:</b> <span style='color: #EF4444; font-weight: bold;'>{child_row['Status']}</span></p>
-                    <p><b>Next Follow-up Date:</b> {child_row['Follow-up']}</p>
-                    <hr>
-                    <p style='font-size: 12px; color: #64748b;'>Screened by Team {child_row['Team Number']} at {child_row['Institution']} on {child_row['Screening Date']}</p>
+                    <h3>{child_row['Child Name']}</h3>
+                    <p><b>Condition:</b> {child_row['Condition']} | <b>Taluka:</b> {child_row['Taluka']}</p>
+                    <p><b>Mobile:</b> {child_row['Contact']} | <b>DOB:</b> {child_row['DOB']}</p>
+                    <p><b>Status:</b> <span style='color:red;'>{child_row['Status']}</span></p>
+                    <p><b>Referral:</b> {child_row['Referral Location']}</p>
+                    <p><b>Follow-up:</b> {child_row['Follow-up']}</p>
                 </div>
                 """, unsafe_allow_html=True)
