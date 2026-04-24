@@ -5,9 +5,9 @@ import gspread
 from google.oauth2.service_account import Credentials
 import json
 import io
+import base64
 import datetime
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
+from PIL import Image
 
 # -----------------------------------------
 # PAGE CONFIGURATION
@@ -25,7 +25,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -----------------------------------------
-# GOOGLE CONNECTIONS
+# GOOGLE SHEETS CONNECTION
 # -----------------------------------------
 scopes = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -41,46 +41,33 @@ credentials = Credentials.from_service_account_info(skey, scopes=scopes)
 client = gspread.authorize(credentials)
 
 # -----------------------------------------
-# GOOGLE DRIVE PHOTO UPLOADER (BYPASS 403 ERROR)
+# PRISTINE PHOTO ENGINE (NO-DRIVE / NO-QUOTA)
 # -----------------------------------------
-@st.cache_resource
-def get_drive_service():
-    return build('drive', 'v3', credentials=credentials)
-
-def upload_photo_to_drive(uploaded_file, child_name, disease):
+def process_photo_to_string(uploaded_file):
+    """Resizes, compresses, and converts photo to a Base64 string for Sheet storage."""
     if uploaded_file is None:
         return "No Photo"
     
     try:
-        drive_service = get_drive_service()
+        # Open the image using PIL
+        img = Image.open(uploaded_file)
         
-        # 🚀 THE FIX: We don't specify a "parents" folder. 
-        # This forces the file into the Service Account's own 15GB free storage, 
-        # which bypasses the personal Gmail 403 Quota error!
+        # Resize to a professional height (keeps file size tiny but clear)
+        img.thumbnail((300, 300)) 
         
-        file_extension = uploaded_file.name.split('.')[-1]
-        new_file_name = f"{child_name}_{disease}_{datetime.datetime.now().strftime('%Y%m%d')}.{file_extension}"
+        # Convert to RGB (to handle PNG transparency if any)
+        if img.mode in ("RGBA", "P"):
+            img = img.convert("RGB")
+            
+        # Save to buffer
+        buffer = io.BytesIO()
+        img.save(buffer, format="JPEG", quality=70) # 70% quality is perfect for app viewing
         
-        file_metadata = {'name': new_file_name}
-        media = MediaIoBaseUpload(io.BytesIO(uploaded_file.getvalue()), mimetype=uploaded_file.type, resumable=True)
-        
-        # Upload to Service Account Root
-        file = drive_service.files().create(
-            body=file_metadata, 
-            media_body=media, 
-            fields='id, webViewLink'
-        ).execute()
-        
-        # Make it public so the DHO can click the link in the sheet
-        drive_service.permissions().create(
-            fileId=file.get('id'),
-            body={'type': 'anyone', 'role': 'reader'}
-        ).execute()
-        
-        return file.get('webViewLink')
+        # Encode to base64 string
+        img_str = base64.b64encode(buffer.getvalue()).decode()
+        return f"data:image/jpeg;base64,{img_str}"
     except Exception as e:
-        st.error(f"⚠️ Photo Logic Error: {e}")
-        return "Upload Failed"
+        return f"Error: {e}"
 
 # -----------------------------------------
 # DATA MINING ENGINE (HISTORIC DATA)
@@ -207,10 +194,11 @@ elif menu == "📈 3. Deep Monthly Data Mining":
         st.dataframe(df_monthly, use_container_width=True, hide_index=True)
 
 # -----------------------------------------
-# MODULE 4: NEW CASE REGISTRATION (FIXED)
+# MODULE 4: NEW CASE REGISTRATION (ZERO-LAG ENGINE)
 # -----------------------------------------
 elif menu == "➕ 4. New Case Registration":
     st.markdown('<p class="big-font">➕ Register New Birth Defect Case (2026-27)</p>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-font">Secured Internal Database: No Quota Errors, No Storage Gaps.</p>', unsafe_allow_html=True)
     
     c1, c2 = st.columns(2)
     with c1:
@@ -235,7 +223,7 @@ elif menu == "➕ 4. New Case Registration":
         st.write("### 🏥 Clinical & Referral Details")
         screening_date = st.date_input("🗓️ Date of Screening", value=datetime.date.today())
         team_num = st.text_input("🚑 Team Number (e.g., 1240315)")
-        institution = st.selectbox("🏫 Institution Type", ["AWC (Anganwadi)", "School", "Delivery Point / PHC"])
+        institution = st.selectbox("🏫 Institution Type", ["AWC (Anganwadi)", "School", "PHC / Delivery Point"])
         
         referral_base = st.selectbox("🏥 Referral Location", [
             "DEIC", "SDH", "U.N. MEHTA", "AHMEDABAD CIVIL", "RAJKOT CIVIL", 
@@ -258,18 +246,20 @@ elif menu == "➕ 4. New Case Registration":
         if child_name.strip() == "" or contact.strip() == "":
             st.error("⚠️ Child Name and Contact are required!")
         else:
-            with st.spinner("Uploading to Secure Cloud..."):
+            with st.spinner("Processing registration and optimizing photo..."):
                 try:
-                    # Photo is saved to Service Account storage (fixes 403)
-                    photo_url = upload_photo_to_drive(photo_file, child_name, disease)
+                    # Optimized Internal Photo Storage
+                    photo_data = process_photo_to_string(photo_file)
                     
+                    # Prepare Data Row
                     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     new_row = [
                         timestamp, taluka, disease, child_name, gender, 
                         str(dob), contact, str(screening_date), team_num, 
-                        institution, final_referral, status, str(follow_up), photo_url
+                        institution, final_referral, status, str(follow_up), photo_data
                     ]
                     
+                    # Log to Google Sheet
                     ws = client.open("NEW BIRTH DEFECT TOTAL 2025-26 for app").worksheet("APP_LIVE_REGISTRATIONS")
                     ws.append_row(new_row)
                     
@@ -278,5 +268,8 @@ elif menu == "➕ 4. New Case Registration":
                 except Exception as e:
                     st.error(f"❌ Error: {e}")
 
+# -----------------------------------------
+# MODULE 5 Placeholder
+# -----------------------------------------
 elif menu == "🎯 5. Live Cycle Analytics (Coming Soon)":
     st.info("This module will read from 'APP_LIVE_REGISTRATIONS' for the 2026-27 cycle.")
