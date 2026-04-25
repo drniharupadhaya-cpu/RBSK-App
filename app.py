@@ -1684,7 +1684,7 @@ elif menu == "5. HBNC Newborn Visit":
 
     tab_physical, tab_telephonic = st.tabs(["🏠 1. Physical Field Visits", "📞 2. Telephonic Techo Queue"])
     
-    # --- TAB 1: PHYSICAL FIELD VISITS (UNTOUCHED AS PER REQUEST) ---
+    # --- TAB 1: PHYSICAL FIELD VISITS ---
     with tab_physical:
         st.subheader("📝 Log Physical Visit")
         with st.form("hbnc_form", clear_on_submit=True):
@@ -1701,11 +1701,12 @@ elif menu == "5. HBNC Newborn Visit":
 
             st.divider()
             st.markdown("#### 🏥 Birth History")
-            b1, b2, b3, b4 = st.columns(4)
+            b1, b2, b3, b4, b5 = st.columns(5)
             with b1: dob = st.date_input("Date of Birth")
-            with b2: birth_weight = st.number_input("Birth Weight (kg)", min_value=0.0, step=0.1)
-            with b3: delivery_type = st.selectbox("Delivery Type", ["Normal Delivery (ND)", "C-Section (LSCS)", "Instrumental"])
-            with b4: delivery_point = st.selectbox("Delivery Point", ["Vatsalya Hospital", "SDH Visavadar", "Jay Ambe Hospital", "Junagadh Civil Hospital", "CHC/PHC", "Home Delivery", "Other Private Hospital"])
+            with b2: gender = st.selectbox("Gender", ["Male", "Female"])
+            with b3: birth_weight = st.number_input("Birth Weight (kg)", min_value=0.0, step=0.1)
+            with b4: delivery_type = st.selectbox("Delivery Type", ["Normal Delivery (ND)", "C-Section (LSCS)", "Instrumental"])
+            with b5: delivery_point = st.selectbox("Delivery Point", ["Vatsalya Hospital", "SDH Visavadar", "Jay Ambe Hospital", "Junagadh Civil Hospital", "CHC/PHC", "Home Delivery", "Other Private Hospital"])
 
             st.divider()
             disease = st.text_input("🦠 Disease / Defect Identified?", placeholder="e.g., Cleft lip, None")
@@ -1716,7 +1717,7 @@ elif menu == "5. HBNC Newborn Visit":
                     st.error("🚨 Enter Child and Parent Name.")
                 else:
                     try:
-                        spreadsheet.worksheet("hbnc_screenings").append_row([str(visit_date), child_name, parent_name, contact_number, str(dob), birth_weight, delivery_type, delivery_point, techo_id, disease, observations, village_name])
+                        spreadsheet.worksheet("hbnc_screenings").append_row([str(visit_date), child_name, parent_name, contact_number, str(dob), gender, birth_weight, delivery_type, delivery_point, techo_id, disease, observations, village_name])
                         st.toast(f"✅ Recorded Visit for {child_name}.", icon="🎉")
                         get_hbnc_logs.clear() 
                         import time
@@ -1729,15 +1730,39 @@ elif menu == "5. HBNC Newborn Visit":
         st.subheader("📋 Recent Physical HBNC Records")
         try:
             if not df_hbnc_live.empty:
-                st.dataframe(df_hbnc_live, use_container_width=True)
-                csv_hbnc = df_hbnc_live.to_csv(index=False).encode('utf-8-sig')
+                # --- ADDED FILTERS ---
+                f1, f2, f3 = st.columns(3)
+                
+                if "Delivery Type" in df_hbnc_live.columns:
+                    with f1: filter_del_type = st.selectbox("Filter by Delivery Type", ["All"] + list(df_hbnc_live["Delivery Type"].unique()))
+                else: filter_del_type = "All"
+                
+                if "Delivery Point" in df_hbnc_live.columns:
+                    with f2: filter_del_point = st.selectbox("Filter by Delivery Point", ["All"] + list(df_hbnc_live["Delivery Point"].unique()))
+                else: filter_del_point = "All"
+                
+                if "Gender" in df_hbnc_live.columns:
+                    with f3: filter_gender = st.selectbox("Filter by Gender", ["All"] + list(df_hbnc_live["Gender"].unique()))
+                else: filter_gender = "All"
+
+                # Apply Filters
+                filtered_hbnc = df_hbnc_live.copy()
+                if filter_del_type != "All":
+                    filtered_hbnc = filtered_hbnc[filtered_hbnc["Delivery Type"] == filter_del_type]
+                if filter_del_point != "All":
+                    filtered_hbnc = filtered_hbnc[filtered_hbnc["Delivery Point"] == filter_del_point]
+                if filter_gender != "All":
+                    filtered_hbnc = filtered_hbnc[filtered_hbnc["Gender"] == filter_gender]
+
+                st.dataframe(filtered_hbnc, use_container_width=True)
+                csv_hbnc = filtered_hbnc.to_csv(index=False).encode('utf-8-sig')
                 st.download_button(label="⬇️ Download Physical Visit Data", data=csv_hbnc, file_name=f"HBNC_Physical_Visits.csv", mime="text/csv")
             else:
                 st.info("No physical visit data found yet.")
         except Exception as e:
             st.warning(f"⚠️ Could not load physical data table. Reason: {e}")
 
-    # --- TAB 2: TELEPHONIC TECHO QUEUE (REVAMPED) ---
+    # --- TAB 2: TELEPHONIC TECHO QUEUE (UNTOUCHED) ---
     with tab_telephonic:
         st.subheader("📞 Techo Consultation Queue")
         st.info("Directly managing call list from 'hbnc_telephonic' master sheet. No upload needed.")
