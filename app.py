@@ -1718,7 +1718,22 @@ elif menu == "5. HBNC Newborn Visit":
                     st.error("🚨 Enter Child and Parent Name.")
                 else:
                     try:
-                        spreadsheet.worksheet("hbnc_screenings").append_row([str(visit_date), child_name, parent_name, contact_number, str(dob), gender, birth_weight, delivery_type, delivery_point, techo_id, disease, observations, village_name])
+                        # FIX: Reordered list so gender goes to the end column as per your sheet update
+                        spreadsheet.worksheet("hbnc_screenings").append_row([
+                            str(visit_date), 
+                            child_name, 
+                            parent_name, 
+                            contact_number, 
+                            str(dob), 
+                            birth_weight, 
+                            delivery_type, 
+                            delivery_point, 
+                            techo_id, 
+                            disease, 
+                            observations, 
+                            village_name,
+                            gender # Gender moved to the end
+                        ])
                         st.toast(f"✅ Recorded Visit for {child_name}.", icon="🎉")
                         get_hbnc_logs.clear() 
                         import time
@@ -1800,7 +1815,6 @@ elif menu == "5. HBNC Newborn Visit":
                 status_options = ["Pending", "Completed ✅", "Not Reachable 📵", "Call Later ⏳", "Switched Off", "Wrong Number"]
                 
                 # Lock original Techo columns, only allow editing Status and Remarks
-                # Modify these strings to match your actual Google Sheet headers exactly
                 read_only_cols = [col for col in df_tele.columns if col not in ["Call Status", "Staff Remarks"]]
 
                 updated_tele_df = st.data_editor(
@@ -1819,7 +1833,6 @@ elif menu == "5. HBNC Newborn Visit":
                     with st.spinner("Cleaning and syncing call logs..."):
                         final_tele_df = updated_tele_df.copy()
                         
-                        # Add a "Last Updated" timestamp to every row
                         import datetime
                         final_tele_df['Last Update'] = datetime.date.today().strftime("%Y-%m-%d")
                         
