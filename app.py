@@ -1829,10 +1829,37 @@ elif menu == "5. HBNC Newborn Visit":
                         st.error(f"⚠️ Error: Could not find 'hbnc_screenings' tab. {e}")
                         
         st.divider()
-        st.subheader("📋 Recent Physical HBNC Records")
+        st.subheader("📋 Recent Physical HBNC Records & Analytics")
         try:
             if not df_hbnc_live.empty:
+                
+                # ==========================================
+                # 🚀 NEW: HOSPITAL-WISE DEMOGRAPHICS TABLE
+                # ==========================================
+                if all(col in df_hbnc_live.columns for col in ["Delivery Point", "Gender", "Delivery Type"]):
+                    st.markdown("##### 🏥 Hospital-wise Demographics & Delivery Analysis")
+                    
+                    # Group by Delivery Point and calculate metrics
+                    hbnc_stats = df_hbnc_live.groupby("Delivery Point").apply(
+                        lambda x: pd.Series({
+                            "Total Deliveries": len(x),
+                            "Male 👦": (x["Gender"].astype(str).str.strip().str.title() == "Male").sum(),
+                            "Female 👧": (x["Gender"].astype(str).str.strip().str.title() == "Female").sum(),
+                            "Normal (ND) 🟢": x["Delivery Type"].astype(str).str.contains("Normal", case=False, na=False).sum(),
+                            "C-Section (LSCS) 🔴": x["Delivery Type"].astype(str).str.contains("C-Section|LSCS", case=False, na=False).sum()
+                        })
+                    ).reset_index()
+                    
+                    # Sort to show highest deliveries first
+                    hbnc_stats = hbnc_stats.sort_values("Total Deliveries", ascending=False).reset_index(drop=True)
+                    
+                    # Display the analytical table
+                    st.dataframe(hbnc_stats, use_container_width=True, hide_index=True)
+                    st.divider()
+                # ==========================================
+
                 # --- ADDED FILTERS ---
+                st.markdown("##### 🔍 View Detailed Records")
                 f1, f2, f3 = st.columns(3)
                 
                 if "Delivery Type" in df_hbnc_live.columns:
