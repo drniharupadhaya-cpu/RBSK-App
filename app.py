@@ -340,7 +340,7 @@ if st.sidebar.button("🔓 Logout"):
 # ==========================================
 # MODULE 1: THE EXECUTIVE DASHBOARD & TOUR PLAN
 # ==========================================
-if menu == "1. Daily Tour Plan":
+elif menu == "1. Daily Tour Plan":
     render_header("Executive Dashboard", "Live team overview and daily screening stats", "📊", "#3b82f6")
 
     tab_tour, tab_charts = st.tabs(["📅 Daily Tour Plan", "📈 Executive Analytics"])
@@ -384,11 +384,11 @@ if menu == "1. Daily Tour Plan":
         if "tour_data" in st.session_state:
             data = st.session_state.tour_data
             if data:
-                df = pd.DataFrame(data)
+                df_tour = pd.DataFrame(data)
                 search_word = st.text_input("🔍 Search for a Staff Name, Village, or Date:")
                 if search_word:
-                    df = df[df.astype(str).apply(lambda col: col.str.contains(search_word, case=False)).any(axis=1)]
-                st.dataframe(df, use_container_width=True)
+                    df_tour = df_tour[df_tour.astype(str).apply(lambda col: col.str.contains(search_word, case=False)).any(axis=1)]
+                st.dataframe(df_tour, use_container_width=True)
             else:
                 st.info("No tour plans have been saved yet!")
                 
@@ -399,6 +399,7 @@ if menu == "1. Daily Tour Plan":
         st.checkbox("Charge tablet/mobile to 100%")
 
     with tab_charts:
+        import plotly.express as px
         aw_logs, sch_logs, df = get_daily_logs()
 
         if df.empty:
@@ -406,12 +407,16 @@ if menu == "1. Daily Tour Plan":
         else:
             st.markdown("#### 📈 District Command Center")
             
+            # --- TOP LEVEL DISTRICT METRICS ---
             total_screened = len(df)
             total_aw = len(df[df['Location_Type'] == 'Anganwadi']) if 'Location_Type' in df.columns else 0
             total_sch = len(df[df['Location_Type'] == 'School']) if 'Location_Type' in df.columns else 0
             
-            if 'Status' in df.columns:
-                referred_df = df[~df['Status'].astype(str).str.lower().isin(['normal', 'none', '', 'nan'])]
+            # Smart sniff for Status column
+            status_col = next((c for c in df.columns if 'STATUS' in str(c).upper() or 'SAM' in str(c).upper() or 'MAM' in str(c).upper()), None)
+            
+            if status_col:
+                referred_df = df[~df[status_col].astype(str).str.lower().isin(['normal', 'none', '', 'nan', 'healthy', 'false'])]
                 total_referred = len(referred_df)
             else:
                 referred_df = pd.DataFrame()
@@ -424,6 +429,76 @@ if menu == "1. Daily Tour Plan":
             c4.metric("🚨 Referrals", total_referred, delta="Requires Action", delta_color="inverse")
 
             st.divider()
+            
+            # ==========================================
+            # 🚀 NEW: TEAM ANALYTICS ENGINE
+            # ==========================================
+            st.markdown("#### 👥 Team Performance & Health Demographics")
+            
+            # Dynamic sniffers for Team and Date columns
+            team_col = next((c for c in df.columns if any(k in str(c).upper() for k in ["TEAM", "MHT", "STAFF", "INSTITUTE"])), None)
+            date_col = next((c for c in df.columns if any(k in str(c).upper() for k in ["DATE", "SCREENING"])), None)
+
+            if team_col:
+                # Create a copy to avoid SettingWithCopyWarning
+                df_team = df.copy()
+                df_team[team_col] = df_team[team_col].astype(str).str.strip().str.upper()
+                
+                # 1. HEALTHY VS DISEASED SPLIT (Stacked Bar Chart)
+                if status_col:
+                    def categorize_health(val):
+                        v = str(val).strip().lower()
+                        if v in ['normal', 'none', '', 'nan', 'healthy', 'false']: return 'Healthy'
+                        return 'Referred/4D Detected'
+                    
+                    df_team['Health_Category'] = df_team[status_col].apply(categorize_health)
+                    health_stats = df_team.groupby([team_col, 'Health_Category']).size().reset_index(name='Child_Count')
+                    
+                    fig_team_health = px.bar(
+                        health_stats, 
+                        x=team_col, 
+                        y='Child_Count', 
+                        color='Health_Category',
+                        title="Team-Wise Health Breakdown",
+                        color_discrete_map={'Healthy': '#10b981', 'Referred/4D Detected': '#ef4444'},
+                        barmode='stack',
+                        text='Child_Count'
+                    )
+                    fig_team_health.update_layout(xaxis_title="Mobile Health Team", yaxis_title="Number of Children")
+                    st.plotly_chart(fig_team_health, use_container_width=True)
+
+                # 2. DAILY AVERAGE & TOTALS TABLE
+                if date_col:
+                    st.markdown("**📊 Team Productivity Matrix**")
+                    df_team[date_col] = df_team[date_col].astype(str).str.strip()
+                    
+                    # Calculate stats
+                    team_productivity = df_team.groupby(team_col).agg(
+                        Total_Screened=(team_col, 'count'),
+                        Unique_Working_Days=(date_col, 'nunique')
+                    ).reset_index()
+                    
+                    # Prevent division by zero
+                    team_productivity['Unique_Working_Days'] = team_productivity['Unique_Working_Days'].replace(0, 1)
+                    team_productivity['Average_Daily_Screening'] = (team_productivity['Total_Screened'] / team_productivity['Unique_Working_Days']).round(1)
+                    
+                    # Format for UI
+                    team_productivity = team_productivity.rename(columns={
+                        team_col: "Mobile Health Team",
+                        "Total_Screened": "Total Screened (All Time)",
+                        "Unique_Working_Days": "Active Field Days",
+                        "Average_Daily_Screening": "Avg. Children/Day"
+                    })
+                    
+                    # Sort by highest average
+                    team_productivity = team_productivity.sort_values(by="Avg. Children/Day", ascending=False).reset_index(drop=True)
+                    st.dataframe(team_productivity, use_container_width=True, hide_index=True)
+            else:
+                st.warning("⚠️ Could not detect a 'Team' or 'Institute' column in your data to generate team-wise analytics.")
+
+            st.divider()
+
+            # --- ORIGINAL LOCATION & DISEASE CHARTS ---
             chart_col1, chart_col2 = st.columns(2)
 
             with chart_col1:
@@ -433,15 +508,26 @@ if menu == "1. Daily Tour Plan":
                     loc_counts.columns = ['Location', 'Count']
                     fig_loc = px.pie(loc_counts, values='Count', names='Location', hole=0.4, 
                                      color_discrete_sequence=['#10b981', '#3b82f6'])
+                    fig_loc.update_traces(textposition='inside', textinfo='percent+label')
                     st.plotly_chart(fig_loc, use_container_width=True)
 
             with chart_col2:
                 st.markdown("**Referrals by Condition (4D)**")
-                if not referred_df.empty and 'Disease' in referred_df.columns:
-                    disease_counts = referred_df['Disease'].value_counts().reset_index()
+                # Dynamic sniff for Disease column
+                disease_col = next((c for c in referred_df.columns if 'DISEASE' in str(c).upper() or '4D' in str(c).upper()), None)
+                
+                if not referred_df.empty and disease_col:
+                    # Clean up diseases for chart
+                    referred_df['Clean_Disease'] = referred_df[disease_col].astype(str).str.strip()
+                    disease_counts = referred_df[referred_df['Clean_Disease'] != 'nan']['Clean_Disease'].value_counts().reset_index()
                     disease_counts.columns = ['Condition', 'Cases']
+                    
+                    # Only show top 10 conditions so chart doesn't look messy
+                    disease_counts = disease_counts.head(10)
+                    
                     fig_dis = px.bar(disease_counts, x='Cases', y='Condition', orientation='h',
                                      color='Cases', color_continuous_scale='Reds')
+                    fig_dis.update_layout(yaxis={'categoryorder':'total ascending'})
                     st.plotly_chart(fig_dis, use_container_width=True)
                 else:
                     st.info("No referral conditions to map yet. Great job MHT-1!")
