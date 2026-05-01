@@ -602,6 +602,27 @@ elif menu == "2. Child Screening":
         else:
             return "Normal"
 
+    # ==========================================
+    # 🩸 NEW: AUTOMATIC ANEMIA BIFURCATION ENGINE
+    # ==========================================
+    def get_anemia_status(hb_val, location_category):
+        if not hb_val or hb_val <= 0:
+            return "Normal"
+            
+        # Anganwadi Guidelines (Infant/Toddler)
+        if location_category == "👶 Anganwadi":
+            if hb_val < 7.0: return "🔴 Severe Anemia"
+            elif hb_val < 10.0: return "🟡 Moderate Anemia"
+            elif hb_val < 11.0: return "🔵 Mild Anemia"
+            else: return "Normal"
+            
+        # School Guidelines (Child/Adolescent)
+        else:
+            if hb_val < 8.0: return "🔴 Severe Anemia"
+            elif hb_val < 11.0: return "🟡 Moderate Anemia"
+            elif hb_val < 11.5: return "🔵 Mild Anemia"
+            else: return "Normal"
+
     # 🚀 180-Day Bi-Annual Background Checker
     @st.cache_data(ttl=60)
     def get_recent_screenings(sheet_name, inst_name):
@@ -788,12 +809,21 @@ elif menu == "2. Child Screening":
                             
                             final_status = get_whz_status(new_gender, height_val, weight_val) if category == "👶 Anganwadi" else "Normal"
                             
+                            # 🩸 ANEMIA OVERRIDE LOGIC
+                            anemia_diagnosis = get_anemia_status(hb_val, category)
+                            final_disease = str(disease).strip()
+                            if anemia_diagnosis != "Normal":
+                                if final_disease.lower() in ["none", "", "nan"]:
+                                    final_disease = anemia_diagnosis
+                                elif anemia_diagnosis not in final_disease:
+                                    final_disease = f"{final_disease} + {anemia_diagnosis}"
+                            
                             ws = spreadsheet.worksheet(target_sheet)
                             
                             if category == "👶 Anganwadi":
-                                new_row = [screening_date, selected_inst, new_name, str(new_dob), new_gender, height_val, weight_val, muac_val, hb_val, disease, new_contact, new_techo, final_status, "Pending", new_class]
+                                new_row = [screening_date, selected_inst, new_name, str(new_dob), new_gender, height_val, weight_val, muac_val, hb_val, final_disease, new_contact, new_techo, final_status, "Pending", new_class]
                             else:
-                                new_row = [screening_date, selected_inst, new_name, str(new_dob), new_gender, height_val, weight_val, hb_val, disease, new_contact, "Online Entry", "Pending", new_class]
+                                new_row = [screening_date, selected_inst, new_name, str(new_dob), new_gender, height_val, weight_val, hb_val, final_disease, new_contact, "Online Entry", "Pending", new_class]
                                 
                             ws.append_row(new_row)
                             
@@ -912,19 +942,37 @@ elif menu == "2. Child Screening":
                                     if category == "👶 Anganwadi":
                                         merged_m = safe_float(m_str) if has_new_m else safe_float(existing_row[7])
                                         merged_hb = safe_float(hb_str) if has_new_hb else safe_float(existing_row[8])
-                                        merged_disease = disease if has_new_disease else (existing_row[9] if str(existing_row[9]).strip() != "" else "None")
+                                        raw_disease = disease if has_new_disease else (existing_row[9] if str(existing_row[9]).strip() != "" else "None")
                                         merged_contact = updated_contact if str(updated_contact).strip() != "" else existing_row[10]
                                         merged_techo = techo_id if str(techo_id).strip() not in ["", "N/A"] else existing_row[11]
                                         
                                         merged_status = get_whz_status(gender, merged_h, merged_w)
                                         merged_class = updated_class if str(updated_class).strip() != "" else existing_row[14]
                                         
+                                        # 🩸 ANEMIA OVERRIDE LOGIC
+                                        anemia_diagnosis = get_anemia_status(merged_hb, category)
+                                        merged_disease = str(raw_disease).strip()
+                                        if anemia_diagnosis != "Normal":
+                                            if merged_disease.lower() in ["none", "", "nan"]:
+                                                merged_disease = anemia_diagnosis
+                                            elif anemia_diagnosis not in merged_disease:
+                                                merged_disease = f"{merged_disease} + {anemia_diagnosis}"
+                                        
                                         new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), merged_h, merged_w, merged_m, merged_hb, merged_disease, merged_contact, merged_techo, merged_status, "Pending", merged_class]
                                     else:
                                         merged_hb = safe_float(hb_str) if has_new_hb else safe_float(existing_row[7])
-                                        merged_disease = disease if has_new_disease else (existing_row[8] if str(existing_row[8]).strip() != "" else "None")
+                                        raw_disease = disease if has_new_disease else (existing_row[8] if str(existing_row[8]).strip() != "" else "None")
                                         merged_contact = updated_contact if str(updated_contact).strip() != "" else existing_row[9]
                                         merged_class = updated_class if str(updated_class).strip() != "" else existing_row[12]
+                                        
+                                        # 🩸 ANEMIA OVERRIDE LOGIC
+                                        anemia_diagnosis = get_anemia_status(merged_hb, category)
+                                        merged_disease = str(raw_disease).strip()
+                                        if anemia_diagnosis != "Normal":
+                                            if merged_disease.lower() in ["none", "", "nan"]:
+                                                merged_disease = anemia_diagnosis
+                                            elif anemia_diagnosis not in merged_disease:
+                                                merged_disease = f"{merged_disease} + {anemia_diagnosis}"
                                         
                                         new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), merged_h, merged_w, merged_hb, merged_disease, merged_contact, "Online Entry", "Pending", merged_class]
                                         
@@ -954,10 +1002,19 @@ elif menu == "2. Child Screening":
                                     hb_val = safe_float(hb_str)
                                     final_status = get_whz_status(gender, height_val, weight_val) if category == "👶 Anganwadi" else "Normal"
                                     
+                                    # 🩸 ANEMIA OVERRIDE LOGIC
+                                    anemia_diagnosis = get_anemia_status(hb_val, category)
+                                    final_disease = str(disease).strip()
+                                    if anemia_diagnosis != "Normal":
+                                        if final_disease.lower() in ["none", "", "nan"]:
+                                            final_disease = anemia_diagnosis
+                                        elif anemia_diagnosis not in final_disease:
+                                            final_disease = f"{final_disease} + {anemia_diagnosis}"
+                                    
                                     if category == "👶 Anganwadi":
-                                        new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, muac_val, hb_val, disease, updated_contact, techo_id, final_status, "Pending", updated_class]
+                                        new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, muac_val, hb_val, final_disease, updated_contact, techo_id, final_status, "Pending", updated_class]
                                     else:
-                                        new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, hb_val, disease, updated_contact, "Online Entry", "Pending", updated_class]
+                                        new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), height_val, weight_val, hb_val, final_disease, updated_contact, "Online Entry", "Pending", updated_class]
 
                                     ws.append_row(new_row) 
                                     st.toast(f"✅ New screening saved for {final_child_name}!", icon="🎉")
