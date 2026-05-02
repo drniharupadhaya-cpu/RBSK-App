@@ -3017,11 +3017,22 @@ elif menu == "12. Automated State Report":
             df_combined[date_col] = df_combined[date_col].astype(str).str.strip()
             df_combined[dob_col] = df_combined[dob_col].astype(str).str.strip()
             
-            df_combined[date_col] = df_combined[date_col].str.replace('/', '-').str.replace('.', '-', regex=False)
-            df_combined[dob_col] = df_combined[dob_col].str.replace('/', '-').str.replace('.', '-', regex=False)
-            
-            df_combined[date_col] = pd.to_datetime(df_combined[date_col], dayfirst=True, format='mixed', errors='coerce')
-            df_combined[dob_col] = pd.to_datetime(df_combined[dob_col], dayfirst=True, format='mixed', errors='coerce')
+            # 🚀 THE BULLETPROOF DATE PARSER
+            # 1. Parse strict YYYY-MM-DD first (Module 2's native format)
+            parsed_date_strict = pd.to_datetime(df_combined[date_col], format='%Y-%m-%d', errors='coerce')
+            parsed_dob_strict = pd.to_datetime(df_combined[dob_col], format='%Y-%m-%d', errors='coerce')
+
+            # 2. Clean strings for fallback parsing
+            cleaned_date_str = df_combined[date_col].astype(str).str.replace('/', '-').str.replace('.', '-', regex=False)
+            cleaned_dob_str = df_combined[dob_col].astype(str).str.replace('/', '-').str.replace('.', '-', regex=False)
+
+            # 3. Parse fallback mixed/dayfirst for old/manual data
+            parsed_date_fallback = pd.to_datetime(cleaned_date_str, dayfirst=True, format='mixed', errors='coerce')
+            parsed_dob_fallback = pd.to_datetime(cleaned_dob_str, dayfirst=True, format='mixed', errors='coerce')
+
+            # 4. Combine: Use strict first, fill NaNs with fallback
+            df_combined[date_col] = parsed_date_strict.fillna(parsed_date_fallback)
+            df_combined[dob_col] = parsed_dob_strict.fillna(parsed_dob_fallback)
             
             df_combined = df_combined.dropna(subset=[date_col])
 
