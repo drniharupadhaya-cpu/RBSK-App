@@ -3708,7 +3708,9 @@ elif menu == "15. Clinical & IFA Tracker":
     aw_list = get_inst_list(master_aw_data, ["INSTITUTE", "AWC", "CENTER"])
     school_list = get_inst_list(master_sch_data, ["INSTITUTION", "SCHOOL"])
 
-    # --- 1. CMTC FOLLOW-UP ---
+    # ==========================================
+    # --- 1. CMTC FOLLOW-UP (SMART ENGINE) ---
+    # ==========================================
     with tab_cmtc:
         st.subheader("📝 SAM/MAM Treatment Progress")
         
@@ -3716,70 +3718,120 @@ elif menu == "15. Clinical & IFA Tracker":
             raw_data = get_cmtc_data() 
             
             if raw_data:
+                # 1. LOAD & PURGE GHOST COLUMNS (Removes 'Unnamed: 9' etc.)
                 ref_data = pd.DataFrame(raw_data)
+                ref_data = ref_data.loc[:, ~ref_data.columns.str.contains('^Unnamed')]
                 ref_data = ref_data.fillna("").astype(str).replace(['nan', 'NaN', 'NaT', 'None'], "")
 
+                # 2. ENSURE REQUIRED COLUMNS EXIST
                 for col in ["Current Status", "Admission Date", "Follow-up Remarks"]:
                     if col not in ref_data.columns:
                         ref_data[col] = "Pending" if col == "Current Status" else ""
 
+                # Standardize Admission Date format
                 ref_data['Admission Date'] = pd.to_datetime(
                     ref_data['Admission Date'].astype(str).str.replace('/', '-'), 
                     dayfirst=True, errors='coerce'
-                ).dt.date
+                ).dt.date.fillna("")
 
-                status_list = ["Pending", "Counselled", "Admitted", "Discharged", "Recovered", "LAMA/Refused"]
-                read_only_cols = ["Child Name", "Institute", "DOB", "Gender", "Referral Date"]
+                # 3. 🚨 THE ACTION BOARD (METRICS)
+                st.markdown("##### 🚨 Live Action Board")
+                m1, m2, m3 = st.columns(3)
+                pending_count = len(ref_data[ref_data['Current Status'] == 'Pending'])
+                counselled_count = len(ref_data[ref_data['Current Status'] == 'Counselled'])
+                resolved_count = len(ref_data[ref_data['Current Status'].isin(['Recovered', 'Discharged'])])
                 
-                updated_ref_df = st.data_editor(
-                    ref_data,
-                    column_config={
-                        "Current Status": st.column_config.SelectboxColumn("Status", options=status_list, width="medium"),
-                        "Admission Date": st.column_config.DateColumn("Adm Date"),
-                        "Follow-up Remarks": st.column_config.TextColumn("Remarks", width="large"),
-                    },
-                    disabled=read_only_cols,
-                    hide_index=True,
-                    use_container_width=True
-                )
+                m1.error(f"🔴 Pending Action: **{pending_count}**")
+                m2.warning(f"🟡 Counselled/Waiting: **{counselled_count}**")
+                m3.success(f"🟢 Resolved/Recovered: **{resolved_count}**")
+                st.divider()
 
-                if st.button("💾 Save Follow-up Progress", type="primary"):
-                    with st.spinner("Scrubbing data and updating Google Sheets..."):
-                        final_df = updated_ref_df.copy()
-                        
-                        if "Admission Date" in final_df.columns:
-                            final_df['Admission Date'] = final_df['Admission Date'].apply(
-                                lambda x: x.strftime('%d-%m-%Y') if pd.notnull(x) and hasattr(x, 'strftime') else x
-                            )
+                # 4. 🎯 THE DUAL-FILTER SYSTEM
+                f1, f2 = st.columns(2)
+                with f1:
+                    aw_col = next((c for c in ref_data.columns if any(k in str(c).upper() for k in ["INSTITUTE", "AW", "CENTER", "ANGANWADI"])), "Anganwadi")
+                    unique_aws = sorted([str(x).strip() for x in ref_data[aw_col].unique() if str(x).strip() != ""])
+                    selected_aw = st.selectbox("🏢 Filter by Anganwadi:", ["All Anganwadis"] + unique_aws)
+                
+                with f2:
+                    unique_statuses = sorted([str(x).strip() for x in ref_data['Current Status'].unique() if str(x).strip() != ""])
+                    # Default to actionable items so doctors aren't overwhelmed by recovered cases
+                    default_stat = [s for s in unique_statuses if s in ["Pending", "Counselled", "Admitted"]]
+                    selected_status = st.multiselect("🚦 Filter by Status:", unique_statuses, default=default_stat)
 
-                        # THE ULTIMATE NAN KILLER
-                        raw_data_list = final_df.values.tolist()
-                        cleaned_list = []
-                        for row in raw_data_list:
-                            clean_row = []
-                            for cell in row:
-                                if pd.isna(cell): clean_row.append("")
-                                else:
-                                    str_cell = str(cell).strip()
-                                    clean_row.append("" if str_cell.lower() in ['nan', 'nat', 'none', '<na>'] else str_cell)
-                            cleaned_list.append(clean_row)
+                # APPLY FILTERS
+                display_df = ref_data.copy()
+                if selected_aw != "All Anganwadis":
+                    display_df = display_df[display_df[aw_col].astype(str).str.strip() == selected_aw]
+                if selected_status:
+                    display_df = display_df[display_df['Current Status'].isin(selected_status)]
 
-                        data_to_save = [final_df.columns.values.tolist()] + cleaned_list
-                        
-                        spreadsheet.worksheet("cmtc_referral").update(data_to_save)
-                        get_cmtc_data.clear() 
-                        
-                        st.toast("Referral status updated successfully!", icon="✅")
-                        import time
-                        time.sleep(1)
-                        st.rerun()
+                # 5. SMART SORT (Force 'Pending' & 'Counselled' to the top of the table)
+                sort_order = {"Pending": 1, "Counselled": 2, "Admitted": 3, "Discharged": 4, "Recovered": 5, "LAMA/Refused": 6}
+                display_df['_sort'] = display_df['Current Status'].map(sort_order).fillna(99)
+                display_df = display_df.sort_values(by='_sort').drop(columns=['_sort'])
+
+                # 6. RENDER THE FOCUSED EDITOR
+                status_list = ["Pending", "Counselled", "Admitted", "Discharged", "Recovered", "LAMA/Refused"]
+                read_only_cols = ["Child Name", "Institute", "Anganwadi", "DOB", "Gender", "Referral Date", "Date", "Height", "Weight", "MUAC", "Status", "Contact"]
+                
+                if display_df.empty:
+                    st.info("No children match your current filters. Great job! 🎉")
+                else:
+                    updated_display_df = st.data_editor(
+                        display_df,
+                        column_config={
+                            "Current Status": st.column_config.SelectboxColumn("Status", options=status_list, width="medium"),
+                            "Admission Date": st.column_config.DateColumn("Adm Date"),
+                            "Follow-up Remarks": st.column_config.TextColumn("Remarks", width="large"),
+                        },
+                        disabled=read_only_cols,
+                        hide_index=True,
+                        use_container_width=True
+                    )
+
+                    # 7. 💾 SAFE MERGE & SAVE LOGIC
+                    if st.button("💾 Save Follow-up Progress", type="primary"):
+                        with st.spinner("Merging your specific updates into the Master Database..."):
+                            
+                            # ✨ THE MAGIC: Merge edited filtered data back into the main DataFrame using exact indices!
+                            ref_data.update(updated_display_df)
+                            
+                            if "Admission Date" in ref_data.columns:
+                                ref_data['Admission Date'] = ref_data['Admission Date'].apply(
+                                    lambda x: x.strftime('%d-%m-%Y') if pd.notnull(x) and hasattr(x, 'strftime') else x
+                                )
+
+                            # THE ULTIMATE NAN KILLER
+                            raw_data_list = ref_data.values.tolist()
+                            cleaned_list = []
+                            for row in raw_data_list:
+                                clean_row = []
+                                for cell in row:
+                                    if pd.isna(cell): clean_row.append("")
+                                    else:
+                                        str_cell = str(cell).strip()
+                                        clean_row.append("" if str_cell.lower() in ['nan', 'nat', 'none', '<na>'] else str_cell)
+                                cleaned_list.append(clean_row)
+
+                            data_to_save = [ref_data.columns.values.tolist()] + cleaned_list
+                            
+                            spreadsheet.worksheet("cmtc_referral").update(data_to_save)
+                            get_cmtc_data.clear() 
+                            
+                            st.toast("Referral status safely merged and updated!", icon="✅")
+                            import time
+                            time.sleep(0.5)
+                            st.rerun()
             else:
                 st.success("🎉 No SAM/MAM referrals currently pending!")
         
         except Exception as e:
             st.error(f"CMTC Logic Error: {e}")
 
+    # ==========================================
     # --- 2. IFA STOCK TRACKER ---
+    # ==========================================
     with tab_ifa:
         st.subheader("💊 IFA Inventory Control")
         ifa_level = st.radio("Select Level:", ["👶 Anganwadi (Syrups)", "🏫 School (Tablets)"], horizontal=True)
