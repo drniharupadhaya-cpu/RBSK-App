@@ -3721,20 +3721,26 @@ elif menu == "15. Clinical & IFA Tracker":
                 # 1. LOAD & PURGE GHOST COLUMNS (Removes 'Unnamed: 9' etc.)
                 ref_data = pd.DataFrame(raw_data)
                 ref_data = ref_data.loc[:, ~ref_data.columns.str.contains('^Unnamed')]
-                ref_data = ref_data.fillna("").astype(str).replace(['nan', 'NaN', 'NaT', 'None'], "")
+                
+                # 2. STRING CLEANUP (Excluding Admission Date)
+                for col in ref_data.columns:
+                    if col != 'Admission Date':
+                        ref_data[col] = ref_data[col].fillna("").astype(str).replace(['nan', 'NaN', 'NaT', 'None', '<NA>'], "")
 
-                # 2. ENSURE REQUIRED COLUMNS EXIST
-                for col in ["Current Status", "Admission Date", "Follow-up Remarks"]:
-                    if col not in ref_data.columns:
-                        ref_data[col] = "Pending" if col == "Current Status" else ""
+                # 3. ENSURE REQUIRED COLUMNS EXIST
+                if "Current Status" not in ref_data.columns: ref_data["Current Status"] = "Pending"
+                if "Follow-up Remarks" not in ref_data.columns: ref_data["Follow-up Remarks"] = ""
+                if "Admission Date" not in ref_data.columns: ref_data["Admission Date"] = None
 
-                # Standardize Admission Date format
+                # 4. 🚨 THE DATE COLUMN FIX 🚨
+                # Strictly parse to date objects, and replace NaT with None (Streamlit's required empty state for DateColumns)
                 ref_data['Admission Date'] = pd.to_datetime(
                     ref_data['Admission Date'].astype(str).str.replace('/', '-'), 
                     dayfirst=True, errors='coerce'
-                ).dt.date.fillna("")
+                ).dt.date
+                ref_data['Admission Date'] = ref_data['Admission Date'].replace({pd.NaT: None})
 
-                # 3. 🚨 THE ACTION BOARD (METRICS)
+                # 5. 🚨 THE ACTION BOARD (METRICS)
                 st.markdown("##### 🚨 Live Action Board")
                 m1, m2, m3 = st.columns(3)
                 pending_count = len(ref_data[ref_data['Current Status'] == 'Pending'])
@@ -3746,7 +3752,7 @@ elif menu == "15. Clinical & IFA Tracker":
                 m3.success(f"🟢 Resolved/Recovered: **{resolved_count}**")
                 st.divider()
 
-                # 4. 🎯 THE DUAL-FILTER SYSTEM
+                # 6. 🎯 THE DUAL-FILTER SYSTEM
                 f1, f2 = st.columns(2)
                 with f1:
                     aw_col = next((c for c in ref_data.columns if any(k in str(c).upper() for k in ["INSTITUTE", "AW", "CENTER", "ANGANWADI"])), "Anganwadi")
@@ -3754,24 +3760,27 @@ elif menu == "15. Clinical & IFA Tracker":
                     selected_aw = st.selectbox("🏢 Filter by Anganwadi:", ["All Anganwadis"] + unique_aws)
                 
                 with f2:
-                    unique_statuses = sorted([str(x).strip() for x in ref_data['Current Status'].unique() if str(x).strip() != ""])
-                    # Default to actionable items so doctors aren't overwhelmed by recovered cases
-                    default_stat = [s for s in unique_statuses if s in ["Pending", "Counselled", "Admitted"]]
-                    selected_status = st.multiselect("🚦 Filter by Status:", unique_statuses, default=default_stat)
+                    # 🚀 NEW: Filter by SAM/MAM Status
+                    if "Status" in ref_data.columns:
+                        unique_nut_statuses = sorted([str(x).strip() for x in ref_data['Status'].unique() if str(x).strip() != ""])
+                        default_nut = [s for s in unique_nut_statuses if s in ["SAM", "MAM"]]
+                        selected_status = st.multiselect("🚦 Filter by SAM/MAM Status:", unique_nut_statuses, default=default_nut)
+                    else:
+                        selected_status = []
 
                 # APPLY FILTERS
                 display_df = ref_data.copy()
                 if selected_aw != "All Anganwadis":
                     display_df = display_df[display_df[aw_col].astype(str).str.strip() == selected_aw]
-                if selected_status:
-                    display_df = display_df[display_df['Current Status'].isin(selected_status)]
+                if selected_status and "Status" in display_df.columns:
+                    display_df = display_df[display_df['Status'].isin(selected_status)]
 
-                # 5. SMART SORT (Force 'Pending' & 'Counselled' to the top of the table)
+                # 7. SMART SORT (Force 'Pending' & 'Counselled' to the top of the table)
                 sort_order = {"Pending": 1, "Counselled": 2, "Admitted": 3, "Discharged": 4, "Recovered": 5, "LAMA/Refused": 6}
                 display_df['_sort'] = display_df['Current Status'].map(sort_order).fillna(99)
                 display_df = display_df.sort_values(by='_sort').drop(columns=['_sort'])
 
-                # 6. RENDER THE FOCUSED EDITOR
+                # 8. RENDER THE FOCUSED EDITOR
                 status_list = ["Pending", "Counselled", "Admitted", "Discharged", "Recovered", "LAMA/Refused"]
                 read_only_cols = ["Child Name", "Institute", "Anganwadi", "DOB", "Gender", "Referral Date", "Date", "Height", "Weight", "MUAC", "Status", "Contact"]
                 
@@ -3781,7 +3790,7 @@ elif menu == "15. Clinical & IFA Tracker":
                     updated_display_df = st.data_editor(
                         display_df,
                         column_config={
-                            "Current Status": st.column_config.SelectboxColumn("Status", options=status_list, width="medium"),
+                            "Current Status": st.column_config.SelectboxColumn("Follow-Up Action", options=status_list, width="medium"),
                             "Admission Date": st.column_config.DateColumn("Adm Date"),
                             "Follow-up Remarks": st.column_config.TextColumn("Remarks", width="large"),
                         },
@@ -3790,19 +3799,20 @@ elif menu == "15. Clinical & IFA Tracker":
                         use_container_width=True
                     )
 
-                    # 7. 💾 SAFE MERGE & SAVE LOGIC
+                    # 9. 💾 SAFE MERGE & SAVE LOGIC
                     if st.button("💾 Save Follow-up Progress", type="primary"):
                         with st.spinner("Merging your specific updates into the Master Database..."):
                             
                             # ✨ THE MAGIC: Merge edited filtered data back into the main DataFrame using exact indices!
                             ref_data.update(updated_display_df)
                             
+                            # Safe conversion of Dates back to strings for Google Sheets
                             if "Admission Date" in ref_data.columns:
                                 ref_data['Admission Date'] = ref_data['Admission Date'].apply(
-                                    lambda x: x.strftime('%d-%m-%Y') if pd.notnull(x) and hasattr(x, 'strftime') else x
+                                    lambda x: x.strftime('%d-%m-%Y') if pd.notnull(x) and hasattr(x, 'strftime') else ""
                                 )
 
-                            # THE ULTIMATE NAN KILLER
+                            # THE ULTIMATE NAN KILLER (Final scrub before pushing to cloud)
                             raw_data_list = ref_data.values.tolist()
                             cleaned_list = []
                             for row in raw_data_list:
