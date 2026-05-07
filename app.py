@@ -1828,7 +1828,7 @@ elif menu == "5. HBNC Newborn Visit":
 
     tab_physical, tab_telephonic = st.tabs(["🏠 1. Physical Field Visits", "📞 2. Telephonic Techo Queue"])
     
-    # --- TAB 1: PHYSICAL FIELD VISITS ---
+    # --- TAB 1: PHYSICAL FIELD VISITS (UNTOUCHED) ---
     with tab_physical:
         st.subheader("📝 Log Physical Visit")
         with st.form("hbnc_form", clear_on_submit=True):
@@ -1861,7 +1861,6 @@ elif menu == "5. HBNC Newborn Visit":
                     st.error("🚨 Enter Child and Parent Name.")
                 else:
                     try:
-                        # FIX: Reordered list so gender goes to the end column as per your sheet update
                         spreadsheet.worksheet("hbnc_screenings").append_row([
                             str(visit_date), 
                             child_name, 
@@ -1875,7 +1874,7 @@ elif menu == "5. HBNC Newborn Visit":
                             disease, 
                             observations, 
                             village_name,
-                            gender # Gender moved to the end
+                            gender
                         ])
                         st.toast(f"✅ Recorded Visit for {child_name}.", icon="🎉")
                         get_hbnc_logs.clear() 
@@ -1889,14 +1888,8 @@ elif menu == "5. HBNC Newborn Visit":
         st.subheader("📋 Recent Physical HBNC Records & Analytics")
         try:
             if not df_hbnc_live.empty:
-                
-                # ==========================================
-                # 🚀 NEW: HOSPITAL-WISE DEMOGRAPHICS TABLE
-                # ==========================================
                 if all(col in df_hbnc_live.columns for col in ["Delivery Point", "Gender", "Delivery Type"]):
                     st.markdown("##### 🏥 Hospital-wise Demographics & Delivery Analysis")
-                    
-                    # Group by Delivery Point and calculate metrics
                     hbnc_stats = df_hbnc_live.groupby("Delivery Point").apply(
                         lambda x: pd.Series({
                             "Total Deliveries": len(x),
@@ -1906,39 +1899,26 @@ elif menu == "5. HBNC Newborn Visit":
                             "C-Section (LSCS) 🔴": x["Delivery Type"].astype(str).str.contains("C-Section|LSCS", case=False, na=False).sum()
                         })
                     ).reset_index()
-                    
-                    # Sort to show highest deliveries first
                     hbnc_stats = hbnc_stats.sort_values("Total Deliveries", ascending=False).reset_index(drop=True)
-                    
-                    # Display the analytical table
                     st.dataframe(hbnc_stats, use_container_width=True, hide_index=True)
                     st.divider()
-                # ==========================================
 
-                # --- ADDED FILTERS ---
                 st.markdown("##### 🔍 View Detailed Records")
                 f1, f2, f3 = st.columns(3)
-                
                 if "Delivery Type" in df_hbnc_live.columns:
                     with f1: filter_del_type = st.selectbox("Filter by Delivery Type", ["All"] + list(df_hbnc_live["Delivery Type"].unique()))
                 else: filter_del_type = "All"
-                
                 if "Delivery Point" in df_hbnc_live.columns:
                     with f2: filter_del_point = st.selectbox("Filter by Delivery Point", ["All"] + list(df_hbnc_live["Delivery Point"].unique()))
                 else: filter_del_point = "All"
-                
                 if "Gender" in df_hbnc_live.columns:
                     with f3: filter_gender = st.selectbox("Filter by Gender", ["All"] + list(df_hbnc_live["Gender"].unique()))
                 else: filter_gender = "All"
 
-                # Apply Filters
                 filtered_hbnc = df_hbnc_live.copy()
-                if filter_del_type != "All":
-                    filtered_hbnc = filtered_hbnc[filtered_hbnc["Delivery Type"] == filter_del_type]
-                if filter_del_point != "All":
-                    filtered_hbnc = filtered_hbnc[filtered_hbnc["Delivery Point"] == filter_del_point]
-                if filter_gender != "All":
-                    filtered_hbnc = filtered_hbnc[filtered_hbnc["Gender"] == filter_gender]
+                if filter_del_type != "All": filtered_hbnc = filtered_hbnc[filtered_hbnc["Delivery Type"] == filter_del_type]
+                if filter_del_point != "All": filtered_hbnc = filtered_hbnc[filtered_hbnc["Delivery Point"] == filter_del_point]
+                if filter_gender != "All": filtered_hbnc = filtered_hbnc[filtered_hbnc["Gender"] == filter_gender]
 
                 st.dataframe(filtered_hbnc, use_container_width=True)
                 csv_hbnc = filtered_hbnc.to_csv(index=False).encode('utf-8-sig')
@@ -1948,48 +1928,49 @@ elif menu == "5. HBNC Newborn Visit":
         except Exception as e:
             st.warning(f"⚠️ Could not load physical data table. Reason: {e}")
 
-    # --- TAB 2: TELEPHONIC TECHO QUEUE (UNTOUCHED) ---
+    # --- TAB 2: TELEPHONIC TECHO QUEUE (UPDATED) ---
     with tab_telephonic:
         st.subheader("📞 Techo Consultation Queue")
-        st.info("Directly managing call list from 'hbnc_telephonic' master sheet. No upload needed.")
         
         try:
-            # 1. Fetch data from the persistent sheet
             tele_sheet = spreadsheet.worksheet("hbnc_telephonic")
             raw_tele_data = tele_sheet.get_all_records()
             
             if raw_tele_data:
                 df_tele = pd.DataFrame(raw_tele_data)
-                
-                # 🚀 THE SANITIZER (Prevents JSON NaN Errors)
-                df_tele = df_tele.fillna("")
-                df_tele = df_tele.replace(['nan', 'NaN', 'NaT', 'None'], "")
+                df_tele = df_tele.fillna("").replace(['nan', 'NaN', 'NaT', 'None'], "")
 
-               # ✂️ THE UPDATED TECHO LOCATION TRIMMER (Extracts Last Two Levels)
                 if "Location" in df_tele.columns:
-                    # Splits at '>', takes the last two elements ([-2:]), strips spaces, and joins them back
                     df_tele["Location"] = df_tele["Location"].astype(str).apply(
                         lambda x: " > ".join([p.strip() for p in x.split('>')[-2:]]) if '>' in x else x.strip()
                     )
 
-                # 2. Ensure all required columns exist (Safety Check)
-                required_cols = ["Child Name", "Techo ID", "Contact Number", "Location", "Gender", "Date of Birth", "Call Status", "Staff Remarks"]
-
-                # Ensure Status and Remarks columns exist
                 if "Call Status" not in df_tele.columns: df_tele["Call Status"] = "Pending"
                 if "Staff Remarks" not in df_tele.columns: df_tele["Staff Remarks"] = ""
 
-                st.write(f"Showing **{len(df_tele)}** children in the Techo Call Queue.")
+                # --- 🛠️ NEW: FILTER COMPLETED & SERIAL NUMBER 🛠️ ---
+                col_filt1, col_filt2 = st.columns([6, 4])
+                with col_filt1:
+                    hide_completed = st.checkbox("🙈 Hide Completed Visits", value=False)
                 
-                # 2. THE DATA EDITOR (Module 15 Style)
+                # Filter logic
+                if hide_completed:
+                    df_to_edit = df_tele[df_tele["Call Status"] != "Completed ✅"].copy()
+                else:
+                    df_to_edit = df_tele.copy()
+
+                # Add Serial Number (starting from 1)
+                df_to_edit.insert(0, "S.No", range(1, len(df_to_edit) + 1))
+                
+                st.write(f"Showing **{len(df_to_edit)}** children in the queue.")
+                
                 status_options = ["Pending", "Completed ✅", "Not Reachable 📵", "Call Later ⏳", "Switched Off", "Wrong Number"]
-                
-                # Lock original Techo columns, only allow editing Status and Remarks
-                read_only_cols = [col for col in df_tele.columns if col not in ["Call Status", "Staff Remarks"]]
+                read_only_cols = [col for col in df_to_edit.columns if col not in ["Call Status", "Staff Remarks"]]
 
                 updated_tele_df = st.data_editor(
-                    df_tele,
+                    df_to_edit,
                     column_config={
+                        "S.No": st.column_config.NumberColumn("No.", width="small"),
                         "Call Status": st.column_config.SelectboxColumn("Call Outcome", options=status_options, width="medium"),
                         "Staff Remarks": st.column_config.TextColumn("Call Notes/Remarks", width="large"),
                     },
@@ -1998,19 +1979,21 @@ elif menu == "5. HBNC Newborn Visit":
                     use_container_width=True
                 )
 
-                # 3. THE BULK SAVE BUTTON
                 if st.button("💾 Save All Call Outcomes", type="primary"):
                     with st.spinner("Cleaning and syncing call logs..."):
-                        final_tele_df = updated_tele_df.copy()
+                        # We merge changes back to the original df_tele to ensure we don't lose the "Hidden" rows
+                        # st.data_editor returns the rows with the "S.No" column, we must drop it before updating
+                        final_updates = updated_tele_df.drop(columns=["S.No"])
+                        
+                        # Use the Techo ID or an Index-based update to maintain data integrity
+                        # If S.No is just a row count, we update df_tele using the index of the edited rows
+                        df_tele.update(final_updates)
                         
                         import datetime
-                        final_tele_df['Last Update'] = datetime.date.today().strftime("%Y-%m-%d")
+                        df_tele['Last Update'] = datetime.date.today().strftime("%Y-%m-%d")
+                        df_tele = df_tele.astype(str).replace(['nan', 'NaN', 'None'], "")
                         
-                        # Vacuum cleanup for JSON compatibility
-                        final_tele_df = final_tele_df.astype(str).replace(['nan', 'NaN', 'None'], "")
-                        
-                        # Overwrite sheet
-                        data_to_push = [final_tele_df.columns.values.tolist()] + final_tele_df.values.tolist()
+                        data_to_push = [df_tele.columns.values.tolist()] + df_tele.values.tolist()
                         tele_sheet.update(data_to_push)
                         
                         st.toast("Call log successfully updated!", icon="📞")
@@ -2018,11 +2001,10 @@ elif menu == "5. HBNC Newborn Visit":
                         time.sleep(1)
                         st.rerun()
             else:
-                st.warning("⚠️ The 'hbnc_telephonic' sheet is empty. Please paste the Techo names into the Google Sheet first.")
+                st.warning("⚠️ The 'hbnc_telephonic' sheet is empty.")
                 
         except Exception as e:
             st.error(f"❌ Telephonic Module Error: {e}")
-            st.info("💡 Ensure you have a tab named 'hbnc_telephonic' in your Master Google Sheet.")
 # ==========================================
 # MODULE 6: SUCCESS STORY BUILDER
 # ==========================================
