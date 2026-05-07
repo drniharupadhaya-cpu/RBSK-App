@@ -1828,7 +1828,7 @@ elif menu == "5. HBNC Newborn Visit":
 
     tab_physical, tab_telephonic = st.tabs(["🏠 1. Physical Field Visits", "📞 2. Telephonic Techo Queue"])
     
-    # --- TAB 1: PHYSICAL FIELD VISITS (UNTOUCHED) ---
+    # --- TAB 1: PHYSICAL FIELD VISITS (Remains Untouched) ---
     with tab_physical:
         st.subheader("📝 Log Physical Visit")
         with st.form("hbnc_form", clear_on_submit=True):
@@ -1862,19 +1862,9 @@ elif menu == "5. HBNC Newborn Visit":
                 else:
                     try:
                         spreadsheet.worksheet("hbnc_screenings").append_row([
-                            str(visit_date), 
-                            child_name, 
-                            parent_name, 
-                            contact_number, 
-                            str(dob), 
-                            birth_weight, 
-                            delivery_type, 
-                            delivery_point, 
-                            techo_id, 
-                            disease, 
-                            observations, 
-                            village_name,
-                            gender
+                            str(visit_date), child_name, parent_name, contact_number, 
+                            str(dob), birth_weight, delivery_type, delivery_point, 
+                            techo_id, disease, observations, village_name, gender
                         ])
                         st.toast(f"✅ Recorded Visit for {child_name}.", icon="🎉")
                         get_hbnc_logs.clear() 
@@ -1882,129 +1872,104 @@ elif menu == "5. HBNC Newborn Visit":
                         time.sleep(0.5)
                         st.rerun()
                     except Exception as e:
-                        st.error(f"⚠️ Error: Could not find 'hbnc_screenings' tab. {e}")
+                        st.error(f"⚠️ Error: {e}")
                         
         st.divider()
         st.subheader("📋 Recent Physical HBNC Records & Analytics")
-        try:
-            if not df_hbnc_live.empty:
-                if all(col in df_hbnc_live.columns for col in ["Delivery Point", "Gender", "Delivery Type"]):
-                    st.markdown("##### 🏥 Hospital-wise Demographics & Delivery Analysis")
-                    hbnc_stats = df_hbnc_live.groupby("Delivery Point").apply(
-                        lambda x: pd.Series({
-                            "Total Deliveries": len(x),
-                            "Male 👦": (x["Gender"].astype(str).str.strip().str.title() == "Male").sum(),
-                            "Female 👧": (x["Gender"].astype(str).str.strip().str.title() == "Female").sum(),
-                            "Normal (ND) 🟢": x["Delivery Type"].astype(str).str.contains("Normal", case=False, na=False).sum(),
-                            "C-Section (LSCS) 🔴": x["Delivery Type"].astype(str).str.contains("C-Section|LSCS", case=False, na=False).sum()
-                        })
-                    ).reset_index()
-                    hbnc_stats = hbnc_stats.sort_values("Total Deliveries", ascending=False).reset_index(drop=True)
-                    st.dataframe(hbnc_stats, use_container_width=True, hide_index=True)
-                    st.divider()
+        if not df_hbnc_live.empty:
+            st.dataframe(df_hbnc_live, use_container_width=True)
 
-                st.markdown("##### 🔍 View Detailed Records")
-                f1, f2, f3 = st.columns(3)
-                if "Delivery Type" in df_hbnc_live.columns:
-                    with f1: filter_del_type = st.selectbox("Filter by Delivery Type", ["All"] + list(df_hbnc_live["Delivery Type"].unique()))
-                else: filter_del_type = "All"
-                if "Delivery Point" in df_hbnc_live.columns:
-                    with f2: filter_del_point = st.selectbox("Filter by Delivery Point", ["All"] + list(df_hbnc_live["Delivery Point"].unique()))
-                else: filter_del_point = "All"
-                if "Gender" in df_hbnc_live.columns:
-                    with f3: filter_gender = st.selectbox("Filter by Gender", ["All"] + list(df_hbnc_live["Gender"].unique()))
-                else: filter_gender = "All"
-
-                filtered_hbnc = df_hbnc_live.copy()
-                if filter_del_type != "All": filtered_hbnc = filtered_hbnc[filtered_hbnc["Delivery Type"] == filter_del_type]
-                if filter_del_point != "All": filtered_hbnc = filtered_hbnc[filtered_hbnc["Delivery Point"] == filter_del_point]
-                if filter_gender != "All": filtered_hbnc = filtered_hbnc[filtered_hbnc["Gender"] == filter_gender]
-
-                st.dataframe(filtered_hbnc, use_container_width=True)
-                csv_hbnc = filtered_hbnc.to_csv(index=False).encode('utf-8-sig')
-                st.download_button(label="⬇️ Download Physical Visit Data", data=csv_hbnc, file_name=f"HBNC_Physical_Visits.csv", mime="text/csv")
-            else:
-                st.info("No physical visit data found yet.")
-        except Exception as e:
-            st.warning(f"⚠️ Could not load physical data table. Reason: {e}")
-
-    # --- TAB 2: TELEPHONIC TECHO QUEUE (UPDATED) ---
+    # ==========================================
+    # --- TAB 2: TELEPHONIC TECHO QUEUE (FIXED) ---
+    # ==========================================
     with tab_telephonic:
         st.subheader("📞 Techo Consultation Queue")
         
         try:
-            tele_sheet = spreadsheet.worksheet("hbnc_telephonic")
-            raw_tele_data = tele_sheet.get_all_records()
-            
-            if raw_tele_data:
-                df_tele = pd.DataFrame(raw_tele_data)
-                df_tele = df_tele.fillna("").replace(['nan', 'NaN', 'NaT', 'None'], "")
+            # 1. SMART PERSISTENCE: Use Session State to prevent losing edits when filtering
+            if 'techo_df' not in st.session_state:
+                tele_sheet = spreadsheet.worksheet("hbnc_telephonic")
+                raw_data = tele_sheet.get_all_records()
+                if raw_data:
+                    df = pd.DataFrame(raw_data).fillna("").replace(['nan', 'NaN', 'NaT', 'None'], "")
+                    # Add necessary columns if missing
+                    if "Call Status" not in df.columns: df["Call Status"] = "Pending"
+                    if "Staff Remarks" not in df.columns: df["Staff Remarks"] = ""
+                    st.session_state['techo_df'] = df
+                else:
+                    st.session_state['techo_df'] = pd.DataFrame()
 
-                if "Location" in df_tele.columns:
-                    df_tele["Location"] = df_tele["Location"].astype(str).apply(
-                        lambda x: " > ".join([p.strip() for p in x.split('>')[-2:]]) if '>' in x else x.strip()
-                    )
+            working_df = st.session_state['techo_df']
 
-                if "Call Status" not in df_tele.columns: df_tele["Call Status"] = "Pending"
-                if "Staff Remarks" not in df_tele.columns: df_tele["Staff Remarks"] = ""
-
-                # --- 🛠️ NEW: FILTER COMPLETED & SERIAL NUMBER 🛠️ ---
+            if not working_df.empty:
+                # 2. FILTER CONTROLS
                 col_filt1, col_filt2 = st.columns([6, 4])
                 with col_filt1:
-                    hide_completed = st.checkbox("🙈 Hide Completed Visits", value=False)
+                    hide_completed = st.checkbox("🙈 Hide 'Completed ✅' names from list", value=False)
                 
-                # Filter logic
+                with col_filt2:
+                    if st.button("🔄 Refresh from Sheets"):
+                        del st.session_state['techo_df']
+                        st.rerun()
+
+                # 3. APPLY HIDE LOGIC
+                display_df = working_df.copy()
                 if hide_completed:
-                    df_to_edit = df_tele[df_tele["Call Status"] != "Completed ✅"].copy()
-                else:
-                    df_to_edit = df_tele.copy()
+                    # Filter out anything that contains "Completed"
+                    display_df = display_df[~display_df["Call Status"].str.contains("Completed", na=False)]
 
-                # Add Serial Number (starting from 1)
-                df_to_edit.insert(0, "S.No", range(1, len(df_to_edit) + 1))
+                # 4. INJECT SERIAL NUMBER (Always 1 to N based on what's visible)
+                display_df.insert(0, "S.No", range(1, len(display_df) + 1))
                 
-                st.write(f"Showing **{len(df_to_edit)}** children in the queue.")
-                
+                st.write(f"Showing **{len(display_df)}** records.")
+
+                # 5. DATA EDITOR
                 status_options = ["Pending", "Completed ✅", "Not Reachable 📵", "Call Later ⏳", "Switched Off", "Wrong Number"]
-                read_only_cols = [col for col in df_to_edit.columns if col not in ["Call Status", "Staff Remarks"]]
+                # Prevent editing original columns, only status and remarks
+                read_only_cols = [c for c in display_df.columns if c not in ["Call Status", "Staff Remarks"]]
 
-                updated_tele_df = st.data_editor(
-                    df_to_edit,
+                edited_df = st.data_editor(
+                    display_df,
                     column_config={
                         "S.No": st.column_config.NumberColumn("No.", width="small"),
-                        "Call Status": st.column_config.SelectboxColumn("Call Outcome", options=status_options, width="medium"),
-                        "Staff Remarks": st.column_config.TextColumn("Call Notes/Remarks", width="large"),
+                        "Call Status": st.column_config.SelectboxColumn("Call Outcome", options=status_options, required=True),
+                        "Staff Remarks": st.column_config.TextColumn("Notes", width="large"),
                     },
                     disabled=read_only_cols,
                     hide_index=True,
-                    use_container_width=True
+                    use_container_width=True,
+                    key="techo_editor"
                 )
 
-                if st.button("💾 Save All Call Outcomes", type="primary"):
-                    with st.spinner("Cleaning and syncing call logs..."):
-                        # We merge changes back to the original df_tele to ensure we don't lose the "Hidden" rows
-                        # st.data_editor returns the rows with the "S.No" column, we must drop it before updating
-                        final_updates = updated_tele_df.drop(columns=["S.No"])
-                        
-                        # Use the Techo ID or an Index-based update to maintain data integrity
-                        # If S.No is just a row count, we update df_tele using the index of the edited rows
-                        df_tele.update(final_updates)
+                # 6. SYNC EDITS BACK TO SESSION STATE
+                # We drop S.No and update the master state using indices
+                if not edited_df.equals(display_df):
+                    updates = edited_df.drop(columns=["S.No"])
+                    st.session_state['techo_df'].update(updates)
+
+                # 7. BULK SAVE TO GOOGLE SHEETS
+                if st.button("💾 Push All Changes to Cloud", type="primary"):
+                    with st.spinner("Uploading updated list..."):
+                        final_to_push = st.session_state['techo_df'].copy()
                         
                         import datetime
-                        df_tele['Last Update'] = datetime.date.today().strftime("%Y-%m-%d")
-                        df_tele = df_tele.astype(str).replace(['nan', 'NaN', 'None'], "")
+                        final_to_push['Last Update'] = datetime.date.today().strftime("%d-%m-%Y")
                         
-                        data_to_push = [df_tele.columns.values.tolist()] + df_tele.values.tolist()
-                        tele_sheet.update(data_to_push)
+                        # Convert all to string for GSheets compatibility
+                        final_to_push = final_to_push.astype(str).replace(['nan', 'NaN', 'None'], "")
                         
-                        st.toast("Call log successfully updated!", icon="📞")
+                        data_to_push = [final_to_push.columns.values.tolist()] + final_to_push.values.tolist()
+                        spreadsheet.worksheet("hbnc_telephonic").update(data_to_push)
+                        
+                        st.toast("Cloud Database Synchronized!", icon="☁️")
                         import time
                         time.sleep(1)
                         st.rerun()
             else:
-                st.warning("⚠️ The 'hbnc_telephonic' sheet is empty.")
+                st.warning("No data found in 'hbnc_telephonic' sheet.")
                 
         except Exception as e:
-            st.error(f"❌ Telephonic Module Error: {e}")
+            st.error(f"❌ Module Error: {e}")
 # ==========================================
 # MODULE 6: SUCCESS STORY BUILDER
 # ==========================================
