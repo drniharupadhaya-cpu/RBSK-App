@@ -1828,7 +1828,9 @@ elif menu == "5. HBNC Newborn Visit":
 
     tab_physical, tab_telephonic = st.tabs(["🏠 1. Physical Field Visits", "📞 2. Telephonic Techo Queue"])
     
+    # ==========================================
     # --- TAB 1: PHYSICAL FIELD VISITS ---
+    # ==========================================
     with tab_physical:
         st.subheader("📝 Log Physical Visit")
         with st.form("hbnc_form", clear_on_submit=True):
@@ -1876,64 +1878,63 @@ elif menu == "5. HBNC Newborn Visit":
                         
         st.divider()
         st.subheader("📋 Recent Physical HBNC Records & Analytics")
-        try:
-            if not df_hbnc_live.empty:
-                
-                # ==========================================
-                # 🚀 HOSPITAL-WISE DEMOGRAPHICS TABLE
-                # ==========================================
-                if all(col in df_hbnc_live.columns for col in ["Delivery Point", "Gender", "Delivery Type"]):
-                    st.markdown("##### 🏥 Hospital-wise Demographics & Delivery Analysis")
-                    hbnc_stats = df_hbnc_live.groupby("Delivery Point").apply(
-                        lambda x: pd.Series({
-                            "Total Deliveries": len(x),
-                            "Male 👦": (x["Gender"].astype(str).str.strip().str.title() == "Male").sum(),
-                            "Female 👧": (x["Gender"].astype(str).str.strip().str.title() == "Female").sum(),
-                            "Normal (ND) 🟢": x["Delivery Type"].astype(str).str.contains("Normal", case=False, na=False).sum(),
-                            "C-Section (LSCS) 🔴": x["Delivery Type"].astype(str).str.contains("C-Section|LSCS", case=False, na=False).sum()
-                        })
-                    ).reset_index()
-                    hbnc_stats = hbnc_stats.sort_values("Total Deliveries", ascending=False).reset_index(drop=True)
-                    st.dataframe(hbnc_stats, use_container_width=True, hide_index=True)
-                    st.divider()
+        
+        # 🚀 THE FIX: Pinned Filters that NEVER disappear
+        st.markdown("##### 🔍 View Detailed Records")
+        f1, f2, f3 = st.columns(3)
+        
+        # Data Cleanup to prevent crashes
+        if not df_hbnc_live.empty:
+            df_hbnc_live.columns = df_hbnc_live.columns.astype(str).str.strip()
+            df_hbnc_live = df_hbnc_live.fillna("")
 
-                # ==========================================
-                # 🔍 FILTERS (Restored exactly to your code)
-                # ==========================================
-                st.markdown("##### 🔍 View Detailed Records")
-                f1, f2, f3 = st.columns(3)
-                
-                if "Delivery Type" in df_hbnc_live.columns:
-                    # Added pd.notna to prevent Streamlit from crashing on empty cells
-                    opts1 = [x for x in df_hbnc_live["Delivery Type"].unique() if pd.notna(x) and str(x).strip() != ""]
-                    with f1: filter_del_type = st.selectbox("Filter by Delivery Type", ["All"] + opts1)
-                else: filter_del_type = "All"
-                
-                if "Delivery Point" in df_hbnc_live.columns:
-                    opts2 = [x for x in df_hbnc_live["Delivery Point"].unique() if pd.notna(x) and str(x).strip() != ""]
-                    with f2: filter_del_point = st.selectbox("Filter by Delivery Point", ["All"] + opts2)
-                else: filter_del_point = "All"
-                
-                if "Gender" in df_hbnc_live.columns:
-                    opts3 = [x for x in df_hbnc_live["Gender"].unique() if pd.notna(x) and str(x).strip() != ""]
-                    with f3: filter_gender = st.selectbox("Filter by Gender", ["All"] + opts3)
-                else: filter_gender = "All"
+        # Safe unique value extractor
+        def get_filter_options(col_name):
+            if not df_hbnc_live.empty and col_name in df_hbnc_live.columns:
+                vals = [str(x).strip() for x in df_hbnc_live[col_name].unique() if str(x).strip() != ""]
+                return ["All"] + sorted(vals)
+            return ["All"]
 
-                filtered_hbnc = df_hbnc_live.copy()
-                if filter_del_type != "All": filtered_hbnc = filtered_hbnc[filtered_hbnc["Delivery Type"] == filter_del_type]
-                if filter_del_point != "All": filtered_hbnc = filtered_hbnc[filtered_hbnc["Delivery Point"] == filter_del_point]
-                if filter_gender != "All": filtered_hbnc = filtered_hbnc[filtered_hbnc["Gender"] == filter_gender]
+        with f1: filter_del_type = st.selectbox("Delivery Type", get_filter_options("Delivery Type"))
+        with f2: filter_del_point = st.selectbox("Delivery Point", get_filter_options("Delivery Point"))
+        with f3: filter_gender = st.selectbox("Gender", get_filter_options("Gender"))
 
-                st.dataframe(filtered_hbnc, use_container_width=True)
-                csv_hbnc = filtered_hbnc.to_csv(index=False).encode('utf-8-sig')
-                st.download_button(label="⬇️ Download Physical Visit Data", data=csv_hbnc, file_name=f"HBNC_Physical_Visits.csv", mime="text/csv")
-            else:
-                st.info("No physical visit data found yet.")
-        except Exception as e:
-            st.warning(f"⚠️ Could not load physical data table. Reason: {e}")
+        # Analytics and Dataframe Rendering
+        if not df_hbnc_live.empty:
+            # 🏥 Demographics Table
+            if all(c in df_hbnc_live.columns for c in ["Delivery Point", "Gender", "Delivery Type"]):
+                st.markdown("##### 🏥 Hospital-wise Demographics & Delivery Analysis")
+                hbnc_stats = df_hbnc_live.groupby("Delivery Point").apply(
+                    lambda x: pd.Series({
+                        "Total Deliveries": len(x),
+                        "Male 👦": (x["Gender"].astype(str).str.strip().str.title() == "Male").sum(),
+                        "Female 👧": (x["Gender"].astype(str).str.strip().str.title() == "Female").sum(),
+                        "Normal (ND) 🟢": x["Delivery Type"].astype(str).str.contains("Normal", case=False, na=False).sum(),
+                        "C-Section (LSCS) 🔴": x["Delivery Type"].astype(str).str.contains("C-Section|LSCS", case=False, na=False).sum()
+                    })
+                ).reset_index()
+                hbnc_stats = hbnc_stats.sort_values("Total Deliveries", ascending=False).reset_index(drop=True)
+                st.dataframe(hbnc_stats, use_container_width=True, hide_index=True)
+                st.divider()
+
+            # 🎯 Apply Filters to the Dataframe
+            filtered_hbnc = df_hbnc_live.copy()
+            if filter_del_type != "All":
+                filtered_hbnc = filtered_hbnc[filtered_hbnc["Delivery Type"].astype(str).str.strip() == filter_del_type]
+            if filter_del_point != "All":
+                filtered_hbnc = filtered_hbnc[filtered_hbnc["Delivery Point"].astype(str).str.strip() == filter_del_point]
+            if filter_gender != "All":
+                filtered_hbnc = filtered_hbnc[filtered_hbnc["Gender"].astype(str).str.strip() == filter_gender]
+
+            st.dataframe(filtered_hbnc, use_container_width=True)
+            
+            csv_hbnc = filtered_hbnc.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(label="⬇️ Download Physical Visit Data", data=csv_hbnc, file_name="HBNC_Physical_Visits.csv", mime="text/csv")
+        else:
+            st.info("No physical visit data found yet. Start by logging a visit above!")
 
     # ==========================================
-    # --- TAB 2: TELEPHONIC TECHO QUEUE (FIXED) ---
+    # --- TAB 2: TELEPHONIC TECHO QUEUE (FIXED & UNTOUCHED) ---
     # ==========================================
     with tab_telephonic:
         st.subheader("📞 Techo Consultation Queue")
