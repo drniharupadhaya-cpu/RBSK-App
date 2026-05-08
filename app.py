@@ -1828,7 +1828,7 @@ elif menu == "5. HBNC Newborn Visit":
 
     tab_physical, tab_telephonic = st.tabs(["🏠 1. Physical Field Visits", "📞 2. Telephonic Techo Queue"])
     
-    # --- TAB 1: PHYSICAL FIELD VISITS (Remains Untouched) ---
+    # --- TAB 1: PHYSICAL FIELD VISITS ---
     with tab_physical:
         st.subheader("📝 Log Physical Visit")
         with st.form("hbnc_form", clear_on_submit=True):
@@ -1877,7 +1877,57 @@ elif menu == "5. HBNC Newborn Visit":
         st.divider()
         st.subheader("📋 Recent Physical HBNC Records & Analytics")
         if not df_hbnc_live.empty:
-            st.dataframe(df_hbnc_live, use_container_width=True)
+            # ==========================================
+            # 🚀 RESTORED: HOSPITAL-WISE DEMOGRAPHICS TABLE
+            # ==========================================
+            if all(col in df_hbnc_live.columns for col in ["Delivery Point", "Gender", "Delivery Type"]):
+                st.markdown("##### 🏥 Hospital-wise Demographics & Delivery Analysis")
+                hbnc_stats = df_hbnc_live.groupby("Delivery Point").apply(
+                    lambda x: pd.Series({
+                        "Total Deliveries": len(x),
+                        "Male 👦": (x["Gender"].astype(str).str.strip().str.title() == "Male").sum(),
+                        "Female 👧": (x["Gender"].astype(str).str.strip().str.title() == "Female").sum(),
+                        "Normal (ND) 🟢": x["Delivery Type"].astype(str).str.contains("Normal", case=False, na=False).sum(),
+                        "C-Section (LSCS) 🔴": x["Delivery Type"].astype(str).str.contains("C-Section|LSCS", case=False, na=False).sum()
+                    })
+                ).reset_index()
+                hbnc_stats = hbnc_stats.sort_values("Total Deliveries", ascending=False).reset_index(drop=True)
+                st.dataframe(hbnc_stats, use_container_width=True, hide_index=True)
+                st.divider()
+
+            # ==========================================
+            # 🚀 RESTORED: DETAILED FILTERS
+            # ==========================================
+            st.markdown("##### 🔍 View Detailed Records")
+            f1, f2, f3 = st.columns(3)
+            
+            if "Delivery Type" in df_hbnc_live.columns:
+                with f1: filter_del_type = st.selectbox("Filter by Delivery Type", ["All"] + list(df_hbnc_live["Delivery Type"].dropna().unique()))
+            else: filter_del_type = "All"
+            
+            if "Delivery Point" in df_hbnc_live.columns:
+                with f2: filter_del_point = st.selectbox("Filter by Delivery Point", ["All"] + list(df_hbnc_live["Delivery Point"].dropna().unique()))
+            else: filter_del_point = "All"
+            
+            if "Gender" in df_hbnc_live.columns:
+                with f3: filter_gender = st.selectbox("Filter by Gender", ["All"] + list(df_hbnc_live["Gender"].dropna().unique()))
+            else: filter_gender = "All"
+
+            # Apply Filters
+            filtered_hbnc = df_hbnc_live.copy()
+            if filter_del_type != "All":
+                filtered_hbnc = filtered_hbnc[filtered_hbnc["Delivery Type"] == filter_del_type]
+            if filter_del_point != "All":
+                filtered_hbnc = filtered_hbnc[filtered_hbnc["Delivery Point"] == filter_del_point]
+            if filter_gender != "All":
+                filtered_hbnc = filtered_hbnc[filtered_hbnc["Gender"] == filter_gender]
+
+            st.dataframe(filtered_hbnc, use_container_width=True)
+            
+            csv_hbnc = filtered_hbnc.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(label="⬇️ Download Physical Visit Data", data=csv_hbnc, file_name="HBNC_Physical_Visits.csv", mime="text/csv")
+        else:
+            st.info("No physical visit data found yet.")
 
     # ==========================================
     # --- TAB 2: TELEPHONIC TECHO QUEUE (FIXED) ---
