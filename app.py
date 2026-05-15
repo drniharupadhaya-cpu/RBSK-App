@@ -1879,57 +1879,90 @@ elif menu == "5. HBNC Newborn Visit":
         st.divider()
         st.subheader("📋 Recent Physical HBNC Records & Analytics")
         
-        # 🚀 THE FIX: Pinned Filters that NEVER disappear
-        st.markdown("##### 🔍 View Detailed Records")
-        f1, f2, f3 = st.columns(3)
-        
         # Data Cleanup to prevent crashes
         if not df_hbnc_live.empty:
             df_hbnc_live.columns = df_hbnc_live.columns.astype(str).str.strip()
             df_hbnc_live = df_hbnc_live.fillna("")
 
-        # Safe unique value extractor
-        def get_filter_options(col_name):
-            if not df_hbnc_live.empty and col_name in df_hbnc_live.columns:
-                vals = [str(x).strip() for x in df_hbnc_live[col_name].unique() if str(x).strip() != ""]
-                return ["All"] + sorted(vals)
-            return ["All"]
-
-        with f1: filter_del_type = st.selectbox("Delivery Type", get_filter_options("Delivery Type"))
-        with f2: filter_del_point = st.selectbox("Delivery Point", get_filter_options("Delivery Point"))
-        with f3: filter_gender = st.selectbox("Gender", get_filter_options("Gender"))
-
-        # Analytics and Dataframe Rendering
-        if not df_hbnc_live.empty:
-            # 🏥 Demographics Table
-            if all(c in df_hbnc_live.columns for c in ["Delivery Point", "Gender", "Delivery Type"]):
-                st.markdown("##### 🏥 Hospital-wise Demographics & Delivery Analysis")
-                hbnc_stats = df_hbnc_live.groupby("Delivery Point").apply(
-                    lambda x: pd.Series({
-                        "Total Deliveries": len(x),
-                        "Male 👦": (x["Gender"].astype(str).str.strip().str.title() == "Male").sum(),
-                        "Female 👧": (x["Gender"].astype(str).str.strip().str.title() == "Female").sum(),
-                        "Normal (ND) 🟢": x["Delivery Type"].astype(str).str.contains("Normal", case=False, na=False).sum(),
-                        "C-Section (LSCS) 🔴": x["Delivery Type"].astype(str).str.contains("C-Section|LSCS", case=False, na=False).sum()
-                    })
-                ).reset_index()
-                hbnc_stats = hbnc_stats.sort_values("Total Deliveries", ascending=False).reset_index(drop=True)
-                st.dataframe(hbnc_stats, use_container_width=True, hide_index=True)
-                st.divider()
-
-            # 🎯 Apply Filters to the Dataframe
-            filtered_hbnc = df_hbnc_live.copy()
-            if filter_del_type != "All":
-                filtered_hbnc = filtered_hbnc[filtered_hbnc["Delivery Type"].astype(str).str.strip() == filter_del_type]
-            if filter_del_point != "All":
-                filtered_hbnc = filtered_hbnc[filtered_hbnc["Delivery Point"].astype(str).str.strip() == filter_del_point]
-            if filter_gender != "All":
-                filtered_hbnc = filtered_hbnc[filtered_hbnc["Gender"].astype(str).str.strip() == filter_gender]
-
-            st.dataframe(filtered_hbnc, use_container_width=True)
+            # 🚀 NEW: MASTER TIME PERIOD FILTER (Cascades to all other elements)
+            def get_col(df, keywords):
+                for c in df.columns:
+                    if any(k.lower() in str(c).lower() for k in keywords): return c
+                return None
             
-            csv_hbnc = filtered_hbnc.to_csv(index=False).encode('utf-8-sig')
-            st.download_button(label="⬇️ Download Physical Visit Data", data=csv_hbnc, file_name="HBNC_Physical_Visits.csv", mime="text/csv")
+            date_col = get_col(df_hbnc_live, ["visit date", "date"])
+            working_df = df_hbnc_live.copy()
+            
+            if date_col:
+                # Convert text dates to actual computer dates for math
+                working_df['_parsed_date'] = pd.to_datetime(working_df[date_col], dayfirst=True, errors='coerce').dt.date
+                valid_dates = working_df['_parsed_date'].dropna()
+                
+                if not valid_dates.empty:
+                    min_date = valid_dates.min()
+                    max_date = valid_dates.max()
+                    
+                    st.markdown("##### 🗓️ Filter by Time Period")
+                    date_range = st.date_input("Select Visit Date Range (Start & End)", value=(min_date, max_date), min_value=min_date, max_value=max_date)
+                    
+                    # Apply Date Filter if two dates are selected
+                    if len(date_range) == 2:
+                        start_date, end_date = date_range
+                        working_df = working_df[(working_df['_parsed_date'] >= start_date) & (working_df['_parsed_date'] <= end_date)]
+                        
+                # Cleanup temp column
+                if '_parsed_date' in working_df.columns:
+                    working_df = working_df.drop(columns=['_parsed_date'])
+
+            st.divider()
+
+            # Safe unique value extractor (Now uses Date-Filtered working_df!)
+            def get_filter_options(col_name):
+                if not working_df.empty and col_name in working_df.columns:
+                    vals = [str(x).strip() for x in working_df[col_name].unique() if str(x).strip() != ""]
+                    return ["All"] + sorted(vals)
+                return ["All"]
+
+            # 🚀 THE FIX: Pinned Filters that NEVER disappear
+            st.markdown("##### 🔍 View Detailed Records")
+            f1, f2, f3 = st.columns(3)
+            with f1: filter_del_type = st.selectbox("Delivery Type", get_filter_options("Delivery Type"))
+            with f2: filter_del_point = st.selectbox("Delivery Point", get_filter_options("Delivery Point"))
+            with f3: filter_gender = st.selectbox("Gender", get_filter_options("Gender"))
+
+            # Analytics and Dataframe Rendering
+            if not working_df.empty:
+                # 🏥 Demographics Table
+                if all(c in working_df.columns for c in ["Delivery Point", "Gender", "Delivery Type"]):
+                    st.markdown("##### 🏥 Hospital-wise Demographics & Delivery Analysis")
+                    hbnc_stats = working_df.groupby("Delivery Point").apply(
+                        lambda x: pd.Series({
+                            "Total Deliveries": len(x),
+                            "Male 👦": (x["Gender"].astype(str).str.strip().str.title() == "Male").sum(),
+                            "Female 👧": (x["Gender"].astype(str).str.strip().str.title() == "Female").sum(),
+                            "Normal (ND) 🟢": x["Delivery Type"].astype(str).str.contains("Normal", case=False, na=False).sum(),
+                            "C-Section (LSCS) 🔴": x["Delivery Type"].astype(str).str.contains("C-Section|LSCS", case=False, na=False).sum()
+                        })
+                    ).reset_index()
+                    hbnc_stats = hbnc_stats.sort_values("Total Deliveries", ascending=False).reset_index(drop=True)
+                    st.dataframe(hbnc_stats, use_container_width=True, hide_index=True)
+                    st.divider()
+
+                # 🎯 Apply Dropdown Filters to the Dataframe
+                filtered_hbnc = working_df.copy()
+                if filter_del_type != "All":
+                    filtered_hbnc = filtered_hbnc[filtered_hbnc["Delivery Type"].astype(str).str.strip() == filter_del_type]
+                if filter_del_point != "All":
+                    filtered_hbnc = filtered_hbnc[filtered_hbnc["Delivery Point"].astype(str).str.strip() == filter_del_point]
+                if filter_gender != "All":
+                    filtered_hbnc = filtered_hbnc[filtered_hbnc["Gender"].astype(str).str.strip() == filter_gender]
+
+                st.dataframe(filtered_hbnc, use_container_width=True)
+                
+                csv_hbnc = filtered_hbnc.to_csv(index=False).encode('utf-8-sig')
+                st.download_button(label="⬇️ Download Physical Visit Data", data=csv_hbnc, file_name="HBNC_Physical_Visits.csv", mime="text/csv")
+            else:
+                st.info("No records found for the selected dates.")
         else:
             st.info("No physical visit data found yet. Start by logging a visit above!")
 
