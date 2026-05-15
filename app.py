@@ -1949,6 +1949,13 @@ elif menu == "5. HBNC Newborn Visit":
                     # Add necessary columns if missing
                     if "Call Status" not in df.columns: df["Call Status"] = "Pending"
                     if "Staff Remarks" not in df.columns: df["Staff Remarks"] = ""
+                    
+                    # ✂️ LOCATION TRIMMER: Extracts only the last two levels of the location
+                    if "Location" in df.columns:
+                        df["Location"] = df["Location"].astype(str).apply(
+                            lambda x: " > ".join([p.strip() for p in x.split('>')[-2:]]) if '>' in x else x.strip()
+                        )
+                        
                     st.session_state['techo_df'] = df
                 else:
                     st.session_state['techo_df'] = pd.DataFrame()
