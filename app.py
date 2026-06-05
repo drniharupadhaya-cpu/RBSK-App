@@ -65,13 +65,21 @@ def render_header(title, subtitle, icon, bg_color):
     """, unsafe_allow_html=True)
 
 def check_password():
-    if "password_correct" not in st.session_state:
+    # 🚀 THE FIX: Now checks for Roles (Admin vs CMTC)
+    if "role" not in st.session_state:
         st.markdown("<br><br>", unsafe_allow_html=True)
         render_header("RBSK Secure Access", "Please enter credentials to continue", "🔒", "#1e293b")
         
         pwd = st.text_input("Enter Password", type="password")
         if st.button("Login"):
+            # Check for Main Admin Password
             if pwd == st.secrets["password"]:
+                st.session_state["role"] = "Admin"
+                st.session_state["password_correct"] = True
+                st.rerun()
+            # Check for CMTC Assistant Password
+            elif "cmtc_password" in st.secrets and pwd == st.secrets["cmtc_password"]:
+                st.session_state["role"] = "CMTC"
                 st.session_state["password_correct"] = True
                 st.rerun()
             else:
@@ -81,6 +89,9 @@ def check_password():
 
 if not check_password():
     st.stop()
+
+# 🛡️ Get the current user's role
+current_role = st.session_state.get("role", "Admin")
 
 # ==========================================
 # GLOBAL PDF ENGINE: OFFICIAL RBSK FORMAT
@@ -257,7 +268,8 @@ except Exception as e:
 # ==========================================
 # 🌍 DISTRICT COMMAND: TEAM UNIFICATION ENGINE
 # ==========================================
-st.sidebar.header("🌍 District Command")
+if current_role == "Admin":
+    st.sidebar.header("🌍 District Command")
 
 team_options = ["TEAM-1240315", "TEAM-1240309", "District Admin (All Teams)"]
 selected_team = st.sidebar.selectbox("🏥 Select Active Team:", team_options)
@@ -331,6 +343,15 @@ menu = st.sidebar.radio("Go to:",
         "15. Clinical & IFA Tracker",
         "16. CMTC Inpatient Tracker"
     ])
+elif current_role == "CMTC":
+    st.sidebar.markdown("### 🏥 CMTC Ward Portal")
+    st.sidebar.write("Inpatient Management")
+    st.sidebar.divider()
+    
+    # CMTC STAFF ONLY GETS ONE OPTION
+    menu_options = [
+        "16. CMTC Inpatient Tracker"
+    ]        
 
 st.sidebar.markdown("---")
 if st.sidebar.button("🔓 Logout"):
