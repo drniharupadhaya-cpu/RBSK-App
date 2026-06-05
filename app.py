@@ -343,6 +343,7 @@ menu = st.sidebar.radio("Go to:",
         "15. Clinical & IFA Tracker",
         "16. CMTC Inpatient Tracker"
     ])
+# 🚀 IF CMTC STAFF LOGS IN, THEY ONLY SEE THIS:
 elif current_role == "CMTC":
     st.sidebar.markdown("### 🏥 CMTC Ward Portal")
     st.sidebar.write("Inpatient Management")
@@ -351,7 +352,10 @@ elif current_role == "CMTC":
     # CMTC STAFF ONLY GETS ONE OPTION
     menu_options = [
         "16. CMTC Inpatient Tracker"
-    ]        
+    ]
+
+# RENDER THE MENU BASED ON ROLE
+menu = st.sidebar.radio("Go to:", menu_options)
 
 st.sidebar.markdown("---")
 if st.sidebar.button("🔓 Logout"):
