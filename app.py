@@ -266,66 +266,65 @@ except Exception as e:
         st.stop()
 
 # ==========================================
-# 🌍 DISTRICT COMMAND: TEAM UNIFICATION ENGINE
+# 🌍 DISTRICT COMMAND & SIDEBAR NAVIGATION
 # ==========================================
+
+# 🚀 ONLY SHOW FULL COMMAND CENTER IF ADMIN
 if current_role == "Admin":
     st.sidebar.header("🌍 District Command")
 
-team_options = ["TEAM-1240315", "TEAM-1240309", "District Admin (All Teams)"]
-selected_team = st.sidebar.selectbox("🏥 Select Active Team:", team_options)
-st.sidebar.divider()
+    team_options = ["TEAM-1240315", "TEAM-1240309", "District Admin (All Teams)"]
+    selected_team = st.sidebar.selectbox("🏥 Select Active Team:", team_options)
+    st.sidebar.divider()
 
-if selected_team != "District Admin (All Teams)":
-    try:
-        team_col_aw = [c for c in df_aw.columns if 'team' in str(c).strip().lower()][0]
-        team_col_stu = [c for c in df_students.columns if 'team' in str(c).strip().lower()][0]
-        team_col_sch = [c for c in df_schools.columns if 'team' in str(c).strip().lower()][0]
+    if selected_team != "District Admin (All Teams)":
+        try:
+            team_col_aw = [c for c in df_aw.columns if 'team' in str(c).strip().lower()][0]
+            team_col_stu = [c for c in df_students.columns if 'team' in str(c).strip().lower()][0]
+            team_col_sch = [c for c in df_schools.columns if 'team' in str(c).strip().lower()][0]
 
-        df_aw = df_aw[df_aw[team_col_aw].astype(str).str.strip().str.upper() == selected_team]
-        df_students = df_students[df_students[team_col_stu].astype(str).str.strip().str.upper() == selected_team]
-        df_schools = df_schools[df_schools[team_col_sch].astype(str).str.strip().str.upper() == selected_team]
-        
-    except IndexError:
-        st.sidebar.error("⚠️ Could not find the 'TEAM' column in one of the master sheets. Please check your Google Sheet headers!")
-
-@st.cache_data(ttl=600)
-def get_today_stats():
-    try:
-        today_str = str(datetime.date.today())
-        aw_df, sch_df, _ = get_daily_logs()
-        
-        def count_today(df):
-            if df.empty: return 0
-            date_col = next((c for c in df.columns if 'date' in str(c).lower()), None)
-            if not date_col: return 0
-            return len(df[df[date_col].astype(str).str.contains(today_str)])
+            df_aw = df_aw[df_aw[team_col_aw].astype(str).str.strip().str.upper() == selected_team]
+            df_students = df_students[df_students[team_col_stu].astype(str).str.strip().str.upper() == selected_team]
+            df_schools = df_schools[df_schools[team_col_sch].astype(str).str.strip().str.upper() == selected_team]
             
-        return count_today(aw_df) + count_today(sch_df)
-    except:
-        return 0
+        except IndexError:
+            st.sidebar.error("⚠️ Could not find the 'TEAM' column in one of the master sheets. Please check your Google Sheet headers!")
 
-# ==========================================
-# SIDEBAR NAVIGATION
-# ==========================================
-st.sidebar.markdown("### 🏛️ RBSK Team Portal")
-st.sidebar.write("Team: Visavadar MHT-1240315")
-st.sidebar.divider()
-st.sidebar.title("🩺 RBSK Menu")
-st.sidebar.write("Dr. Workspace")
+    @st.cache_data(ttl=600)
+    def get_today_stats():
+        try:
+            today_str = str(datetime.date.today())
+            aw_df, sch_df, _ = get_daily_logs()
+            
+            def count_today(df):
+                if df.empty: return 0
+                date_col = next((c for c in df.columns if 'date' in str(c).lower()), None)
+                if not date_col: return 0
+                return len(df[df[date_col].astype(str).str.contains(today_str)])
+                
+            return count_today(aw_df) + count_today(sch_df)
+        except:
+            return 0
 
-today_total = get_today_stats()
+    st.sidebar.markdown("### 🏛️ RBSK Team Portal")
+    st.sidebar.write("Team: Visavadar MHT-1240315")
+    st.sidebar.divider()
+    st.sidebar.title("🩺 RBSK Menu")
+    st.sidebar.write("Dr. Workspace")
 
-st.sidebar.markdown(f"""
-<div style="background-color: #1e293b; padding: 15px; border-radius: 10px; border-left: 5px solid #10b981; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-    <p style="margin: 0; color: #94a3b8; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">📅 Screened Today</p>
-    <h2 style="margin: 5px 0 0 0; color: #ffffff; font-size: 28px;">
-        {today_total} <span style="font-size: 14px; color: #10b981; font-weight: normal;">Children</span>
-    </h2>
-</div>
-""", unsafe_allow_html=True)
+    today_total = get_today_stats()
 
-menu = st.sidebar.radio("Go to:", 
-    [
+    st.sidebar.markdown(f"""
+    <div style="background-color: #1e293b; padding: 15px; border-radius: 10px; border-left: 5px solid #10b981; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        <p style="margin: 0; color: #94a3b8; font-size: 14px; text-transform: uppercase; letter-spacing: 1px;">📅 Screened Today</p>
+        <h2 style="margin: 5px 0 0 0; color: #ffffff; font-size: 28px;">
+            {today_total} <span style="font-size: 14px; color: #10b981; font-weight: normal;">Children</span>
+        </h2>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # ADMIN GETS ALL OPTIONS
+    menu_options = [
         "1. Daily Tour Plan", 
         "2. Child Screening", 
         "3. 4D Defect Registry", 
@@ -342,7 +341,8 @@ menu = st.sidebar.radio("Go to:",
         "14. TECHO Entry Queue",
         "15. Clinical & IFA Tracker",
         "16. CMTC Inpatient Tracker"
-    ])
+    ]
+
 # 🚀 IF CMTC STAFF LOGS IN, THEY ONLY SEE THIS:
 elif current_role == "CMTC":
     st.sidebar.markdown("### 🏥 CMTC Ward Portal")
