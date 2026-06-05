@@ -329,6 +329,7 @@ menu = st.sidebar.radio("Go to:",
         "13. Offline Batch Sync",
         "14. TECHO Entry Queue",
         "15. Clinical & IFA Tracker",
+        "16. CMTC Inpatient Tracker"
     ])
 
 st.sidebar.markdown("---")
@@ -3932,3 +3933,199 @@ elif menu == "15. Clinical & IFA Tracker":
 
         except Exception as e:
             st.error(f"Inventory Error: {e}")
+    # ==========================================
+# MODULE 16: 🏥 CMTC INPATIENT TRACKER (14-Day Ward)
+# ==========================================
+elif menu == "16. CMTC Inpatient Tracker":
+    import datetime
+    
+    render_header("CMTC Inpatient Ward", "Track 14-day SAM/MAM admissions, daily weights, and discharges", "🏥", "#ef4444")
+    
+    # --- CACHE & DATA FETCH ---
+    @st.cache_data(ttl=600)
+    def get_cmtc_ward_data():
+        try: 
+            raw = spreadsheet.worksheet("cmtc_admissions").get_all_records()
+            return raw
+        except Exception as e: 
+            return []
+
+    raw_ward_data = get_cmtc_ward_data()
+    
+    # Safely load into Pandas with updated columns
+    if raw_ward_data:
+        df_ward = pd.DataFrame(raw_ward_data).fillna("")
+        df_ward = df_ward.loc[:, ~df_ward.columns.str.contains('^Unnamed')]
+        df_ward = df_ward.astype(str).replace(['nan', 'NaN', 'NaT', 'None'], "")
+    else:
+        # 🚀 UPDATED FALLBACK COLUMNS
+        df_ward = pd.DataFrame(columns=[
+            "Admission Date", "Child Name", "Gender", "Age (Months)", "Guardian Contact", 
+            "Village", "Referred By", "Diagnosis", "Admission Weight", "Admission height", 
+            "Admission MUAC", "Admission HB", "Medical complications", "Remarks", 
+            "Current Weight", "Discharge Date", "Status"
+        ])
+
+    tab_admit, tab_ward, tab_history = st.tabs(["📝 1. New Admission", "🛏️ 2. Active Ward Tracker", "📊 3. Discharge History"])
+
+    # ==========================================
+    # --- TAB 1: NEW ADMISSION FORM (UPDATED) ---
+    # ==========================================
+    with tab_admit:
+        st.subheader("📝 Register New CMTC Admission")
+        with st.form("cmtc_admission_form", clear_on_submit=True):
+            st.markdown("#### 👤 Patient Demographics")
+            
+            c1, c2, c3, c4 = st.columns(4)
+            with c1: adm_date = st.date_input("Admission Date", value=datetime.date.today())
+            with c2: child_name = st.text_input("Child Name *")
+            with c3: gender = st.selectbox("Gender", ["Male", "Female"])
+            with c4: age_months = st.number_input("Age (in Months)", min_value=0, max_value=60, step=1)
+
+            c5, c6, c7, c8 = st.columns(4)
+            with c5: contact = st.text_input("Guardian Contact", max_chars=10)
+            with c6: village = st.text_input("Village / Address")
+            with c7: referred_by = st.selectbox("Referred By", ["RBSK Mobile Team", "Local PHC/CHC", "Anganwadi Worker (AWW)", "ASHA", "Self/Walk-in", "Other"])
+            with c8: diagnosis = st.selectbox("Diagnosis", ["SAM", "MAM", "Medical complications"])
+
+            st.divider()
+            st.markdown("#### ⚖️ Baseline Clinical Vitals")
+            
+            b1, b2, b3, b4 = st.columns(4)
+            with b1: adm_weight = st.number_input("Admission Weight (kg) *", min_value=0.0, step=0.1, format="%.2f")
+            with b2: adm_height = st.number_input("Admission Height (cm)", min_value=0.0, step=0.1, format="%.1f")
+            with b3: adm_muac = st.number_input("Admission MUAC (cm)", min_value=0.0, step=0.1, format="%.1f")
+            with b4: adm_hb = st.number_input("Admission HB (g/dL)", min_value=0.0, step=0.1, format="%.1f")
+
+            st.divider()
+            st.markdown("#### 🩺 Additional Notes")
+            
+            n1, n2 = st.columns(2)
+            with n1: med_comp = st.text_input("Medical Complications (Detail)", placeholder="e.g. Diarrhea, Fever, None")
+            with n2: remarks = st.text_input("General Remarks")
+
+            if st.form_submit_button("🏥 Admit to CMTC", type="primary"):
+                if child_name == "" or adm_weight <= 0:
+                    st.error("🚨 Child Name and Admission Weight are mandatory!")
+                else:
+                    try:
+                        # Ensures data aligns perfectly with the 17-column Google Sheet structure
+                        new_row = [
+                            str(adm_date), child_name, gender, age_months, contact, 
+                            village, referred_by, diagnosis, adm_weight, adm_height, 
+                            adm_muac, adm_hb, med_comp, remarks, 
+                            adm_weight, "", "Admitted" # Auto-injects Ward Tracker variables
+                        ]
+                        spreadsheet.worksheet("cmtc_admissions").append_row(new_row)
+                        st.toast(f"✅ {child_name} admitted successfully!", icon="🏥")
+                        get_cmtc_ward_data.clear()
+                        import time; time.sleep(0.5); st.rerun()
+                    except Exception as e:
+                        st.error(f"⚠️ Could not save admission: {e}")
+
+    # ==========================================
+    # --- TAB 2: ACTIVE WARD TRACKER ---
+    # ==========================================
+    with tab_ward:
+        st.subheader("🛏️ Active CMTC Ward (14-Day Tracker)")
+        
+        if not df_ward.empty and "Status" in df_ward.columns:
+            # Filter ONLY currently admitted children
+            active_df = df_ward[df_ward["Status"] == "Admitted"].copy()
+            
+            if not active_df.empty:
+                # 🚀 SMART ENGINE: Calculate Days in CMTC Automatically
+                active_df["Admission Date"] = pd.to_datetime(active_df["Admission Date"], errors='coerce')
+                today = pd.to_datetime(datetime.date.today())
+                active_df["Days Admitted"] = (today - active_df["Admission Date"]).dt.days
+                
+                # Format date back to string for UI
+                active_df["Admission Date"] = active_df["Admission Date"].dt.strftime('%Y-%m-%d').fillna("")
+                
+                # We focus the Ward Tracker on weight progress and discharge
+                cols_to_show = ["Days Admitted", "Child Name", "Diagnosis", "Admission Weight", "Current Weight", "Status", "Discharge Date", "Remarks"]
+                
+                # Add missing columns safely if they aren't in the sheet yet
+                for col in cols_to_show:
+                    if col not in active_df.columns:
+                        active_df[col] = ""
+                        
+                display_df = active_df[cols_to_show].copy()
+
+                st.info(f"Currently monitoring **{len(display_df)}** children in the CMTC.")
+
+                # Actionable Data Editor
+                status_options = ["Admitted", "Recovered/Target Weight Achieved", "Defaulter (LAMA)", "Referred to NRC/Higher Center", "Non-Responder"]
+                read_only = ["Days Admitted", "Child Name", "Diagnosis", "Admission Weight"]
+                
+                edited_ward_df = st.data_editor(
+                    display_df,
+                    column_config={
+                        "Days Admitted": st.column_config.NumberColumn("Day #", disabled=True),
+                        "Current Weight": st.column_config.NumberColumn("Today's Weight (kg)", format="%.2f", step=0.1),
+                        "Status": st.column_config.SelectboxColumn("Status", options=status_options, required=True),
+                        "Discharge Date": st.column_config.DateColumn("Discharge Date"),
+                        "Remarks": st.column_config.TextColumn("Notes")
+                    },
+                    disabled=read_only,
+                    hide_index=True,
+                    use_container_width=True,
+                    key="ward_editor"
+                )
+
+                # Merge logic back to Master DF
+                if st.button("💾 Save Ward Updates", type="primary"):
+                    with st.spinner("Syncing ward data..."):
+                        save_df = edited_ward_df.drop(columns=["Days Admitted"])
+                        df_ward.update(save_df)
+                        
+                        df_ward = df_ward.astype(str).replace(['nan', 'NaN', 'None', '<NA>'], "")
+                        
+                        data_to_push = [df_ward.columns.values.tolist()] + df_ward.values.tolist()
+                        spreadsheet.worksheet("cmtc_admissions").update(data_to_push)
+                        
+                        st.toast("Ward records updated safely!", icon="✅")
+                        get_cmtc_ward_data.clear()
+                        import time; time.sleep(0.5); st.rerun()
+            else:
+                st.success("The CMTC ward is currently empty. No active admissions.")
+        else:
+            st.warning("No data found in 'cmtc_admissions' sheet.")
+
+    # ==========================================
+    # --- TAB 3: DISCHARGE & ANALYTICS ---
+    # ==========================================
+    with tab_history:
+        st.subheader("📊 Discharge History & Analytics")
+        
+        if not df_ward.empty and "Status" in df_ward.columns:
+            # Filter ONLY discharged/defaulter children
+            history_df = df_ward[df_ward["Status"] != "Admitted"].copy()
+            
+            if not history_df.empty:
+                total_discharged = len(history_df)
+                recovered = len(history_df[history_df["Status"] == "Recovered/Target Weight Achieved"])
+                recovery_rate = (recovered / total_discharged) * 100 if total_discharged > 0 else 0
+                
+                m1, m2, m3 = st.columns(3)
+                m1.metric("Total Past Admissions", total_discharged)
+                m2.metric("Successfully Recovered", recovered)
+                m3.metric("CMTC Recovery Rate", f"{recovery_rate:.1f}%")
+                
+                st.divider()
+                
+                f1, f2 = st.columns(2)
+                with f1: source_filter = st.selectbox("Filter by Referring Source", ["All"] + sorted(history_df["Referred By"].unique().tolist()))
+                with f2: status_filter = st.selectbox("Filter by Outcome", ["All"] + sorted(history_df["Status"].unique().tolist()))
+                
+                display_history = history_df.copy()
+                if source_filter != "All": display_history = display_history[display_history["Referred By"] == source_filter]
+                if status_filter != "All": display_history = display_history[display_history["Status"] == status_filter]
+                
+                st.dataframe(display_history, use_container_width=True, hide_index=True)
+                
+                csv = display_history.to_csv(index=False).encode('utf-8-sig')
+                st.download_button("⬇️ Download CMTC History", data=csv, file_name="CMTC_Discharge_History.csv", mime="text/csv")
+            else:
+                st.info("No children have been discharged yet.")
+
