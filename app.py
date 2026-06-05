@@ -4077,13 +4077,17 @@ elif menu == "16. CMTC Inpatient Tracker":
 
                 st.info(f"Currently monitoring **{len(display_df)}** children in the CMTC.")
 
-                # Actionable Data Editor
+                # 5. DATA EDITOR: Strict Type Handling
                 status_options = ["Admitted", "Recovered/Target Weight Achieved", "Defaulter (LAMA)", "Referred to NRC/Higher Center", "Non-Responder"]
                 read_only = ["Days Admitted", "Child Name", "Diagnosis", "Admission Weight"]
                 
-                # We use .astype(object) to allow None values for the editor
+                # Convert explicitly to clean types
+                editor_df = display_df.copy()
+                editor_df["Current Weight"] = pd.to_numeric(editor_df["Current Weight"], errors='coerce')
+                
+                # Use a specific configuration mapping
                 edited_ward_df = st.data_editor(
-                    display_df.astype(object), 
+                    editor_df,
                     column_config={
                         "Days Admitted": st.column_config.NumberColumn("Day #", disabled=True),
                         "Admission Weight": st.column_config.NumberColumn("Adm Weight (kg)", format="%.2f", disabled=True),
