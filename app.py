@@ -4056,36 +4056,41 @@ elif menu == "16. CMTC Inpatient Tracker":
         
         if not df_ward.empty and "Status" in df_ward.columns:
             # Filter ONLY currently admitted children
-            active_df = df_ward[df_ward["Status"].str.strip() == "Admitted"].copy()
+            active_df = df_ward[df_ward["Status"].astype(str).str.strip().str.title() == "Admitted"].copy()
             
             if not active_df.empty:
-                # 1. Clean the Dates
+                # 1. Calculate Days
                 active_df["Admission Date"] = pd.to_datetime(active_df["Admission Date"], errors='coerce')
                 today = pd.to_datetime(datetime.date.today())
                 active_df["Days Admitted"] = (today - active_df["Admission Date"]).dt.days
-                active_df["Admission Date"] = active_df["Admission Date"].dt.strftime('%Y-%m-%d').fillna("")
-                
-                # 2. 🚨 STRICT TYPE CASTING TO FIX THE CRASH
-                # Convert numeric columns to float, then replace NaN with None (which data_editor loves)
-                cols_to_num = ["Admission Weight", "Current Weight"]
-                for col in cols_to_num:
-                    active_df[col] = pd.to_numeric(active_df[col], errors='coerce').astype(float)
                 
                 # Setup display table
                 cols_to_show = ["Days Admitted", "Child Name", "Diagnosis", "Admission Weight", "Current Weight", "Status", "Discharge Date", "Remarks"]
+                
+                # Add missing columns safely
+                for col in cols_to_show:
+                    if col not in active_df.columns:
+                        active_df[col] = ""
+                        
                 display_df = active_df[cols_to_show].copy()
 
-                st.info(f"Currently monitoring **{len(display_df)}** children in the CMTC.")
+                # 🚀 2. THE ULTIMATE TYPE FIX (Prevents StreamlitAPIException) 🚀
+                editor_df = display_df.copy()
+                
+                # Fix Numbers: Convert to float, replace empty/NaN with None
+                for col in ["Days Admitted", "Admission Weight", "Current Weight"]:
+                    editor_df[col] = pd.to_numeric(editor_df[col], errors='coerce')
+                    editor_df[col] = editor_df[col].replace({np.nan: None})
+                    
+                # Fix Dates: Convert to Date Objects, replace NaT/empty with None
+                editor_df["Discharge Date"] = pd.to_datetime(editor_df["Discharge Date"], errors='coerce').dt.date
+                editor_df["Discharge Date"] = editor_df["Discharge Date"].replace({pd.NaT: None, np.nan: None})
 
-                # 5. DATA EDITOR: Strict Type Handling
+                st.info(f"Currently monitoring **{len(editor_df)}** children in the CMTC.")
+
                 status_options = ["Admitted", "Recovered/Target Weight Achieved", "Defaulter (LAMA)", "Referred to NRC/Higher Center", "Non-Responder"]
                 read_only = ["Days Admitted", "Child Name", "Diagnosis", "Admission Weight"]
                 
-                # Convert explicitly to clean types
-                editor_df = display_df.copy()
-                editor_df["Current Weight"] = pd.to_numeric(editor_df["Current Weight"], errors='coerce')
-                
-                # Use a specific configuration mapping
                 edited_ward_df = st.data_editor(
                     editor_df,
                     column_config={
@@ -4102,14 +4107,15 @@ elif menu == "16. CMTC Inpatient Tracker":
                     key="ward_editor"
                 )
 
-                # Merge logic back to Master DF
                 if st.button("💾 Save Ward Updates", type="primary"):
                     with st.spinner("Syncing ward data..."):
                         save_df = edited_ward_df.drop(columns=["Days Admitted"])
+                        
+                        # Apply updates safely using matching indices
                         df_ward.update(save_df)
                         
-                        # Final pass: Convert everything to string for GSheets storage
-                        df_ward = df_ward.astype(str).replace(['nan', 'NaN', 'None', '<NA>'], "")
+                        # Clean back to strings for Google Sheets
+                        df_ward = df_ward.astype(str).replace(['nan', 'NaN', 'None', '<NA>', 'NaT'], "")
                         
                         data_to_push = [df_ward.columns.values.tolist()] + df_ward.values.tolist()
                         spreadsheet.worksheet("cmtc_admissions").update(data_to_push)
