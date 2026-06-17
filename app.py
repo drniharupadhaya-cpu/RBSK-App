@@ -3745,48 +3745,66 @@ elif menu == "14. TECHO Entry Queue":
 # ==========================================
 elif menu == "15. Clinical & IFA Tracker":
     import gspread # Needed for specific error catching
+    
     # --- PDF GENERATION ENGINE FOR VISIT REPORTS ---
+    from reportlab.lib.pagesizes import A4
+    from reportlab.pdfgen import canvas
+    from reportlab.lib import colors
+    import textwrap
     def generate_visit_report(data):
-        buffer = BytesIO()
-        c = canvas.Canvas(buffer, pagesize=A4)
-        width, height = A4
-        
-        today = datetime.date.today()
-        date_str = today.strftime("%d-%m-%Y")
-        day_str = today.strftime("%A").upper()
-        
-        c.setFont("Helvetica-Bold", 16)
-        c.drawCentredString(width/2, height-50, "RBSK TEAM VISAVADAR SCREENING VISIT")
-        c.line(50, height-65, width-50, height-65)
-        
-        c.setFont("Helvetica", 12)
-        c.drawString(50, height-100, f"DATE: {date_str}")
-        c.drawString(50, height-120, f"DAY: {day_str}")
-        
-        text = f"TODAY, RBSK TEAM VISAVADAR VISITED AND SCREENED ALL CHILDREN OF – {data['name']} – THIS INSTITUTION."
-        c.drawString(50, height-160, text)
-        c.drawString(50, height-190, "THE HEALTH SCREENING WAS CARRIED OUT ACCORDING TO 4D AND ALL NEEDFUL CHILDREN WERE")
-        c.drawString(50, height-210, "COUNSELLED AND REFERRED TO NEAREST REFERRAL POINT FOR FURTHER TREATMENT.")
-        c.drawString(50, height-240, "ALSO, IEC ABOUT VARIOUS GOVT. HEALTH PROGRAMS LIKE TOBACCO CONTROL, TB, LEPROSY,")
-        c.drawString(50, height-260, "AMB (ANEMIA MUKT BHARAT), NUTRITION, VECTOR BORN DISEASES WERE ALSO GIVEN TO THE STUDENTS.")
-        
-        y = height - 350
-        c.drawString(50, y, "REGARDS,")
-        c.drawString(50, y-20, "RBSK MEDICAL OFFICER")
-        c.setStrokeColor(colors.blue)
-        c.circle(350, y, 40, stroke=1, fill=0)
-        c.setFont("Helvetica-Bold", 8)
-        c.drawCentredString(350, y, "RBSK SEAL")
-        
-        sign_path = "sign.jpg"
-        if os.path.exists(sign_path):
-            c.drawImage(sign_path, 420, y-20, width=80, height=50, preserveAspectRatio=True, mask='auto')
-        c.line(420, y-25, 520, y-25)
-        
-        c.save()
-        buffer.seek(0)
-        return buffer.getvalue()
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    
+    # 1. Automatic Date and Day
+    today = datetime.date.today()
+    date_str = today.strftime("%d-%m-%Y")
+    day_str = today.strftime("%A").upper()
+    
+    # 2. Header
+    c.setFont("Helvetica-Bold", 16)
+    c.drawCentredString(width/2, height-50, "RBSK TEAM VISAVADAR SCREENING VISIT")
+    c.line(50, height-65, width-50, height-65)
+    
+    c.setFont("Helvetica", 12)
+    c.drawString(50, height-100, f"DATE: {date_str}")
+    c.drawString(50, height-120, f"DAY: {day_str}")
+    
+    # 3. Helper to wrap text
+    def draw_wrapped_text(text, x, y, max_width, line_height=20):
+        lines = textwrap.wrap(text, width=max_width)
+        for line in lines:
+            c.drawString(x, y, line)
+            y -= line_height
+        return y # Returns the new Y position
 
+    # Body Content
+    intro = f"TODAY, RBSK TEAM VISAVADAR VISITED AND SCREENED ALL CHILDREN OF – {data['name']} – THIS INSTITUTION."
+    body = "THE HEALTH SCREENING WAS CARRIED OUT ACCORDING TO 4D AND ALL NEEDFUL CHILDREN WERE COUNSELLED AND REFERRED TO NEAREST REFERRAL POINT FOR FURTHER TREATMENT. ALSO, IEC ABOUT VARIOUS GOVT. HEALTH PROGRAMS LIKE TOBACCO CONTROL, TB, LEPROSY, AMB (ANEMIA MUKT BHARAT), NUTRITION, VECTOR BORN DISEASES WERE ALSO GIVEN TO THE STUDENTS."
+    
+    y = draw_wrapped_text(intro, 50, height-160, 95)
+    y = draw_wrapped_text(body, 50, y-20, 95)
+    
+    # 4. Signature and Seal Placement
+    y -= 50
+    c.drawString(400, y+30, "REGARDS,")
+    
+    # Signature Path
+    sign_path = "sign.jpg"
+    if os.path.exists(sign_path):
+        c.drawImage(sign_path, 400, y, width=100, height=50, preserveAspectRatio=True, mask='auto')
+    
+    # Seal Path
+    seal_path = "SEAL.jpeg"
+    if os.path.exists(seal_path):
+        c.drawImage(seal_path, 320, y, width=60, height=60, preserveAspectRatio=True, mask='auto')
+        
+    c.line(400, y-5, 500, y-5)
+    c.drawString(400, y-20, "RBSK MEDICAL OFFICER")
+    
+    c.save()
+    buffer.seek(0)
+    return buffer.getvalue()
     render_header("Clinical Operations", "Referrals, Inventory & Institution Monitoring", "🏥", "#0ea5e9")
     
       
