@@ -3809,7 +3809,7 @@ elif menu == "15. Clinical & IFA Tracker":
         try: return pd.DataFrame(spreadsheet.worksheet("ifa_inventory").get_all_records())
         except: return pd.DataFrame()
 
-    tab_cmtc, tab_ifa = st.tabs(["🔴 CMTC Follow-up (SAM/MAM)", "💊 IFA Stock Tracker (Syrups/Tablets)"])
+    
     # --- INTEGRATED TABS ---
     tab_cmtc, tab_ifa, tab_visits = st.tabs(["🔴 CMTC Follow-up", "💊 IFA Stock Tracker", "🏫 Institution Visit Report"])
 
@@ -4010,26 +4010,40 @@ elif menu == "15. Clinical & IFA Tracker":
 
         except Exception as e:
             st.error(f"Inventory Error: {e}")
-# --- TAB 3: INSTITUTION VISIT PDF ---
+# --- 3. INTEGRATED TAB: INSTITUTION VISIT PDF ---
     with tab_visits:
         st.subheader("🏫 Institution Visit PDF Generator")
-        with st.form("pdf_visit_form"):
+        
+        # 1. Initialize session state to hold report data
+        if "report_ready" not in st.session_state:
+            st.session_state.report_ready = False
+        
+        with st.form("visit_report_form"):
             v_level = st.radio("Level:", ["Anganwadi", "School"], horizontal=True)
+            # 🚀 FIX: Use correct list based on selection
             inst_options = aw_list if v_level == "Anganwadi" else school_list
             v_name = st.selectbox("Select Institution:", ["-- Select --"] + inst_options)
             
-            if st.form_submit_button("📄 Generate Official PDF Report"):
+            submitted = st.form_submit_button("📄 Prepare Official PDF")
+            
+            if submitted:
                 if v_name != "-- Select --":
-                    report_data = {"name": v_name}
-                    pdf_bytes = generate_visit_report(report_data)
-                    st.download_button(
-                        label="⬇️ Download Official Report",
-                        data=pdf_bytes,
-                        file_name=f"Visit_Report_{v_name}.pdf",
-                        mime="application/pdf"
-                    )
+                    st.session_state.report_data = {"name": v_name}
+                    st.session_state.report_ready = True
                 else:
                     st.warning("Please select an institution.")
+                    st.session_state.report_ready = False
+
+        # 2. DOWNLOAD BUTTON IS OUTSIDE THE FORM
+        if st.session_state.report_ready:
+            pdf_bytes = generate_visit_report(st.session_state.report_data)
+            st.download_button(
+                label="⬇️ Download Official Report",
+                data=pdf_bytes,
+                file_name=f"Visit_Report_{st.session_state.report_data['name']}.pdf",
+                mime="application/pdf",
+                type="primary"
+            )
 # ==========================================
 # MODULE 16: 🏥 CMTC INPATIENT TRACKER (14-Day Ward)
 # ==========================================
