@@ -3745,9 +3745,51 @@ elif menu == "14. TECHO Entry Queue":
 # ==========================================
 elif menu == "15. Clinical & IFA Tracker":
     import gspread # Needed for specific error catching
+    # --- PDF GENERATION ENGINE FOR VISIT REPORTS ---
+    def generate_visit_report(data):
+        buffer = BytesIO()
+        c = canvas.Canvas(buffer, pagesize=A4)
+        width, height = A4
+        
+        today = datetime.date.today()
+        date_str = today.strftime("%d-%m-%Y")
+        day_str = today.strftime("%A").upper()
+        
+        c.setFont("Helvetica-Bold", 16)
+        c.drawCentredString(width/2, height-50, "RBSK TEAM VISAVADAR SCREENING VISIT")
+        c.line(50, height-65, width-50, height-65)
+        
+        c.setFont("Helvetica", 12)
+        c.drawString(50, height-100, f"DATE: {date_str}")
+        c.drawString(50, height-120, f"DAY: {day_str}")
+        
+        text = f"TODAY, RBSK TEAM VISAVADAR VISITED AND SCREENED ALL CHILDREN OF – {data['name']} – THIS INSTITUTION."
+        c.drawString(50, height-160, text)
+        c.drawString(50, height-190, "THE HEALTH SCREENING WAS CARRIED OUT ACCORDING TO 4D AND ALL NEEDFUL CHILDREN WERE")
+        c.drawString(50, height-210, "COUNSELLED AND REFERRED TO NEAREST REFERRAL POINT FOR FURTHER TREATMENT.")
+        c.drawString(50, height-240, "ALSO, IEC ABOUT VARIOUS GOVT. HEALTH PROGRAMS LIKE TOBACCO CONTROL, TB, LEPROSY,")
+        c.drawString(50, height-260, "AMB (ANEMIA MUKT BHARAT), NUTRITION, VECTOR BORN DISEASES WERE ALSO GIVEN TO THE STUDENTS.")
+        
+        y = height - 350
+        c.drawString(50, y, "REGARDS,")
+        c.drawString(50, y-20, "RBSK MEDICAL OFFICER")
+        c.setStrokeColor(colors.blue)
+        c.circle(350, y, 40, stroke=1, fill=0)
+        c.setFont("Helvetica-Bold", 8)
+        c.drawCentredString(350, y, "RBSK SEAL")
+        
+        sign_path = "sign.jpg"
+        if os.path.exists(sign_path):
+            c.drawImage(sign_path, 420, y-20, width=80, height=50, preserveAspectRatio=True, mask='auto')
+        c.line(420, y-25, 520, y-25)
+        
+        c.save()
+        buffer.seek(0)
+        return buffer.getvalue()
+
+    render_header("Clinical Operations", "Referrals, Inventory & Institution Monitoring", "🏥", "#0ea5e9")
     
-    render_header("Clinical Operations", "Referrals & Inventory Management", "🏥", "#0ea5e9")
-    
+      
     # --- CACHING FUNCTIONS (Memorizes data for 10 minutes) ---
     @st.cache_data(ttl=600)
     def get_master_lists():
@@ -3768,6 +3810,12 @@ elif menu == "15. Clinical & IFA Tracker":
         except: return pd.DataFrame()
 
     tab_cmtc, tab_ifa = st.tabs(["🔴 CMTC Follow-up (SAM/MAM)", "💊 IFA Stock Tracker (Syrups/Tablets)"])
+    # --- INTEGRATED TABS ---
+    tab_cmtc, tab_ifa, tab_visits = st.tabs(["🔴 CMTC Follow-up", "💊 IFA Stock Tracker", "🏫 Institution Visit Report"])
+
+    master_aw_data, master_sch_data = get_master_lists()
+    aw_list = sorted(master_aw_data.iloc[:, 0].unique().tolist()) if not master_aw_data.empty else []
+    school_list = sorted(master_sch_data.iloc[:, 0].unique().tolist()) if not master_sch_data.empty else []
 
     # --- 0. FETCH INSTITUTE LISTS (FROM MEMORY) ---
     master_aw_data, master_sch_data = get_master_lists()
@@ -3962,6 +4010,26 @@ elif menu == "15. Clinical & IFA Tracker":
 
         except Exception as e:
             st.error(f"Inventory Error: {e}")
+# --- TAB 3: INSTITUTION VISIT PDF ---
+    with tab_visits:
+        st.subheader("🏫 Institution Visit PDF Generator")
+        with st.form("pdf_visit_form"):
+            v_level = st.radio("Level:", ["Anganwadi", "School"], horizontal=True)
+            inst_options = aw_list if v_level == "Anganwadi" else school_list
+            v_name = st.selectbox("Select Institution:", ["-- Select --"] + inst_options)
+            
+            if st.form_submit_button("📄 Generate Official PDF Report"):
+                if v_name != "-- Select --":
+                    report_data = {"name": v_name}
+                    pdf_bytes = generate_visit_report(report_data)
+                    st.download_button(
+                        label="⬇️ Download Official Report",
+                        data=pdf_bytes,
+                        file_name=f"Visit_Report_{v_name}.pdf",
+                        mime="application/pdf"
+                    )
+                else:
+                    st.warning("Please select an institution.")
 # ==========================================
 # MODULE 16: 🏥 CMTC INPATIENT TRACKER (14-Day Ward)
 # ==========================================
