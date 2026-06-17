@@ -799,15 +799,10 @@ elif menu == "2. Child Screening":
                         c1, c2 = st.columns(2)
                         with c1: new_name = st.text_input("Child Full Name *")
                         with c2: 
-        # 🚀 THE FIX: Extend year range to 20 years back
-        today = datetime.date.today()
-        twenty_years_ago = today.replace(year=today.year - 20)
-        
-        new_dob = st.date_input(
-            "Date of Birth", 
-            min_value=twenty_years_ago, 
-            max_value=today
-        )
+                            # 🚀 FIXED: 20 Year Date Picker Range
+                            today = datetime.date.today()
+                            twenty_years_ago = today.replace(year=today.year - 20)
+                            new_dob = st.date_input("Date of Birth", min_value=twenty_years_ago, max_value=today)
                         
                         c3, c4 = st.columns(2)
                         with c3: new_gender = st.selectbox("Gender *", ["M", "F"])
