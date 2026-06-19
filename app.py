@@ -1713,7 +1713,7 @@ elif menu == "3. 4D Defect Registry":
                             
                             # Footer
                             pdf.set_font('Gujarati', '', 8)
-                            pdf.text(150, 225, "Civil hospital junagadh, room number 218, second floor")
+                            pdf.text(320, 725, "Civil hospital junagadh, room number 218, second floor")
                             
                             return bytes(pdf.output())
 
