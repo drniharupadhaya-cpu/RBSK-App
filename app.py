@@ -1573,20 +1573,20 @@ elif menu == "3. 4D Defect Registry":
                             pdf.text(25, 112, "બાળકની વિગત")
                             
                             pdf.set_font('Gujarati', '', 10)
-                            y = 145
+                            y = 110
                             pdf.text(20, y, f"બાળકનું પુરું નામ : {data.get('Name', '')}")
                             pdf.text(320, y, f"FEMALE/MALE : {data.get('Gender', '')}")
                             pdf.text(450, y, "આઈ.ડી. નંબર : ________")
                             
-                            y += 25
+                            y += 20
                             pdf.text(20, y, f"બાળકની જન્મ તારીખ : {data.get('DOB', '')}")
                             pdf.text(320, y, f"ઉંમર (વર્ષ અને મહિનામાં) : {data.get('Age', '')}")
                             
-                            y += 25
+                            y += 20
                             pdf.text(20, y, f"બાળકના પિતાનું પુરું નામ : {data.get('Father', '')}")
                             pdf.text(320, y, f"પિતાનો મોબાઈલ નં. : {data.get('Contact', '')}")
                             
-                            y += 25
+                            y += 20
                             pdf.text(20, y, f"ગામ/શહેર: {data.get('Village', '')}")
                             pdf.text(220, y, "તાલુકો : VISAVADAR")
                             pdf.text(400, y, "DISTRICT : JUNAGADH")
@@ -1619,13 +1619,13 @@ elif menu == "3. 4D Defect Registry":
                             y += 25
                             pdf.text(20, y, "રહેઠાણનું પુરું સરનામું : _______________________________________________________")
                             
-                            y += 25
+                            y += 20
                             pdf.text(20, y, "4D :")
                             draw_checkbox(50, y, "BIRTH DEFECT")
                             draw_checkbox(140, y, "DEFICIENCIES")
-                            draw_checkbox(140, y, "DISEASES")
-                            draw_checkbox(250, y, "DEVELOPMENTAL DEALYS AND DISABILITIES")
-                            draw_checkbox(410, y, "OTHERS")
+                            draw_checkbox(240, y, "DISEASES")
+                            draw_checkbox(350, y, "DEVELOPMENTAL DEALYS AND DISABILITIES")
+                            draw_checkbox(510, y, "OTHERS")
                             
                             pdf.line(15, y + 15, 595.27 - 15, y + 15)
                             
@@ -1637,29 +1637,29 @@ elif menu == "3. 4D Defect Registry":
                             pdf.text(25, y + 17, "પ્રાથમિક તપાસણીની વિગત")
                             
                             pdf.set_font('Gujarati', '', 10)
-                            y += 45
+                            y += 35
                             pdf.text(20, y, "RBSK મોબાઈલ હેલ્થ ટીમ નંબર : MHT-1")
                             pdf.text(320, y, f"પ્રાથમિક તપાસણી કર્યા તારીખ : {data.get('Date', '')}")
                             
-                            y += 25
+                            y += 20
                             pdf.text(20, y, f"બાળકને પ્રાથમિક તપાસણીમાં જોવા મળેલ તક્લીફ (રોગ/4D) : {data.get('Condition', '')}")
                             pdf.text(430, y, f"HT: {data.get('Height', '')}  WT: {data.get('Weight', '')}")
                             
-                            y += 25
+                            y += 20
                             pdf.text(20, y, f"પ્રાથમિક તપાસમાં આપેલ સારવાર : {data.get('Remarks', '')}")
                             
-                            y += 25
+                            y += 20
                             pdf.text(20, y, f"સંદર્ભ સેવા માટે કઈ હોસ્પિટલ / DEIC રીફર કર્યું : {data.get('Referred_To', '')}")
                             
-                            y += 25
+                            y += 20
                             pdf.text(20, y, f"પ્રાથમિક તપાસ કરનાર તબીબનું નામ : {data.get('MO_Name', '')}")
                             pdf.text(320, y, "રીફર કરવાનું કારણ : _________________")
                             
-                            y += 25
+                            y += 20
                             pdf.text(20, y, "હોદ્દો : MEDICAL OFFICER")
                             pdf.text(320, y, "CONTACT NO. : _________________")
                             
-                            y += 25
+                            y += 20
                             pdf.text(20, y, "સહી અને સિક્કો :")
                             
                             # SEAL and SIGNATURE Logic
@@ -1695,19 +1695,19 @@ elif menu == "3. 4D Defect Registry":
                             pdf.text(20, y, "(સરકારી / ખાનગી / સી. એમ. સેતુ / ચિરંજીવી)")
                             pdf.text(350, y, "સહી : ________________")
                             
-                            y += 25
+                            y += 20
                             pdf.text(20, y, "રિફર કરેલ સ્થળ / સંસ્થા : _____________________________________________________")
                             
-                            y += 25
+                            y += 20
                             pdf.text(20, y, "તપાસ અને તારણ : ______________________________________________________________")
                             
-                            y += 25
+                            y += 20
                             pdf.text(20, y, "ફોલોઅપ સર્વિસ : ______________________________________________________________")
                             
-                            y += 25
+                            y += 20
                             pdf.text(20, y, "મોબાઈલ હેલ્થ ટીમના તબીબ માટેની સુચના : _________________________________________")
                             
-                            y += 25
+                            y += 20
                             pdf.text(20, y, "વધુ સારવારની જરૂર છે : _________________________________________________________")
                             pdf.text(400, y + 10, "હોસ્પિટલ/સંસ્થાનો સિક્કો")
                             
