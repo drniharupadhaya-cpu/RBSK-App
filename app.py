@@ -18,7 +18,8 @@ import numpy as np # Added globally for maximum speed
 # ==========================================
 # MASTER DATA ENGINE (Optimized for Speed & Multiple Users)
 # ==========================================
-@st.cache_data(ttl=600)
+# 🚀 FIX 1: Removed ttl=600 so memory never auto-wipes while users are typing!
+@st.cache_data()
 def get_daily_logs():
     """Fetches daily screenings ONCE and shares it with Modules 1, 3, and 12."""
     try:
@@ -65,7 +66,6 @@ def render_header(title, subtitle, icon, bg_color):
     """, unsafe_allow_html=True)
 
 def check_password():
-    # 🚀 THE FIX: Now checks for Roles (Admin vs CMTC)
     if "role" not in st.session_state:
         st.markdown("<br><br>", unsafe_allow_html=True)
         render_header("RBSK Secure Access", "Please enter credentials to continue", "🔒", "#1e293b")
@@ -96,103 +96,102 @@ current_role = st.session_state.get("role", "Admin")
 # ==========================================
 # GLOBAL PDF ENGINE: OFFICIAL RBSK FORMAT
 # ==========================================
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
+
 def generate_refer_card(data):
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     width, height = A4
     
-    def draw_text(x, y, text, size=11, bold=False, color=colors.black):
-        c.setFillColor(color)
-        c.setFont("Helvetica-Bold" if bold else "Helvetica", size)
-        c.drawString(x, y, str(text))
+    # 🚀 REGISTER THE GUJARATI FONT
+    # Ensure 'NotoSansGujarati-Regular.ttf' is uploaded to your Streamlit folder
+    try:
+        pdfmetrics.registerFont(TTFont('Gujarati', 'NotoSansGujarati-Regular.ttf'))
+        font_guj = 'Gujarati'
+    except:
+        # Fallback to English if the font file is missing
+        font_guj = 'Helvetica'
+        st.warning("⚠️ Gujarati font file not found! Falling back to English.")
 
-    # Outer Frame
-    c.setStrokeColor(colors.HexColor("#1e3a8a"))
-    c.setLineWidth(3)
-    c.roundRect(20, 20, width - 40, height - 40, 10, stroke=1, fill=0)
-    c.setLineWidth(1)
-
-    # Header
-    c.setFillColor(colors.HexColor("#10b981"))
-    c.roundRect(20, height - 80, width - 40, 60, 10, stroke=0, fill=1)
-    c.rect(20, height - 80, width - 40, 30, stroke=0, fill=1) 
+    # --- HEADER SECTION ---
+    c.setStrokeColor(colors.black)
+    c.setLineWidth(2)
+    c.rect(20, 20, width - 40, height - 40, stroke=1, fill=0) # Outer Border
     
-    c.setFillColor(colors.white)
-    c.setFont("Helvetica-Bold", 16)
-    c.drawCentredString(width / 2.0, height - 45, "RBSK - REFERRAL CARD (NATIONAL CHILD HEALTH PROGRAM)")
-    c.setFont("Helvetica", 11)
-    c.drawCentredString(width / 2.0, height - 65, "District Panchayat, Junagadh - Health Branch")
+    c.setFont(font_guj, 14)
+    c.drawCentredString(width / 2.0, height - 50, "શાળા આરોગ્ય - રાષ્ટ્રીય બાળ સ્વાસ્થ્ય કાર્યક્રમ RBSK")
+    c.setFont(font_guj, 16)
+    c.drawCentredString(width / 2.0, height - 75, "સંદર્ભ કાર્ડ")
+    c.line(20, height - 90, width - 20, height - 90)
 
-    # Demographics
-    start_y = height - 100
-    c.setFillColor(colors.HexColor("#f8fafc"))
-    c.setStrokeColor(colors.HexColor("#cbd5e1"))
-    c.roundRect(30, start_y - 105, width - 60, 95, 6, stroke=1, fill=1)
+    # --- SECTION 1: બાળકની વિગત (Child Demographics) ---
+    c.setFont(font_guj, 12)
+    c.setFillColor(colors.HexColor("#1e3a8a")) # Dark Blue for Section Headers
+    c.drawString(30, height - 110, "બાળકની વિગત :")
+    c.setFillColor(colors.black)
     
-    draw_text(40, start_y - 20, "📋 PATIENT DEMOGRAPHICS", 12, bold=True, color=colors.HexColor("#1e3a8a"))
-    draw_text(40, start_y - 45, f"Child's Name: {data.get('Name', '')}", 12, bold=True)
-    draw_text(350, start_y - 45, f"Gender: {data.get('Gender', '')}")
-    draw_text(40, start_y - 70, f"Date of Birth: {data.get('DOB', '')}")
-    draw_text(180, start_y - 70, f"Age: {data.get('Age', 'N/A')}")
-    draw_text(350, start_y - 70, f"Contact: {data.get('Contact_Num', '')}")
-    draw_text(40, start_y - 95, f"Father's Name: {data.get('Parent_Name', '')}")
-    draw_text(350, start_y - 95, f"Mother's Name: {data.get('Mother', '')}")
-
-    # Location
-    loc_y = start_y - 120
-    c.setFillColor(colors.HexColor("#f8fafc"))
-    c.roundRect(30, loc_y - 75, width - 60, 65, 6, stroke=1, fill=1)
+    c.setFont(font_guj, 11)
+    y = height - 135
     
-    draw_text(40, loc_y - 20, "🏫 LOCATION & INSTITUTION", 12, bold=True, color=colors.HexColor("#1e3a8a"))
-    draw_text(40, loc_y - 45, f"Village / City: {data.get('Village', '')}")
-    draw_text(350, loc_y - 45, "Taluka: VISAVADAR")
-    draw_text(40, loc_y - 65, f"Institution: {data.get('Institution', '')}")
-    draw_text(350, loc_y - 65, f"Status: {data.get('School_Status', '')}")
-
-    # Clinical
-    clin_y = loc_y - 90
-    c.setFillColor(colors.HexColor("#fef2f2"))
-    c.setStrokeColor(colors.HexColor("#fca5a5"))
-    c.roundRect(30, clin_y - 125, width - 60, 115, 6, stroke=1, fill=1)
+    # Left Column
+    c.drawString(30, y, f"બાળકનું પુરું નામ : {data.get('Name', '')}")
+    c.drawString(30, y - 25, f"બાળકની જન્મ તારીખ : {data.get('DOB', '')}")
+    c.drawString(30, y - 50, f"પિતાનું નામ : {data.get('Parent_Name', '')}")
+    c.drawString(30, y - 75, f"માતાનું નામ : {data.get('Mother', '')}")
+    c.drawString(30, y - 100, f"ગામ/શહેર : {data.get('Village', '')}")
     
-    draw_text(40, clin_y - 20, "🩺 CLINICAL SCREENING & REFERRAL", 12, bold=True, color=colors.HexColor("#b91c1c"))
-    draw_text(40, clin_y - 45, f"Screening Date: {data.get('Date', '')}")
-    draw_text(40, clin_y - 70, "Medical Condition Identified (4D):", 11, bold=True)
-    draw_text(240, clin_y - 70, f"{data.get('Clinical_Findings', '')}", 12, color=colors.HexColor("#b91c1c"))
-    draw_text(40, clin_y - 95, "Primary Treatment Given:")
-    draw_text(240, clin_y - 95, f"{data.get('Treatment_Given', '')}")
-    draw_text(40, clin_y - 115, "Referred To (Hospital):", 11, bold=True)
-    draw_text(240, clin_y - 115, f"{data.get('Referred_To', '')}", 12, bold=True)
+    # Right Column
+    c.drawString(350, y, f"સ્ત્રી/પુરૂષ : {data.get('Gender', '')}")
+    c.drawString(350, y - 25, f"ઉંમર : {data.get('Age', '')}")
+    c.drawString(350, y - 50, f"મોબાઈલ નં. : {data.get('Contact_Num', '')}")
+    c.drawString(350, y - 100, "તાલુકો : VISAVADAR")
+    
+    c.line(20, y - 115, width - 20, y - 115)
 
-    # Stamp & Signature
-    stamp_y = clin_y - 220
+    # --- SECTION 2: શાળા/આંગણવાડી (Institution details) ---
+    y = y - 135
+    c.setFillColor(colors.HexColor("#1e3a8a"))
+    c.drawString(30, y, "શાળા / આંગણવાડી ની વિગત :")
+    c.setFillColor(colors.black)
+    
+    c.drawString(30, y - 25, f"શાળા/આંગણવાડીનું નામ : {data.get('Institution', '')}")
+    c.drawString(30, y - 50, f"સ્થિતિ : {data.get('School_Status', '')}")
+    
+    c.line(20, y - 65, width - 20, y - 65)
+
+    # --- SECTION 3: પ્રાથમિક તપાસણી (Screening Details) ---
+    y = y - 85
+    c.setFillColor(colors.HexColor("#b91c1c")) # Red for Clinical Header
+    c.drawString(30, y, "પ્રાથમિક તપાસણીની વિગત (4D) :")
+    c.setFillColor(colors.black)
+    
+    c.drawString(30, y - 25, f"તપાસણી તારીખ : {data.get('Date', '')}")
+    c.drawString(30, y - 50, f"4D કન્ડીશન / બીમારી : {data.get('Clinical_Findings', '')}")
+    c.drawString(30, y - 75, f"આપવામાં આવેલ પ્રાથમિક સારવાર : {data.get('Treatment_Given', '')}")
+    c.drawString(30, y - 100, f"રીફર કરેલ સંસ્થા (Hospital) : {data.get('Referred_To', '')}")
+
+    # --- STAMP & SIGNATURE ---
+    stamp_y = y - 180
     stamp_x = 120
     
-    c.setStrokeColor(colors.HexColor("#1e3a8a"))
-    c.setLineWidth(2)
-    c.circle(stamp_x, stamp_y, 45, stroke=1, fill=0)
+    # Seal Circle
+    c.setStrokeColor(colors.blue)
     c.circle(stamp_x, stamp_y, 40, stroke=1, fill=0)
+    c.setFont(font_guj, 9)
+    c.drawCentredString(stamp_x, stamp_y, "RBSK SEAL")
     
-    c.setFillColor(colors.HexColor("#1e3a8a"))
-    c.setFont("Helvetica-Bold", 10)
-    c.drawCentredString(stamp_x, stamp_y + 10, "RBSK MO")
-    c.drawCentredString(stamp_x, stamp_y - 5, "VISAVADAR")
-    c.setFont("Helvetica", 8)
-    c.drawCentredString(stamp_x, stamp_y - 20, "Official Seal")
-    
+    # Official Signature Image
     sign_path = "sign.jpg"
     if os.path.exists(sign_path):
         c.drawImage(sign_path, 360, stamp_y - 10, width=90, height=60, preserveAspectRatio=True, mask='auto')
-    else:
-        draw_text(370, stamp_y + 10, "(Signature Image Missing)", 9, color=colors.red)
-
-    c.setFillColor(colors.black)
+        
     c.setStrokeColor(colors.black)
-    c.setLineWidth(1)
     c.line(340, stamp_y - 15, 520, stamp_y - 15)
     
-    draw_text(340, stamp_y - 30, f"Medical Officer: {data.get('MO_Name', '')}", 11, bold=True)
-    draw_text(340, stamp_y - 45, "Mobile Health Team (MHT-1)")
+    c.setFont(font_guj, 11)
+    c.drawString(340, stamp_y - 30, f"મેડિકલ ઓફિસર : {data.get('MO_Name', '')}")
+    c.drawString(340, stamp_y - 45, "મોબાઈલ હેલ્થ ટીમ (MHT-1)")
 
     c.save()
     buffer.seek(0)
@@ -201,7 +200,6 @@ def generate_refer_card(data):
 # ==========================================
 # DATABASE CONNECTION (Zero-Lag Optimized)
 # ==========================================
-# 🚀 THE FIX: This keeps the Google Connection "awake" in the server's background for 30 minutes!
 @st.cache_resource(ttl=1800)
 def get_spreadsheet():
     creds_dict = json.loads(st.secrets["gcp_service_account"])
@@ -209,7 +207,8 @@ def get_spreadsheet():
     sheet_url = "https://docs.google.com/spreadsheets/d/1i5wAkI7k98E80qhHRe6xQOhF4Qj9Z0DH8wjPsQ7gRZc/edit?gid=2111634358#gid=2111634358"
     return client.open_by_url(sheet_url)
 
-@st.cache_data(ttl=600)
+# 🚀 FIX 1: Removed ttl=600 so memory never auto-wipes while users are typing!
+@st.cache_data()
 def load_all_data():
     sheet = get_spreadsheet()
     def safe_load(tab_name, retries=3):
@@ -241,18 +240,15 @@ def load_all_data():
     df_q_loc = safe_load("Q_Location_4D")
     df_q_demo = safe_load("Q_Demo_4D")
     df_team_4d = safe_load("Team_4D_Report")
-    df_hbnc = safe_load("hbnc_screenings") # 🚀 Added Module 5 to the fast-cache!
+    df_hbnc = safe_load("hbnc_screenings")
 
-    # Return exactly 12 items
     return df_4d, df_anemia, df_directory, df_aw_contacts, df_staff, df_aw_master, df_all_students, df_q_perf, df_q_loc, df_q_demo, df_team_4d, df_hbnc
 
 try:
     spreadsheet = get_spreadsheet() 
     
-    # 🔴 THE FIX IS HERE: We unpack exactly 12 variables in the same order they were returned!
     df_4d, df_anemia, df_directory, df_aw_contacts, df_staff, df_aw_master, df_all_students, df_q_perf, df_q_loc, df_q_demo, df_team_4d, df_hbnc = load_all_data() 
     
-    # These safe aliases ensure Modules 1, 2, and 3 don't throw NameErrors
     df_aw = df_aw_master
     df_students = df_all_students
     df_schools = df_directory
@@ -269,7 +265,6 @@ except Exception as e:
 # 🌍 DISTRICT COMMAND & SIDEBAR NAVIGATION
 # ==========================================
 
-# 🚀 ONLY SHOW FULL COMMAND CENTER IF ADMIN
 if current_role == "Admin":
     st.sidebar.header("🌍 District Command")
 
@@ -290,7 +285,7 @@ if current_role == "Admin":
         except IndexError:
             st.sidebar.error("⚠️ Could not find the 'TEAM' column in one of the master sheets. Please check your Google Sheet headers!")
 
-    @st.cache_data(ttl=600)
+    @st.cache_data()
     def get_today_stats():
         try:
             today_str = str(datetime.date.today())
@@ -309,6 +304,16 @@ if current_role == "Admin":
     st.sidebar.markdown("### 🏛️ RBSK Team Portal")
     st.sidebar.write("Team: Visavadar MHT-1240315")
     st.sidebar.divider()
+    
+    # 🚀 FIX 2: THE MANUAL SYNC BUTTON 
+    if st.sidebar.button("🔄 Sync Latest Cloud Data", type="primary", use_container_width=True):
+        st.cache_data.clear()
+        st.toast("✅ Master Database Synced!", icon="🔄")
+        time.sleep(0.5)
+        st.rerun()
+        
+    st.sidebar.divider()
+    
     st.sidebar.title("🩺 RBSK Menu")
     st.sidebar.write("Dr. Workspace")
 
@@ -323,7 +328,6 @@ if current_role == "Admin":
     </div>
     """, unsafe_allow_html=True)
 
-    # ADMIN GETS ALL OPTIONS
     menu_options = [
         "1. Daily Tour Plan", 
         "2. Child Screening", 
@@ -343,18 +347,21 @@ if current_role == "Admin":
         "16. CMTC Inpatient Tracker"
     ]
 
-# 🚀 IF CMTC STAFF LOGS IN, THEY ONLY SEE THIS:
 elif current_role == "CMTC":
     st.sidebar.markdown("### 🏥 CMTC Ward Portal")
     st.sidebar.write("Inpatient Management")
     st.sidebar.divider()
     
-    # CMTC STAFF ONLY GETS ONE OPTION
+    if st.sidebar.button("🔄 Sync Latest Cloud Data", type="primary", use_container_width=True):
+        st.cache_data.clear()
+        st.rerun()
+        
+    st.sidebar.divider()
+    
     menu_options = [
         "16. CMTC Inpatient Tracker"
     ]
 
-# RENDER THE MENU BASED ON ROLE
 menu = st.sidebar.radio("Go to:", menu_options)
 
 st.sidebar.markdown("---")
@@ -362,7 +369,6 @@ if st.sidebar.button("🔓 Logout"):
     for key in st.session_state.keys():
         del st.session_state[key]
     st.rerun()
-
 # ==========================================
 # MODULE 1: THE EXECUTIVE DASHBOARD & TOUR PLAN
 # ==========================================
