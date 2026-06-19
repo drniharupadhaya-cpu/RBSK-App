@@ -1558,11 +1558,11 @@ elif menu == "3. 4D Defect Registry":
                             
                             pdf.set_font('Gujarati', '', 14)
                             pdf.set_xy(0, 45)
-                            pdf.cell(595.27, 10, "શાળા આરોગ્ય - રાષ્ટ્રીય બાળ સ્વાસ્થ્ય કાર્યક્રમ RBSK", align='C')
+                            pdf.cell(595.27, 10, "શાળા આરોગ્ય - RASHTRIYA BAL SWASTHYA KARYAKRAM-RBSK", align='C')
                             
                             pdf.set_font('Gujarati', '', 16)
                             pdf.set_xy(0, 70)
-                            pdf.cell(595.27, 10, "સંદર્ભ કાર્ડ", align='C')
+                            pdf.cell(595.27, 10, "REFER CARD", align='C')
                             
                             pdf.line(15, 85, 595.27 - 15, 85)
                             
