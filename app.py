@@ -1624,7 +1624,7 @@ elif menu == "3. 4D Defect Registry":
                             draw_checkbox(50, y, "BIRTH DEFECT")
                             draw_checkbox(140, y, "DEFICIENCIES")
                             draw_checkbox(240, y, "DISEASES")
-                            draw_checkbox(350, y, "DEVELOPMENTAL DEALYS")
+                            draw_checkbox(350, y, "DEVELOPMENTAL DELAY")
                             draw_checkbox(510, y, "OTHERS")
                             
                             pdf.line(15, y + 15, 595.27 - 15, y + 15)
@@ -1713,7 +1713,7 @@ elif menu == "3. 4D Defect Registry":
                             
                             # Footer
                             pdf.set_font('Gujarati', '', 8)
-                            pdf.text(350, 825, "આરોગ્ય અને પરિવાર કલ્યાણ વિભાગ, ગુજરાત સરકાર")
+                            pdf.text(150, 225, "Civil hospital junagadh, room number 218, second floor")
                             
                             return bytes(pdf.output())
 
