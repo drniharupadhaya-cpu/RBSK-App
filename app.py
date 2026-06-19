@@ -1471,190 +1471,208 @@ elif menu == "3. 4D Defect Registry":
                          use_container_width=True, hide_index=True)
         else: st.info("No defects screened today.")
 
-   # 🚀 NEW: OFFICIAL GUJARATI REFER CARD GENERATOR
-    with t_print:
+   # 🪪 TAB 4: REFER CARD PRINT (GUJARATI)
+    with tab_card:  # 🚀 FIXED THE NAME ERROR HERE
         st.subheader("🪪 Official Refer Card Center (Gujarati Format)")
         
-        # 1. State Management for the PDF Data
-        if "refer_card_ready" not in st.session_state:
-            st.session_state.refer_card_ready = False
+        df_card_base = pd.DataFrame(all_live_defects)
+        
+        if not df_card_base.empty:
+            # --- REAL DATABASE FILTERS ---
+            c_f1, c_f2 = st.columns(2)
+            inst_list_card = sorted(list(df_card_base['Institution'].unique()))
+            with c_f1: sel_inst_card = st.selectbox("🏢 Institution:", ["-- All --"] + inst_list_card, key="card_inst_new")
+            with c_f2: c_gen_card = st.selectbox("⚖️ Gender:", ["-- All --", "Male", "Female"], key="card_gen_new")
+
+            df_card_filtered = df_card_base.copy()
+            if sel_inst_card != "-- All --": df_card_filtered = df_card_filtered[df_card_filtered['Institution'] == sel_inst_card]
+            if c_gen_card != "-- All --": df_card_filtered = df_card_filtered[df_card_filtered['Gender'] == c_gen_card]
+
+            # Create a clean display map for the dropdown
+            display_map = {f"{r['Name']} ({r['Institution']})": r for _, r in df_card_filtered.iterrows()}
             
-        with st.form("refer_card_form"):
-            sample_children = ["John Doe - SAM", "Jane Smith - Anemia"] 
-            selected_ref = st.selectbox("Select Child to Print Card:", ["-- Select --"] + sample_children, key="print_child_select")
-            
-            st.write("### ✍️ Team Actions & Notes")
-            action_c1, action_c2 = st.columns(2)
-            with action_c1:
-                team_remarks = st.text_area("Doctor / Team Remarks (Editable)", placeholder="Add any specific clinical advice or notes here...")
-            with action_c2:
-                refer_options = ["DEIC", "CMTC", "SDH", "PHC", "GATHANI HOSPITAL", "JAY AMBE CHAPARDA HOSPITAL"]
-                selected_refer_to = st.selectbox("Referred To (Editable)", refer_options)
-            
-            submitted = st.form_submit_button("🖨️ Prepare Print Card")
-            
-            if submitted:
-                if selected_ref != "-- Select --":
-                    st.session_state.report_data = {
-                        "Name": selected_ref.split(" - ")[0],
-                        "DOB": "15-08-2018", 
-                        "Father": "Ramesh Patel",
-                        "Mother": "Geeta Patel",
-                        "Village": "Visavadar",
-                        "Gender": "Male",
-                        "Age": "8 Years",
-                        "Contact": "9876543210",
-                        "Institution": "Primary School Visavadar",
-                        "Date": str(datetime.date.today().strftime("%d-%m-%Y")),
-                        "Condition": selected_ref.split(" - ")[1],
-                        "Height": "115.5",
-                        "Weight": "18.2",
-                        "Hb": "10.5",
-                        "MO_Name": "Dr. RBSK MO",
-                        "Remarks": team_remarks,
-                        "Referred_To": selected_refer_to
-                    }
-                    st.session_state.refer_card_ready = True
-                else:
-                    st.warning("Please select a child.")
-                    st.session_state.refer_card_ready = False
+            # --- STATE MANAGEMENT ---
+            if "refer_card_ready" not in st.session_state:
+                st.session_state.refer_card_ready = False
+                
+            with st.form("refer_card_form"):
+                sel_c = st.selectbox("Select Child to Print Card:", ["-- Select --"] + sorted(list(display_map.keys())), key="print_child_select")
+                
+                st.write("### ✍️ Team Actions & Notes")
+                action_c1, action_c2 = st.columns(2)
+                with action_c1:
+                    team_remarks = st.text_area("Doctor / Team Remarks (Editable)", placeholder="Add any specific clinical advice or notes here...")
+                with action_c2:
+                    refer_options = ["DEIC", "CMTC", "SDH", "PHC", "GATHANI HOSPITAL", "JAY AMBE CHAPARDA HOSPITAL"]
+                    selected_refer_to = st.selectbox("Referred To (Editable)", refer_options)
+                
+                submitted = st.form_submit_button("🖨️ Prepare Print Card")
+                
+                if submitted:
+                    if sel_c != "-- Select --":
+                        p = display_map[sel_c] # 🚀 GRAB THE REAL CHILD DATA!
+                        st.session_state.report_data = {
+                            "Name": p.get("Name", ""),
+                            "DOB": p.get("DOB", ""), 
+                            "Father": p.get("Father", ""),
+                            "Mother": "", # Kept blank for manual entry if needed
+                            "Village": "Visavadar",
+                            "Gender": p.get("Gender", ""),
+                            "Age": get_age(p.get("DOB", "")) if "DOB" in p else "",
+                            "Contact": p.get("Contact", ""),
+                            "Institution": p.get("Institution", ""),
+                            "Date": p.get("Date", str(datetime.date.today().strftime("%d-%m-%Y"))),
+                            "Condition": p.get("Condition", ""),
+                            "Height": p.get("Height", ""),
+                            "Weight": p.get("Weight", ""),
+                            "Hb": p.get("Hb", ""),
+                            "MO_Name": "Dr. RBSK MO",
+                            "Remarks": team_remarks,
+                            "Referred_To": selected_refer_to
+                        }
+                        st.session_state.refer_card_ready = True
+                    else:
+                        st.warning("Please select a child.")
+                        st.session_state.refer_card_ready = False
+                        
+            # --- 2. GENERATE PDF OUTSIDE FORM TO PREVENT CRASHES ---
+            if st.session_state.refer_card_ready:
+                try:
+                    def generate_gujarati_refer_card(data):
+                        from io import BytesIO
+                        from reportlab.pdfgen import canvas
+                        from reportlab.lib.pagesizes import A4
+                        from reportlab.lib import colors
+                        from reportlab.pdfbase import pdfmetrics
+                        from reportlab.pdfbase.ttfonts import TTFont
+                        import os
+
+                        buffer = BytesIO()
+                        c = canvas.Canvas(buffer, pagesize=A4)
+                        width, height = A4
+
+                        try:
+                            pdfmetrics.registerFont(TTFont('Gujarati', 'NotoSansGujarati-Regular.ttf'))
+                            font_guj = 'Gujarati'
+                        except:
+                            font_guj = 'Helvetica'
+
+                        c.setLineWidth(1)
+                        c.rect(15, 15, width - 30, height - 30) # Outer border
+
+                        # Title Section
+                        c.setFont(font_guj, 12)
+                        c.drawCentredString(width / 2.0, height - 35, "આરોગ્ય અને પરિવાર કલ્યાણ વિભાગ, ગુજરાત સરકાર")
+                        c.setFont(font_guj, 16)
+                        c.drawCentredString(width / 2.0, height - 60, "શાળા આરોગ્ય - રાષ્ટ્રીય બાળ સ્વાસ્થ્ય કાર્યક્રમ RBSK")
+                        c.setFont(font_guj, 14)
+                        c.drawCentredString(width / 2.0, height - 85, "સંદર્ભ કાર્ડ")
+                        c.line(15, height - 95, width - 15, height - 95)
+
+                        # 1. બાળકની વિગત (Child Info)
+                        c.setFillColor(colors.lightgrey)
+                        c.rect(15, height - 120, width - 30, 25, fill=1)
+                        c.setFillColor(colors.black)
+                        c.setFont(font_guj, 12)
+                        c.drawString(25, height - 113, "બાળકની વિગત")
+
+                        y = height - 145
+                        c.setFont(font_guj, 11)
+                        c.drawString(25, y, f"બાળકનું પુરું નામ : {data.get('Name', '')}")
+                        c.drawString(350, y, f"સ્ત્રી/પુરૂષ : {data.get('Gender', '')}")
+
+                        y -= 25
+                        c.drawString(25, y, f"બાળકની જન્મ તારીખ : {data.get('DOB', '')}")
+                        c.drawString(350, y, f"ઉંમર : {data.get('Age', '')}")
+
+                        y -= 25
+                        c.drawString(25, y, f"પિતાનું પુરું નામ : {data.get('Father', '')}")
+                        c.drawString(350, y, f"મોબાઈલ નં. : {data.get('Contact', '')}")
+
+                        y -= 25
+                        c.drawString(25, y, f"શાળા/આંગણવાડીનું નામ : {data.get('Institution', '')}")
+                        c.drawString(350, y, f"ગામ/શહેર : {data.get('Village', 'Visavadar')}")
+
+                        y -= 25
+                        c.drawString(25, y, f"ઊંચાઈ : {data.get('Height', '')} cm")
+                        c.drawString(150, y, f"વજન : {data.get('Weight', '')} kg")
+                        c.drawString(280, y, f"HB : {data.get('Hb', '')} g/dL")
+
+                        # 2. પ્રાથમિક તપાસણીની વિગત (Screening Details)
+                        y -= 35
+                        c.setFillColor(colors.lightgrey)
+                        c.rect(15, y - 5, width - 30, 25, fill=1)
+                        c.setFillColor(colors.black)
+                        c.setFont(font_guj, 12)
+                        c.drawString(25, y + 2, "પ્રાથમિક તપાસણીની વિગત")
+
+                        y -= 30
+                        c.setFont(font_guj, 11)
+                        c.drawString(25, y, f"પ્રાથમિક તપાસણી કર્યા તારીખ : {data.get('Date', '')}")
+                        c.drawString(350, y, "RBSK મોબાઈલ હેલ્થ ટીમ નંબર : MHT-1")
+
+                        y -= 25
+                        c.drawString(25, y, f"બાળકને જોવા મળેલ તક્લીફ (રોગ/4D) : {data.get('Condition', '')}")
+
+                        y -= 25
+                        c.drawString(25, y, f"પ્રાથમિક તપાસમાં આપેલ સારવાર/નોંધ : {data.get('Remarks', '')}")
+
+                        y -= 25
+                        c.drawString(25, y, f"સંદર્ભ સેવા માટે રીફર કરેલ હોસ્પિટલ : {data.get('Referred_To', '')}")
+
+                        y -= 45
+                        # Seal and Signature Logic
+                        stamp_x, stamp_y = 60, y - 20
+                        c.setStrokeColor(colors.blue)
+                        c.circle(stamp_x, stamp_y, 35, stroke=1, fill=0)
+                        c.setFont(font_guj, 8)
+                        c.drawCentredString(stamp_x, stamp_y, "RBSK SEAL")
+
+                        sign_path = "sign.jpg"
+                        if os.path.exists(sign_path):
+                            c.drawImage(sign_path, 350, stamp_y - 15, width=80, height=50, preserveAspectRatio=True, mask='auto')
+
+                        c.setStrokeColor(colors.black)
+                        c.setFont(font_guj, 11)
+                        c.drawString(350, stamp_y - 30, "મેડીકલ ઓફિસર સહી")
+                        c.drawString(350, stamp_y - 45, f"{data.get('MO_Name', '')}")
+
+                        # 3. સંદર્ભ સેવાની વિગત (Referral Services Details)
+                        y -= 90
+                        c.setFillColor(colors.lightgrey)
+                        c.rect(15, y - 5, width - 30, 25, fill=1)
+                        c.setFillColor(colors.black)
+                        c.setFont(font_guj, 12)
+                        c.drawString(25, y + 2, "સંદર્ભ સેવાની વિગત (સંદર્ભ સેવાના સ્થળે તજજ્ઞ ડોકટરે જ ભરવું.)")
+
+                        y -= 30
+                        c.setFont(font_guj, 11)
+                        c.drawString(25, y, "સારવાર આપનાર નિષ્ણાંત તબીબનું નામ : _________________________________")
+                        c.drawString(350, y, "હોદો : __________________")
+
+                        y -= 35
+                        c.drawString(25, y, "તપાસ અને તારણ : _________________________________________________________________")
+                        y -= 35
+                        c.drawString(25, y, "ફોલોઅપ સર્વિસ : __________________________________________________________________")
+
+                        y -= 50
+                        c.drawString(350, y, "સહી : __________________")
+                        c.drawString(350, y - 20, "હોસ્પિટલ/સંસ્થાનો સિક્કો")
+
+                        c.save()
+                        buffer.seek(0)
+                        return buffer.getvalue()
+
+                    pdf_bytes = generate_gujarati_refer_card(st.session_state.report_data)
                     
-        # 2. GENERATE PDF OUTSIDE FORM TO PREVENT CRASHES
-        if st.session_state.refer_card_ready:
-            try:
-                def generate_gujarati_refer_card(data):
-                    from io import BytesIO
-                    from reportlab.pdfgen import canvas
-                    from reportlab.lib.pagesizes import A4
-                    from reportlab.lib import colors
-                    from reportlab.pdfbase import pdfmetrics
-                    from reportlab.pdfbase.ttfonts import TTFont
-                    import os
-
-                    buffer = BytesIO()
-                    c = canvas.Canvas(buffer, pagesize=A4)
-                    width, height = A4
-
-                    try:
-                        pdfmetrics.registerFont(TTFont('Gujarati', 'NotoSansGujarati-Regular.ttf'))
-                        font_guj = 'Gujarati'
-                    except:
-                        font_guj = 'Helvetica'
-
-                    c.setLineWidth(1)
-                    c.rect(15, 15, width - 30, height - 30) # Outer border
-
-                    # Title Section
-                    c.setFont(font_guj, 12)
-                    c.drawCentredString(width / 2.0, height - 35, "આરોગ્ય અને પરિવાર કલ્યાણ વિભાગ, ગુજરાત સરકાર")
-                    c.setFont(font_guj, 16)
-                    c.drawCentredString(width / 2.0, height - 60, "શાળા આરોગ્ય - રાષ્ટ્રીય બાળ સ્વાસ્થ્ય કાર્યક્રમ RBSK")
-                    c.setFont(font_guj, 14)
-                    c.drawCentredString(width / 2.0, height - 85, "સંદર્ભ કાર્ડ")
-                    c.line(15, height - 95, width - 15, height - 95)
-
-                    # 1. બાળકની વિગત (Child Info)
-                    c.setFillColor(colors.lightgrey)
-                    c.rect(15, height - 120, width - 30, 25, fill=1)
-                    c.setFillColor(colors.black)
-                    c.setFont(font_guj, 12)
-                    c.drawString(25, height - 113, "બાળકની વિગત")
-
-                    y = height - 145
-                    c.setFont(font_guj, 11)
-                    c.drawString(25, y, f"બાળકનું પુરું નામ : {data.get('Name', '')}")
-                    c.drawString(350, y, f"સ્ત્રી/પુરૂષ : {data.get('Gender', '')}")
-
-                    y -= 25
-                    c.drawString(25, y, f"બાળકની જન્મ તારીખ : {data.get('DOB', '')}")
-                    c.drawString(350, y, f"ઉંમર : {data.get('Age', '')}")
-
-                    y -= 25
-                    c.drawString(25, y, f"પિતાનું પુરું નામ : {data.get('Father', '')}")
-                    c.drawString(350, y, f"મોબાઈલ નં. : {data.get('Contact', '')}")
-
-                    y -= 25
-                    c.drawString(25, y, f"શાળા/આંગણવાડીનું નામ : {data.get('Institution', '')}")
-                    c.drawString(350, y, f"ગામ/શહેર : {data.get('Village', 'Visavadar')}")
-
-                    y -= 25
-                    c.drawString(25, y, f"ઊંચાઈ : {data.get('Height', '')} cm")
-                    c.drawString(150, y, f"વજન : {data.get('Weight', '')} kg")
-                    c.drawString(280, y, f"HB : {data.get('Hb', '')} g/dL")
-
-                    # 2. પ્રાથમિક તપાસણીની વિગત (Screening Details)
-                    y -= 35
-                    c.setFillColor(colors.lightgrey)
-                    c.rect(15, y - 5, width - 30, 25, fill=1)
-                    c.setFillColor(colors.black)
-                    c.setFont(font_guj, 12)
-                    c.drawString(25, y + 2, "પ્રાથમિક તપાસણીની વિગત")
-
-                    y -= 30
-                    c.setFont(font_guj, 11)
-                    c.drawString(25, y, f"પ્રાથમિક તપાસણી કર્યા તારીખ : {data.get('Date', '')}")
-                    c.drawString(350, y, "RBSK મોબાઈલ હેલ્થ ટીમ નંબર : MHT-1")
-
-                    y -= 25
-                    c.drawString(25, y, f"બાળકને જોવા મળેલ તક્લીફ (રોગ/4D) : {data.get('Condition', '')}")
-
-                    y -= 25
-                    c.drawString(25, y, f"પ્રાથમિક તપાસમાં આપેલ સારવાર/નોંધ : {data.get('Remarks', '')}")
-
-                    y -= 25
-                    c.drawString(25, y, f"સંદર્ભ સેવા માટે રીફર કરેલ હોસ્પિટલ : {data.get('Referred_To', '')}")
-
-                    y -= 45
-                    # Seal and Signature Logic
-                    stamp_x, stamp_y = 60, y - 20
-                    c.setStrokeColor(colors.blue)
-                    c.circle(stamp_x, stamp_y, 35, stroke=1, fill=0)
-                    c.setFont(font_guj, 8)
-                    c.drawCentredString(stamp_x, stamp_y, "RBSK SEAL")
-
-                    sign_path = "sign.jpg"
-                    if os.path.exists(sign_path):
-                        c.drawImage(sign_path, 350, stamp_y - 15, width=80, height=50, preserveAspectRatio=True, mask='auto')
-
-                    c.setStrokeColor(colors.black)
-                    c.setFont(font_guj, 11)
-                    c.drawString(350, stamp_y - 30, "મેડીકલ ઓફિસર સહી")
-                    c.drawString(350, stamp_y - 45, f"{data.get('MO_Name', '')}")
-
-                    # 3. સંદર્ભ સેવાની વિગત (Referral Services Details - Blank for specialist)
-                    y -= 90
-                    c.setFillColor(colors.lightgrey)
-                    c.rect(15, y - 5, width - 30, 25, fill=1)
-                    c.setFillColor(colors.black)
-                    c.setFont(font_guj, 12)
-                    c.drawString(25, y + 2, "સંદર્ભ સેવાની વિગત (સંદર્ભ સેવાના સ્થળે તજજ્ઞ ડોકટરે જ ભરવું.)")
-
-                    y -= 30
-                    c.setFont(font_guj, 11)
-                    c.drawString(25, y, "સારવાર આપનાર નિષ્ણાંત તબીબનું નામ : _________________________________")
-                    c.drawString(350, y, "હોદો : __________________")
-
-                    y -= 35
-                    c.drawString(25, y, "તપાસ અને તારણ : _________________________________________________________________")
-                    y -= 35
-                    c.drawString(25, y, "ફોલોઅપ સર્વિસ : __________________________________________________________________")
-
-                    y -= 50
-                    c.drawString(350, y, "સહી : __________________")
-                    c.drawString(350, y - 20, "હોસ્પિટલ/સંસ્થાનો સિક્કો")
-
-                    c.save()
-                    buffer.seek(0)
-                    return buffer.getvalue()
-
-                pdf_bytes = generate_gujarati_refer_card(st.session_state.report_data)
-                
-                import base64
-                b64 = base64.b64encode(pdf_bytes).decode()
-                st.markdown(f'<a href="data:application/pdf;base64,{b64}" download="ReferCard_{st.session_state.report_data["Name"]}.pdf" style="display:block;padding:12px;background:#2563eb;color:white;text-align:center;font-weight:bold;border-radius:6px;text-decoration:none;">📄 Click Here to Download Gujarati Referral Card PDF</a>', unsafe_allow_html=True)
-                
-            except Exception as e:
-                st.error(f"Error generating PDF. Please ensure the 'NotoSansGujarati-Regular.ttf' font file is in your application directory! Details: {e}")
+                    import base64
+                    b64 = base64.b64encode(pdf_bytes).decode()
+                    st.markdown(f'<a href="data:application/pdf;base64,{b64}" download="ReferCard_{st.session_state.report_data["Name"]}.pdf" style="display:block;padding:12px;background:#2563eb;color:white;text-align:center;font-weight:bold;border-radius:6px;text-decoration:none;">📄 Click Here to Download Gujarati Referral Card PDF</a>', unsafe_allow_html=True)
+                    
+                except Exception as e:
+                    st.error(f"Error generating PDF. Please ensure the 'NotoSansGujarati-Regular.ttf' font file is in your application directory! Details: {e}")
+        else:
+            st.info("No children found in the live registry matching your filters today.")
 # ==========================================
 # MODULE 4: VISUAL ANALYSIS
 # ==========================================
