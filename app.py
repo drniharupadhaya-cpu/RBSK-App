@@ -1472,13 +1472,12 @@ elif menu == "3. 4D Defect Registry":
         else: st.info("No defects screened today.")
 
    # 🪪 TAB 4: REFER CARD PRINT (GUJARATI)
-    with tab_card:  # 🚀 FIXED THE NAME ERROR HERE
-        st.subheader("🪪 Official Refer Card Center (Gujarati Format)")
+    with tab_card:
+        st.subheader("🪪 Official Refer Card Center (Exact Replica)")
         
         df_card_base = pd.DataFrame(all_live_defects)
         
         if not df_card_base.empty:
-            # --- REAL DATABASE FILTERS ---
             c_f1, c_f2 = st.columns(2)
             inst_list_card = sorted(list(df_card_base['Institution'].unique()))
             with c_f1: sel_inst_card = st.selectbox("🏢 Institution:", ["-- All --"] + inst_list_card, key="card_inst_new")
@@ -1488,10 +1487,8 @@ elif menu == "3. 4D Defect Registry":
             if sel_inst_card != "-- All --": df_card_filtered = df_card_filtered[df_card_filtered['Institution'] == sel_inst_card]
             if c_gen_card != "-- All --": df_card_filtered = df_card_filtered[df_card_filtered['Gender'] == c_gen_card]
 
-            # Create a clean display map for the dropdown
             display_map = {f"{r['Name']} ({r['Institution']})": r for _, r in df_card_filtered.iterrows()}
             
-            # --- STATE MANAGEMENT ---
             if "refer_card_ready" not in st.session_state:
                 st.session_state.refer_card_ready = False
                 
@@ -1501,7 +1498,7 @@ elif menu == "3. 4D Defect Registry":
                 st.write("### ✍️ Team Actions & Notes")
                 action_c1, action_c2 = st.columns(2)
                 with action_c1:
-                    team_remarks = st.text_area("Doctor / Team Remarks (Editable)", placeholder="Add any specific clinical advice or notes here...")
+                    team_remarks = st.text_area("Doctor / Team Remarks (Editable)", placeholder="Add primary treatment notes here...")
                 with action_c2:
                     refer_options = ["DEIC", "CMTC", "SDH", "PHC", "GATHANI HOSPITAL", "JAY AMBE CHAPARDA HOSPITAL"]
                     selected_refer_to = st.selectbox("Referred To (Editable)", refer_options)
@@ -1510,23 +1507,23 @@ elif menu == "3. 4D Defect Registry":
                 
                 if submitted:
                     if sel_c != "-- Select --":
-                        p = display_map[sel_c] # 🚀 GRAB THE REAL CHILD DATA!
+                        p = display_map[sel_c]
                         st.session_state.report_data = {
                             "Name": p.get("Name", ""),
                             "DOB": p.get("DOB", ""), 
                             "Father": p.get("Father", ""),
-                            "Mother": "", # Kept blank for manual entry if needed
-                            "Village": "Visavadar",
+                            "Mother": "", 
+                            "Village": p.get("Village", "Visavadar"),
                             "Gender": p.get("Gender", ""),
                             "Age": get_age(p.get("DOB", "")) if "DOB" in p else "",
                             "Contact": p.get("Contact", ""),
                             "Institution": p.get("Institution", ""),
                             "Date": p.get("Date", str(datetime.date.today().strftime("%d-%m-%Y"))),
                             "Condition": p.get("Condition", ""),
-                            "Height": p.get("Height", ""),
-                            "Weight": p.get("Weight", ""),
-                            "Hb": p.get("Hb", ""),
-                            "MO_Name": "Dr. RBSK MO",
+                            "Height": p.get("Height", "N/A"),
+                            "Weight": p.get("Weight", "N/A"),
+                            "Hb": p.get("Hb", "N/A"),
+                            "MO_Name": "Dr. NIHAR UPADHYAY",
                             "Remarks": team_remarks,
                             "Referred_To": selected_refer_to
                         }
@@ -1535,142 +1532,208 @@ elif menu == "3. 4D Defect Registry":
                         st.warning("Please select a child.")
                         st.session_state.refer_card_ready = False
                         
-            # --- 2. GENERATE PDF OUTSIDE FORM TO PREVENT CRASHES ---
             if st.session_state.refer_card_ready:
-                try:
-                    def generate_gujarati_refer_card(data):
-                        from io import BytesIO
-                        from reportlab.pdfgen import canvas
-                        from reportlab.lib.pagesizes import A4
-                        from reportlab.lib import colors
-                        from reportlab.pdfbase import pdfmetrics
-                        from reportlab.pdfbase.ttfonts import TTFont
-                        import os
+                import os
+                if not os.path.exists("NotoSansGujarati-Regular.ttf"):
+                    st.error("🚨 CRITICAL: 'NotoSansGujarati-Regular.ttf' Font Missing from GitHub!")
+                else:
+                    try:
+                        def generate_gujarati_refer_card(data):
+                            from io import BytesIO
+                            from reportlab.pdfgen import canvas
+                            from reportlab.lib.pagesizes import A4
+                            from reportlab.lib import colors
+                            from reportlab.pdfbase import pdfmetrics
+                            from reportlab.pdfbase.ttfonts import TTFont
 
-                        buffer = BytesIO()
-                        c = canvas.Canvas(buffer, pagesize=A4)
-                        width, height = A4
+                            buffer = BytesIO()
+                            c = canvas.Canvas(buffer, pagesize=A4)
+                            width, height = A4
 
-                        try:
                             pdfmetrics.registerFont(TTFont('Gujarati', 'NotoSansGujarati-Regular.ttf'))
                             font_guj = 'Gujarati'
-                        except:
-                            font_guj = 'Helvetica'
 
-                        c.setLineWidth(1)
-                        c.rect(15, 15, width - 30, height - 30) # Outer border
+                            # Outer Frame
+                            c.setLineWidth(1)
+                            c.rect(15, 15, width - 30, height - 30)
 
-                        # Title Section
-                        c.setFont(font_guj, 12)
-                        c.drawCentredString(width / 2.0, height - 35, "આરોગ્ય અને પરિવાર કલ્યાણ વિભાગ, ગુજરાત સરકાર")
-                        c.setFont(font_guj, 16)
-                        c.drawCentredString(width / 2.0, height - 60, "શાળા આરોગ્ય - રાષ્ટ્રીય બાળ સ્વાસ્થ્ય કાર્યક્રમ RBSK")
-                        c.setFont(font_guj, 14)
-                        c.drawCentredString(width / 2.0, height - 85, "સંદર્ભ કાર્ડ")
-                        c.line(15, height - 95, width - 15, height - 95)
+                            # Header Details (Matches Top Left of Original)
+                            c.setFont(font_guj, 8)
+                            c.drawString(20, height - 25, "G. P. Rjt. Ch-806 03-2025 60000 A4")
 
-                        # 1. બાળકની વિગત (Child Info)
-                        c.setFillColor(colors.lightgrey)
-                        c.rect(15, height - 120, width - 30, 25, fill=1)
-                        c.setFillColor(colors.black)
-                        c.setFont(font_guj, 12)
-                        c.drawString(25, height - 113, "બાળકની વિગત")
+                            # Main Titles
+                            c.setFont(font_guj, 14)
+                            c.drawCentredString(width / 2.0, height - 40, "શાળા આરોગ્ય - રાષ્ટ્રીય બાળ સ્વાસ્થ્ય કાર્યક્રમ RBSK")
+                            c.setFont(font_guj, 16)
+                            c.drawCentredString(width / 2.0, height - 60, "સંદર્ભ કાર્ડ")
+                            c.line(15, height - 70, width - 15, height - 70)
 
-                        y = height - 145
-                        c.setFont(font_guj, 11)
-                        c.drawString(25, y, f"બાળકનું પુરું નામ : {data.get('Name', '')}")
-                        c.drawString(350, y, f"સ્ત્રી/પુરૂષ : {data.get('Gender', '')}")
+                            def draw_checkbox(x, y, label):
+                                """Draws a precise 10x10 empty checkbox exactly like the original form"""
+                                c.rect(x, y, 10, 10)
+                                c.drawString(x + 15, y + 2, label)
 
-                        y -= 25
-                        c.drawString(25, y, f"બાળકની જન્મ તારીખ : {data.get('DOB', '')}")
-                        c.drawString(350, y, f"ઉંમર : {data.get('Age', '')}")
+                            # ==========================================
+                            # SECTION 1: બાળકની વિગત
+                            # ==========================================
+                            y = height - 90
+                            c.setFont(font_guj, 12)
+                            c.drawString(20, y, "બાળકની વિગત")
+                            
+                            c.setFont(font_guj, 10)
+                            y -= 25
+                            c.drawString(20, y, f"બાળકનું પુરું નામ : {data.get('Name', '')}")
+                            c.drawString(320, y, f"સ્ત્રી/પુરૂષ : {data.get('Gender', '')}")
+                            c.drawString(450, y, "આઈ.ડી. નંબર : ________")
 
-                        y -= 25
-                        c.drawString(25, y, f"પિતાનું પુરું નામ : {data.get('Father', '')}")
-                        c.drawString(350, y, f"મોબાઈલ નં. : {data.get('Contact', '')}")
+                            y -= 25
+                            c.drawString(20, y, f"બાળકની જન્મ તારીખ : {data.get('DOB', '')}")
+                            c.drawString(320, y, f"ઉંમર (વર્ષ અને મહિનામાં) : {data.get('Age', '')}")
 
-                        y -= 25
-                        c.drawString(25, y, f"શાળા/આંગણવાડીનું નામ : {data.get('Institution', '')}")
-                        c.drawString(350, y, f"ગામ/શહેર : {data.get('Village', 'Visavadar')}")
+                            y -= 25
+                            c.drawString(20, y, f"બાળકના પિતાનું પુરું નામ : {data.get('Father', '')}")
+                            c.drawString(320, y, f"પિતાનો મોબાઈલ નં. : {data.get('Contact', '')}")
 
-                        y -= 25
-                        c.drawString(25, y, f"ઊંચાઈ : {data.get('Height', '')} cm")
-                        c.drawString(150, y, f"વજન : {data.get('Weight', '')} kg")
-                        c.drawString(280, y, f"HB : {data.get('Hb', '')} g/dL")
+                            y -= 25
+                            c.drawString(20, y, f"ગામ/શહેર: {data.get('Village', '')}")
+                            c.drawString(220, y, "તાલુકો : VISAVADAR")
+                            c.drawString(400, y, "જિલ્લો : JUNAGADH")
 
-                        # 2. પ્રાથમિક તપાસણીની વિગત (Screening Details)
-                        y -= 35
-                        c.setFillColor(colors.lightgrey)
-                        c.rect(15, y - 5, width - 30, 25, fill=1)
-                        c.setFillColor(colors.black)
-                        c.setFont(font_guj, 12)
-                        c.drawString(25, y + 2, "પ્રાથમિક તપાસણીની વિગત")
+                            # Checkbox Row 1
+                            y -= 25
+                            draw_checkbox(20, y, "શાળાએ જતું")
+                            draw_checkbox(120, y, "શાળાને ન જતું")
+                            draw_checkbox(230, y, "આંગણવાડી")
+                            draw_checkbox(330, y, "ડીલીવરી પોઈન્ટ (નવજાત બાળક)")
 
-                        y -= 30
-                        c.setFont(font_guj, 11)
-                        c.drawString(25, y, f"પ્રાથમિક તપાસણી કર્યા તારીખ : {data.get('Date', '')}")
-                        c.drawString(350, y, "RBSK મોબાઈલ હેલ્થ ટીમ નંબર : MHT-1")
+                            y -= 25
+                            c.drawString(20, y, f"શાળા/આંગણવાડીનું નામ : {data.get('Institution', '')}")
+                            c.drawString(320, y, "શાળા/આંગણવાડીનો સંપર્ક નં.: ________")
 
-                        y -= 25
-                        c.drawString(25, y, f"બાળકને જોવા મળેલ તક્લીફ (રોગ/4D) : {data.get('Condition', '')}")
+                            y -= 25
+                            c.drawString(20, y, "શાળા/આંગણવાડીનું પુરું સરનામું : _______________________________________________")
 
-                        y -= 25
-                        c.drawString(25, y, f"પ્રાથમિક તપાસમાં આપેલ સારવાર/નોંધ : {data.get('Remarks', '')}")
+                            y -= 25
+                            c.drawString(20, y, "માતાનું નામ : ____________________")
+                            c.drawString(220, y, "જાતિ :")
+                            draw_checkbox(250, y, "જનરલ")
+                            draw_checkbox(310, y, "SC")
+                            draw_checkbox(360, y, "ST")
+                            draw_checkbox(410, y, "OBC")
 
-                        y -= 25
-                        c.drawString(25, y, f"સંદર્ભ સેવા માટે રીફર કરેલ હોસ્પિટલ : {data.get('Referred_To', '')}")
+                            y -= 25
+                            c.drawString(20, y, "રહેઠાણનું પુરું સરનામું : _______________________________________________________")
 
-                        y -= 45
-                        # Seal and Signature Logic
-                        stamp_x, stamp_y = 60, y - 20
-                        c.setStrokeColor(colors.blue)
-                        c.circle(stamp_x, stamp_y, 35, stroke=1, fill=0)
-                        c.setFont(font_guj, 8)
-                        c.drawCentredString(stamp_x, stamp_y, "RBSK SEAL")
+                            # Checkbox Row 2 (4D)
+                            y -= 25
+                            c.drawString(20, y, "4D :")
+                            draw_checkbox(50, y, "બર્થ ડીફેકટ")
+                            draw_checkbox(140, y, "ડેફિસિએન્સી ડીસીઝ")
+                            draw_checkbox(250, y, "ડેવલોપમેન્ટ-ડિલે/ડિસેબિલિટી")
+                            draw_checkbox(410, y, "અન્ય (વિગતમાં)")
 
-                        sign_path = "sign.jpg"
-                        if os.path.exists(sign_path):
-                            c.drawImage(sign_path, 350, stamp_y - 15, width=80, height=50, preserveAspectRatio=True, mask='auto')
+                            c.line(15, y - 15, width - 15, y - 15)
 
-                        c.setStrokeColor(colors.black)
-                        c.setFont(font_guj, 11)
-                        c.drawString(350, stamp_y - 30, "મેડીકલ ઓફિસર સહી")
-                        c.drawString(350, stamp_y - 45, f"{data.get('MO_Name', '')}")
+                            # ==========================================
+                            # SECTION 2: પ્રાથમિક તપાસણીની વિગત
+                            # ==========================================
+                            y -= 35
+                            c.setFont(font_guj, 12)
+                            c.drawString(20, y, "પ્રાથમિક તપાસણીની વિગત")
 
-                        # 3. સંદર્ભ સેવાની વિગત (Referral Services Details)
-                        y -= 90
-                        c.setFillColor(colors.lightgrey)
-                        c.rect(15, y - 5, width - 30, 25, fill=1)
-                        c.setFillColor(colors.black)
-                        c.setFont(font_guj, 12)
-                        c.drawString(25, y + 2, "સંદર્ભ સેવાની વિગત (સંદર્ભ સેવાના સ્થળે તજજ્ઞ ડોકટરે જ ભરવું.)")
+                            c.setFont(font_guj, 10)
+                            y -= 25
+                            c.drawString(20, y, "RBSK મોબાઈલ હેલ્થ ટીમ નંબર : MHT-1")
+                            c.drawString(320, y, f"પ્રાથમિક તપાસણી કર્યા તારીખ : {data.get('Date', '')}")
 
-                        y -= 30
-                        c.setFont(font_guj, 11)
-                        c.drawString(25, y, "સારવાર આપનાર નિષ્ણાંત તબીબનું નામ : _________________________________")
-                        c.drawString(350, y, "હોદો : __________________")
+                            y -= 25
+                            c.drawString(20, y, f"બાળકને પ્રાથમિક તપાસણીમાં જોવા મળેલ તક્લીફ (રોગ) : {data.get('Condition', '')}")
+                            c.drawString(450, y, f"HT: {data.get('Height', '')} WT: {data.get('Weight', '')}")
 
-                        y -= 35
-                        c.drawString(25, y, "તપાસ અને તારણ : _________________________________________________________________")
-                        y -= 35
-                        c.drawString(25, y, "ફોલોઅપ સર્વિસ : __________________________________________________________________")
+                            y -= 25
+                            c.drawString(20, y, f"પ્રાથમિક તપાસમાં આપેલ સારવાર : {data.get('Remarks', '')}")
 
-                        y -= 50
-                        c.drawString(350, y, "સહી : __________________")
-                        c.drawString(350, y - 20, "હોસ્પિટલ/સંસ્થાનો સિક્કો")
+                            y -= 25
+                            c.drawString(20, y, f"સંદર્ભ સેવા માટે કઈ હોસ્પિટલ / DEIC રીફર કર્યું : {data.get('Referred_To', '')}")
 
-                        c.save()
-                        buffer.seek(0)
-                        return buffer.getvalue()
+                            y -= 25
+                            c.drawString(20, y, f"પ્રાથમિક તપાસ કરનાર તબીબનું નામ : {data.get('MO_Name', '')}")
+                            c.drawString(320, y, "રીફર કરવાનું કારણ : _________________")
 
-                    pdf_bytes = generate_gujarati_refer_card(st.session_state.report_data)
-                    
-                    import base64
-                    b64 = base64.b64encode(pdf_bytes).decode()
-                    st.markdown(f'<a href="data:application/pdf;base64,{b64}" download="ReferCard_{st.session_state.report_data["Name"]}.pdf" style="display:block;padding:12px;background:#2563eb;color:white;text-align:center;font-weight:bold;border-radius:6px;text-decoration:none;">📄 Click Here to Download Gujarati Referral Card PDF</a>', unsafe_allow_html=True)
-                    
-                except Exception as e:
-                    st.error(f"Error generating PDF. Please ensure the 'NotoSansGujarati-Regular.ttf' font file is in your application directory! Details: {e}")
+                            y -= 25
+                            c.drawString(20, y, "હોદ્દો : MEDICAL OFFICER")
+                            c.drawString(320, y, "સંપર્ક નં. : _________________")
+
+                            # 🚀 REAL IMAGE INJECTION FOR SEAL AND SIGNATURE
+                            y -= 20
+                            c.drawString(20, y, "સહી અને સિક્કો :")
+                            
+                            # Real SEAL Injection
+                            seal_path = "SEAL.jpeg"
+                            if os.path.exists(seal_path):
+                                c.drawImage(seal_path, 80, y - 45, width=65, height=65, preserveAspectRatio=True, mask='auto')
+                            else:
+                                c.rect(80, y - 45, 65, 65)
+                                c.drawString(90, y - 15, "SEAL MISSING")
+
+                            # Real Signature Injection
+                            sign_path = "sign.jpg"
+                            if os.path.exists(sign_path):
+                                c.drawImage(sign_path, 350, y - 45, width=90, height=60, preserveAspectRatio=True, mask='auto')
+
+                            c.drawString(350, y - 55, "મેડીકલ ઓફિસર વિસાવદર")
+
+                            c.line(15, y - 75, width - 15, y - 75)
+
+                            # ==========================================
+                            # SECTION 3: સંદર્ભ સેવાની વિગત
+                            # ==========================================
+                            y -= 95
+                            c.setFont(font_guj, 12)
+                            c.drawString(20, y, "સંદર્ભ સેવાની વિગત (સંદર્ભ સેવાના સ્થળે તજજ્ઞ ડોકટરે જ ભરવું.)")
+
+                            c.setFont(font_guj, 10)
+                            y -= 25
+                            c.drawString(20, y, "સારવાર આપનાર નિષ્ણાંત તબીબનું નામ : ________________________________________")
+                            c.drawString(350, y, "હોદો : ________________")
+
+                            y -= 15
+                            c.drawString(20, y, "(સરકારી / ખાનગી / સી. એમ. સેતુ / ચિરંજીવી)")
+                            c.drawString(350, y, "સહી : ________________")
+
+                            y -= 25
+                            c.drawString(20, y, "રિફર કરેલ સ્થળ / સંસ્થા : _____________________________________________________")
+                            
+                            y -= 25
+                            c.drawString(20, y, "તપાસ અને તારણ : ______________________________________________________________")
+                            
+                            y -= 25
+                            c.drawString(20, y, "ફોલોઅપ સર્વિસ : ______________________________________________________________")
+
+                            y -= 25
+                            c.drawString(20, y, "મોબાઈલ હેલ્થ ટીમના તબીબ માટેની સુચના : _________________________________________")
+
+                            y -= 25
+                            c.drawString(20, y, "વધુ સારવારની જરૂર છે : _________________________________________________________")
+                            
+                            c.drawString(400, y - 15, "હોસ્પિટલ/સંસ્થાનો સિક્કો")
+                            
+                            # Footer Elements
+                            c.drawString(20, 20, "સૂચના : વધુ લખાણની જરૂર પડે તો પાછળના પાને લખવું.")
+                            c.drawString(350, 20, "આરોગ્ય અને પરિવાર કલ્યાણ વિભાગ, ગુજરાત સરકાર")
+
+                            c.save()
+                            buffer.seek(0)
+                            return buffer.getvalue()
+
+                        pdf_bytes = generate_gujarati_refer_card(st.session_state.report_data)
+                        
+                        import base64
+                        b64 = base64.b64encode(pdf_bytes).decode()
+                        st.markdown(f'<a href="data:application/pdf;base64,{b64}" download="ReferCard_{st.session_state.report_data["Name"]}.pdf" style="display:block;padding:12px;background:#2563eb;color:white;text-align:center;font-weight:bold;border-radius:6px;text-decoration:none;">📄 Click Here to Download Perfect Replica PDF</a>', unsafe_allow_html=True)
+                        
+                    except Exception as e:
+                        st.error(f"Error generating PDF. Details: {e}")
         else:
             st.info("No children found in the live registry matching your filters today.")
 # ==========================================
