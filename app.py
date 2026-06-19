@@ -1471,173 +1471,190 @@ elif menu == "3. 4D Defect Registry":
                          use_container_width=True, hide_index=True)
         else: st.info("No defects screened today.")
 
-    # 🪪 TAB 4: REFER CARD PRINT
-    with tab_card:
-        st.subheader("🪪 Official Refer Card Center")
-        df_card_base = pd.DataFrame(all_live_defects)
+   # 🚀 NEW: OFFICIAL GUJARATI REFER CARD GENERATOR
+    with t_print:
+        st.subheader("🪪 Official Refer Card Center (Gujarati Format)")
         
-        if not df_card_base.empty:
-            c_f1, c_f2 = st.columns(2)
-            inst_list_card = sorted(list(df_card_base['Institution'].unique()))
-            with c_f1: sel_inst_card = st.selectbox("🏢 Institution:", ["-- All --"] + inst_list_card, key="card_inst")
-            with c_f2: c_gen_card = st.selectbox("⚖️ Gender:", ["-- All --", "Male", "Female"], key="card_gen")
-
-            df_card_filtered = df_card_base.copy()
-            if sel_inst_card != "-- All --": df_card_filtered = df_card_filtered[df_card_filtered['Institution'] == sel_inst_card]
-            if c_gen_card != "-- All --": df_card_filtered = df_card_filtered[df_card_filtered['Gender'] == c_gen_card]
-
-            display_map = {f"{r['Name']} ({r['Institution']})": r for _, r in df_card_filtered.iterrows()}
-            sel_c = st.selectbox("Select Child to Print:", ["-- Select --"] + sorted(list(display_map.keys())))
+        # 1. State Management for the PDF Data
+        if "refer_card_ready" not in st.session_state:
+            st.session_state.refer_card_ready = False
             
-            if sel_c != "-- Select --":
-                p = display_map[sel_c]
+        with st.form("refer_card_form"):
+            sample_children = ["John Doe - SAM", "Jane Smith - Anemia"] 
+            selected_ref = st.selectbox("Select Child to Print Card:", ["-- Select --"] + sample_children, key="print_child_select")
+            
+            st.write("### ✍️ Team Actions & Notes")
+            action_c1, action_c2 = st.columns(2)
+            with action_c1:
+                team_remarks = st.text_area("Doctor / Team Remarks (Editable)", placeholder="Add any specific clinical advice or notes here...")
+            with action_c2:
+                refer_options = ["DEIC", "CMTC", "SDH", "PHC", "GATHANI HOSPITAL", "JAY AMBE CHAPARDA HOSPITAL"]
+                selected_refer_to = st.selectbox("Referred To (Editable)", refer_options)
+            
+            submitted = st.form_submit_button("🖨️ Prepare Print Card")
+            
+            if submitted:
+                if selected_ref != "-- Select --":
+                    st.session_state.report_data = {
+                        "Name": selected_ref.split(" - ")[0],
+                        "DOB": "15-08-2018", 
+                        "Father": "Ramesh Patel",
+                        "Mother": "Geeta Patel",
+                        "Village": "Visavadar",
+                        "Gender": "Male",
+                        "Age": "8 Years",
+                        "Contact": "9876543210",
+                        "Institution": "Primary School Visavadar",
+                        "Date": str(datetime.date.today().strftime("%d-%m-%Y")),
+                        "Condition": selected_ref.split(" - ")[1],
+                        "Height": "115.5",
+                        "Weight": "18.2",
+                        "Hb": "10.5",
+                        "MO_Name": "Dr. RBSK MO",
+                        "Remarks": team_remarks,
+                        "Referred_To": selected_refer_to
+                    }
+                    st.session_state.refer_card_ready = True
+                else:
+                    st.warning("Please select a child.")
+                    st.session_state.refer_card_ready = False
+                    
+        # 2. GENERATE PDF OUTSIDE FORM TO PREVENT CRASHES
+        if st.session_state.refer_card_ready:
+            try:
+                def generate_gujarati_refer_card(data):
+                    from io import BytesIO
+                    from reportlab.pdfgen import canvas
+                    from reportlab.lib.pagesizes import A4
+                    from reportlab.lib import colors
+                    from reportlab.pdfbase import pdfmetrics
+                    from reportlab.pdfbase.ttfonts import TTFont
+                    import os
+
+                    buffer = BytesIO()
+                    c = canvas.Canvas(buffer, pagesize=A4)
+                    width, height = A4
+
+                    try:
+                        pdfmetrics.registerFont(TTFont('Gujarati', 'NotoSansGujarati-Regular.ttf'))
+                        font_guj = 'Gujarati'
+                    except:
+                        font_guj = 'Helvetica'
+
+                    c.setLineWidth(1)
+                    c.rect(15, 15, width - 30, height - 30) # Outer border
+
+                    # Title Section
+                    c.setFont(font_guj, 12)
+                    c.drawCentredString(width / 2.0, height - 35, "આરોગ્ય અને પરિવાર કલ્યાણ વિભાગ, ગુજરાત સરકાર")
+                    c.setFont(font_guj, 16)
+                    c.drawCentredString(width / 2.0, height - 60, "શાળા આરોગ્ય - રાષ્ટ્રીય બાળ સ્વાસ્થ્ય કાર્યક્રમ RBSK")
+                    c.setFont(font_guj, 14)
+                    c.drawCentredString(width / 2.0, height - 85, "સંદર્ભ કાર્ડ")
+                    c.line(15, height - 95, width - 15, height - 95)
+
+                    # 1. બાળકની વિગત (Child Info)
+                    c.setFillColor(colors.lightgrey)
+                    c.rect(15, height - 120, width - 30, 25, fill=1)
+                    c.setFillColor(colors.black)
+                    c.setFont(font_guj, 12)
+                    c.drawString(25, height - 113, "બાળકની વિગત")
+
+                    y = height - 145
+                    c.setFont(font_guj, 11)
+                    c.drawString(25, y, f"બાળકનું પુરું નામ : {data.get('Name', '')}")
+                    c.drawString(350, y, f"સ્ત્રી/પુરૂષ : {data.get('Gender', '')}")
+
+                    y -= 25
+                    c.drawString(25, y, f"બાળકની જન્મ તારીખ : {data.get('DOB', '')}")
+                    c.drawString(350, y, f"ઉંમર : {data.get('Age', '')}")
+
+                    y -= 25
+                    c.drawString(25, y, f"પિતાનું પુરું નામ : {data.get('Father', '')}")
+                    c.drawString(350, y, f"મોબાઈલ નં. : {data.get('Contact', '')}")
+
+                    y -= 25
+                    c.drawString(25, y, f"શાળા/આંગણવાડીનું નામ : {data.get('Institution', '')}")
+                    c.drawString(350, y, f"ગામ/શહેર : {data.get('Village', 'Visavadar')}")
+
+                    y -= 25
+                    c.drawString(25, y, f"ઊંચાઈ : {data.get('Height', '')} cm")
+                    c.drawString(150, y, f"વજન : {data.get('Weight', '')} kg")
+                    c.drawString(280, y, f"HB : {data.get('Hb', '')} g/dL")
+
+                    # 2. પ્રાથમિક તપાસણીની વિગત (Screening Details)
+                    y -= 35
+                    c.setFillColor(colors.lightgrey)
+                    c.rect(15, y - 5, width - 30, 25, fill=1)
+                    c.setFillColor(colors.black)
+                    c.setFont(font_guj, 12)
+                    c.drawString(25, y + 2, "પ્રાથમિક તપાસણીની વિગત")
+
+                    y -= 30
+                    c.setFont(font_guj, 11)
+                    c.drawString(25, y, f"પ્રાથમિક તપાસણી કર્યા તારીખ : {data.get('Date', '')}")
+                    c.drawString(350, y, "RBSK મોબાઈલ હેલ્થ ટીમ નંબર : MHT-1")
+
+                    y -= 25
+                    c.drawString(25, y, f"બાળકને જોવા મળેલ તક્લીફ (રોગ/4D) : {data.get('Condition', '')}")
+
+                    y -= 25
+                    c.drawString(25, y, f"પ્રાથમિક તપાસમાં આપેલ સારવાર/નોંધ : {data.get('Remarks', '')}")
+
+                    y -= 25
+                    c.drawString(25, y, f"સંદર્ભ સેવા માટે રીફર કરેલ હોસ્પિટલ : {data.get('Referred_To', '')}")
+
+                    y -= 45
+                    # Seal and Signature Logic
+                    stamp_x, stamp_y = 60, y - 20
+                    c.setStrokeColor(colors.blue)
+                    c.circle(stamp_x, stamp_y, 35, stroke=1, fill=0)
+                    c.setFont(font_guj, 8)
+                    c.drawCentredString(stamp_x, stamp_y, "RBSK SEAL")
+
+                    sign_path = "sign.jpg"
+                    if os.path.exists(sign_path):
+                        c.drawImage(sign_path, 350, stamp_y - 15, width=80, height=50, preserveAspectRatio=True, mask='auto')
+
+                    c.setStrokeColor(colors.black)
+                    c.setFont(font_guj, 11)
+                    c.drawString(350, stamp_y - 30, "મેડીકલ ઓફિસર સહી")
+                    c.drawString(350, stamp_y - 45, f"{data.get('MO_Name', '')}")
+
+                    # 3. સંદર્ભ સેવાની વિગત (Referral Services Details - Blank for specialist)
+                    y -= 90
+                    c.setFillColor(colors.lightgrey)
+                    c.rect(15, y - 5, width - 30, 25, fill=1)
+                    c.setFillColor(colors.black)
+                    c.setFont(font_guj, 12)
+                    c.drawString(25, y + 2, "સંદર્ભ સેવાની વિગત (સંદર્ભ સેવાના સ્થળે તજજ્ઞ ડોકટરે જ ભરવું.)")
+
+                    y -= 30
+                    c.setFont(font_guj, 11)
+                    c.drawString(25, y, "સારવાર આપનાર નિષ્ણાંત તબીબનું નામ : _________________________________")
+                    c.drawString(350, y, "હોદો : __________________")
+
+                    y -= 35
+                    c.drawString(25, y, "તપાસ અને તારણ : _________________________________________________________________")
+                    y -= 35
+                    c.drawString(25, y, "ફોલોઅપ સર્વિસ : __________________________________________________________________")
+
+                    y -= 50
+                    c.drawString(350, y, "સહી : __________________")
+                    c.drawString(350, y - 20, "હોસ્પિટલ/સંસ્થાનો સિક્કો")
+
+                    c.save()
+                    buffer.seek(0)
+                    return buffer.getvalue()
+
+                pdf_bytes = generate_gujarati_refer_card(st.session_state.report_data)
                 
-                with st.form("print_refer_final"):
-                    st.write(f"### 📋 Auto-Filled Screening Details for {p['Name']}")
-                    st.caption("Data is pulled directly from the screening sheet. Please verify and add remarks.")
-                    
-                    r1_1, r1_2, r1_3 = st.columns(3)
-                    with r1_1: st.text_input("Screening Date", value=p['Date'], disabled=True)
-                    with r1_2: st.text_input("Institution", value=p['Institution'], disabled=True)
-                    with r1_3: st.text_input("Gender", value=p['Gender'], disabled=True)
-                    
-                    r2_1, r2_2, r2_3 = st.columns(3)
-                    with r2_1: st.text_input("DOB", value=p['DOB'], disabled=True)
-                    with r2_2: st.text_input("Father Name", value=p['Father'], disabled=True)
-                    with r2_3: st.text_input("Contact", value=p['Contact'], disabled=True)
-                    
-                    r3_1, r3_2, r3_3 = st.columns(3)
-                    with r3_1: st.text_input("Height (cm)", value=p.get('Height', 'N/A'), disabled=True)
-                    with r3_2: st.text_input("Weight (kg)", value=p.get('Weight', 'N/A'), disabled=True)
-                    with r3_3: st.text_input("Hb (g/dL)", value=p.get('Hb', 'N/A'), disabled=True)
-                    
-                    r4_1, r4_2 = st.columns(2)
-                    with r4_1: st.text_input("MUAC (Anganwadi)", value=p.get('MUAC', 'N/A'), disabled=True)
-                    with r4_2: st.text_input("Class (School)", value=p.get('Class', 'N/A'), disabled=True)
-                    
-                    st.text_area("Diseases / Conditions Found", value=p['Condition'], disabled=True)
-                    
-                    st.divider()
-                    st.write("### ✍️ Team Actions")
-                    
-                    action_c1, action_c2 = st.columns(2)
-                    with action_c1:
-                        team_remarks = st.text_area("Doctor / Team Remarks (Editable)", placeholder="Add any specific clinical advice or notes here...")
-                    with action_c2:
-                        refer_options = ["DEIC", "CMTC", "SDH", "PHC", "GATHANI HOSPITAL", "JAY AMBE CHAPARDA HOSPITAL"]
-                        selected_refer_to = st.selectbox("Referred To (Editable)", refer_options)
-                    
-                    if st.form_submit_button("🖨️ Generate Professional PDF Refer Card"):
-                        
-                        def generate_enhanced_refer_card(data):
-                            try:
-                                from fpdf import FPDF
-                                import os
-                                pdf = FPDF()
-                                pdf.add_page()
-                                
-                                # Header
-                                pdf.set_font("Arial", 'B', 16)
-                                pdf.cell(0, 10, "RASHTRIYA BAL SWASTHYA KARYAKRAM (RBSK)", ln=True, align='C')
-                                pdf.set_font("Arial", 'B', 12)
-                                pdf.cell(0, 10, "Official Clinical Referral & Case Management Card", ln=True, align='C')
-                                pdf.ln(5)
-                                
-                                def add_row(col1, val1, col2, val2):
-                                    pdf.set_font("Arial", 'B', 10)
-                                    pdf.cell(40, 8, col1, border=1)
-                                    pdf.set_font("Arial", '', 10)
-                                    pdf.cell(55, 8, str(val1), border=1)
-                                    pdf.set_font("Arial", 'B', 10)
-                                    pdf.cell(40, 8, col2, border=1)
-                                    pdf.set_font("Arial", '', 10)
-                                    pdf.cell(55, 8, str(val2), border=1, ln=True)
-
-                                # Section 1. Demographics
-                                pdf.set_fill_color(220, 230, 245)
-                                pdf.set_font("Arial", 'B', 11)
-                                pdf.cell(0, 8, " 1. Child Demographics & Details", border=1, fill=True, ln=True)
-                                add_row("Name:", data.get('Name', 'N/A'), "Gender:", data.get('Gender', 'N/A'))
-                                add_row("DOB / Age:", f"{data.get('DOB', 'N/A')} ({get_age(data.get('DOB', ''))})", "Father Name:", data.get('Father', 'N/A'))
-                                add_row("Institution:", data.get('Institution', 'N/A'), "Contact No:", data.get('Contact', 'N/A'))
-                                add_row("Screening Date:", data.get('Date', 'N/A'), "Class / Team:", f"{data.get('Class', 'N/A')} / {data.get('Team', 'N/A')}")
-                                pdf.ln(5)
-
-                                # Section 2. Vitals
-                                pdf.set_font("Arial", 'B', 11)
-                                pdf.cell(0, 8, " 2. Screening Vitals & Anthropometry", border=1, fill=True, ln=True)
-                                add_row("Height (cm):", data.get('Height', 'N/A'), "Weight (kg):", data.get('Weight', 'N/A'))
-                                add_row("Hemoglobin (Hb):", data.get('Hb', 'N/A'), "MUAC (AW):", data.get('MUAC', 'N/A'))
-                                pdf.ln(5)
-
-                                # Section 3. Clinical
-                                pdf.set_font("Arial", 'B', 11)
-                                pdf.cell(0, 8, " 3. Clinical Diagnosis & Team Remarks", border=1, fill=True, ln=True)
-                                pdf.set_font("Arial", 'B', 10)
-                                pdf.cell(40, 14, "Conditions / 4D:", border=1)
-                                pdf.set_font("Arial", '', 10)
-                                pdf.multi_cell(150, 14, str(data.get('Condition', 'N/A')), border=1)
-                                
-                                pdf.set_font("Arial", 'B', 10)
-                                pdf.cell(40, 14, "Team Remarks:", border=1)
-                                pdf.set_font("Arial", '', 10)
-                                pdf.multi_cell(150, 14, str(team_remarks if team_remarks else 'No remarks provided.'), border=1)
-                                pdf.ln(5)
-
-                                # Section 4. Referral Action
-                                pdf.set_font("Arial", 'B', 11)
-                                pdf.cell(0, 8, " 4. Referral Action", border=1, fill=True, ln=True)
-                                add_row("Referred To:", selected_refer_to, "Medical Officer:", "Dr. NIHAR UPADHYAY")
-                                
-                                # 🚀 RE-INTEGRATED: Signature and Seal
-                                pdf.ln(10)
-                                y_pos = pdf.get_y()
-                                
-                                seal_path = "SEAL.jpeg" 
-                                sign_path = "sign.jpg"
-                                
-                                if os.path.exists(seal_path):
-                                    try:
-                                        pdf.image(seal_path, x=30, y=y_pos, w=25)
-                                    except Exception as e:
-                                        st.warning(f"⚠️ Found {seal_path} but couldn't load it: {e}")
-                                else:
-                                    st.warning(f"⚠️ Could not find {seal_path} in the app directory.")
-
-                                if os.path.exists(sign_path):
-                                    try:
-                                        pdf.image(sign_path, x=150, y=y_pos, w=30)
-                                    except Exception as e:
-                                        st.warning(f"⚠️ Found {sign_path} but couldn't load it: {e}")
-                                else:
-                                    st.warning(f"⚠️ Could not find {sign_path} in the app directory.")
-                                
-                                pdf.set_y(y_pos + 25)
-                                pdf.set_font("Arial", 'B', 10)
-                                pdf.cell(80, 5, "Official Seal", align='C')
-                                pdf.cell(110, 5, "Medical Officer Signature", align='R', ln=True)
-
-                                # Footer
-                                pdf.ln(10)
-                                pdf.set_font("Arial", 'I', 9)
-                                pdf.cell(0, 10, "Authorized by RBSK Health Department. Generated Electronically.", align='C')
-
-                                pdf_out = pdf.output()
-                                if type(pdf_out) == str:
-                                    return pdf_out.encode('latin1')
-                                else:
-                                    return bytes(pdf_out)
-                                    
-                            except Exception as e:
-                                st.error(f"Error generating PDF: {e}")
-                                return b""
-
-                        pdf_b = generate_enhanced_refer_card(p)
-                        if pdf_b:
-                            import base64
-                            b64 = base64.b64encode(pdf_b).decode()
-                            st.markdown(f'<a href="data:application/pdf;base64,{b64}" download="Refer_{p["Name"]}.pdf" style="display:block;padding:12px;background:#2563eb;color:white;text-align:center;font-weight:bold;border-radius:6px;text-decoration:none;">📄 Click Here to Download PDF Referral Card</a>', unsafe_allow_html=True)
-        else: st.warning("No children available to print cards matching current filters.")
+                import base64
+                b64 = base64.b64encode(pdf_bytes).decode()
+                st.markdown(f'<a href="data:application/pdf;base64,{b64}" download="ReferCard_{st.session_state.report_data["Name"]}.pdf" style="display:block;padding:12px;background:#2563eb;color:white;text-align:center;font-weight:bold;border-radius:6px;text-decoration:none;">📄 Click Here to Download Gujarati Referral Card PDF</a>', unsafe_allow_html=True)
+                
+            except Exception as e:
+                st.error(f"Error generating PDF. Please ensure the 'NotoSansGujarati-Regular.ttf' font file is in your application directory! Details: {e}")
 # ==========================================
 # MODULE 4: VISUAL ANALYSIS
 # ==========================================
