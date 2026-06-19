@@ -1473,7 +1473,7 @@ elif menu == "3. 4D Defect Registry":
 
    # 🪪 TAB 4: REFER CARD PRINT (GUJARATI)
     with tab_card:
-        st.subheader("🪪 Official Refer Card Center (Exact Replica)")
+        st.subheader("🪪 Official Refer Card Center (Perfect Gujarati)")
         
         df_card_base = pd.DataFrame(all_live_defects)
         
@@ -1539,192 +1539,183 @@ elif menu == "3. 4D Defect Registry":
                 else:
                     try:
                         def generate_gujarati_refer_card(data):
-                            from io import BytesIO
-                            from reportlab.pdfgen import canvas
-                            from reportlab.lib.pagesizes import A4
-                            from reportlab.lib import colors
-                            from reportlab.pdfbase import pdfmetrics
-                            from reportlab.pdfbase.ttfonts import TTFont
-
-                            buffer = BytesIO()
-                            c = canvas.Canvas(buffer, pagesize=A4)
-                            width, height = A4
-
-                            pdfmetrics.registerFont(TTFont('Gujarati', 'NotoSansGujarati-Regular.ttf'))
-                            font_guj = 'Gujarati'
-
-                            # Outer Frame
-                            c.setLineWidth(1)
-                            c.rect(15, 15, width - 30, height - 30)
-
-                            # Header Details (Matches Top Left of Original)
-                            c.setFont(font_guj, 8)
-                            c.drawString(20, height - 25, "G. P. Rjt. Ch-806 03-2025 60000 A4")
-
-                            # Main Titles
-                            c.setFont(font_guj, 14)
-                            c.drawCentredString(width / 2.0, height - 40, "શાળા આરોગ્ય - રાષ્ટ્રીય બાળ સ્વાસ્થ્ય કાર્યક્રમ RBSK")
-                            c.setFont(font_guj, 16)
-                            c.drawCentredString(width / 2.0, height - 60, "સંદર્ભ કાર્ડ")
-                            c.line(15, height - 70, width - 15, height - 70)
-
-                            def draw_checkbox(x, y, label):
-                                """Draws a precise 10x10 empty checkbox exactly like the original form"""
-                                c.rect(x, y, 10, 10)
-                                c.drawString(x + 15, y + 2, label)
-
-                            # ==========================================
-                            # SECTION 1: બાળકની વિગત
-                            # ==========================================
-                            y = height - 90
-                            c.setFont(font_guj, 12)
-                            c.drawString(20, y, "બાળકની વિગત")
+                            from fpdf import FPDF
                             
-                            c.setFont(font_guj, 10)
-                            y -= 25
-                            c.drawString(20, y, f"બાળકનું પુરું નામ : {data.get('Name', '')}")
-                            c.drawString(320, y, f"સ્ત્રી/પુરૂષ : {data.get('Gender', '')}")
-                            c.drawString(450, y, "આઈ.ડી. નંબર : ________")
-
-                            y -= 25
-                            c.drawString(20, y, f"બાળકની જન્મ તારીખ : {data.get('DOB', '')}")
-                            c.drawString(320, y, f"ઉંમર (વર્ષ અને મહિનામાં) : {data.get('Age', '')}")
-
-                            y -= 25
-                            c.drawString(20, y, f"બાળકના પિતાનું પુરું નામ : {data.get('Father', '')}")
-                            c.drawString(320, y, f"પિતાનો મોબાઈલ નં. : {data.get('Contact', '')}")
-
-                            y -= 25
-                            c.drawString(20, y, f"ગામ/શહેર: {data.get('Village', '')}")
-                            c.drawString(220, y, "તાલુકો : VISAVADAR")
-                            c.drawString(400, y, "જિલ્લો : JUNAGADH")
-
-                            # Checkbox Row 1
-                            y -= 25
+                            # Use FPDF2 Engine for perfect text shaping
+                            pdf = FPDF(unit='pt', format='A4')
+                            pdf.add_page()
+                            
+                            # Native Gujarati Text Shaping!
+                            pdf.add_font('Gujarati', '', 'NotoSansGujarati-Regular.ttf')
+                            
+                            # Outer Border
+                            pdf.set_line_width(1)
+                            pdf.rect(15, 15, 595.27 - 30, 841.89 - 30)
+                            
+                            # Header
+                            pdf.set_font('Gujarati', '', 8)
+                            pdf.text(20, 30, "G. P. Rjt. Ch-806 03-2025 60000 A4")
+                            
+                            pdf.set_font('Gujarati', '', 14)
+                            pdf.set_xy(0, 45)
+                            pdf.cell(595.27, 10, "શાળા આરોગ્ય - રાષ્ટ્રીય બાળ સ્વાસ્થ્ય કાર્યક્રમ RBSK", align='C')
+                            
+                            pdf.set_font('Gujarati', '', 16)
+                            pdf.set_xy(0, 70)
+                            pdf.cell(595.27, 10, "સંદર્ભ કાર્ડ", align='C')
+                            
+                            pdf.line(15, 85, 595.27 - 15, 85)
+                            
+                            # --- 1. બાળકની વિગત ---
+                            pdf.set_fill_color(220, 220, 220)
+                            pdf.rect(15, 95, 595.27 - 30, 25, style='F')
+                            pdf.set_font('Gujarati', '', 12)
+                            pdf.text(25, 112, "બાળકની વિગત")
+                            
+                            pdf.set_font('Gujarati', '', 10)
+                            y = 145
+                            pdf.text(20, y, f"બાળકનું પુરું નામ : {data.get('Name', '')}")
+                            pdf.text(320, y, f"સ્ત્રી/પુરૂષ : {data.get('Gender', '')}")
+                            pdf.text(450, y, "આઈ.ડી. નંબર : ________")
+                            
+                            y += 25
+                            pdf.text(20, y, f"બાળકની જન્મ તારીખ : {data.get('DOB', '')}")
+                            pdf.text(320, y, f"ઉંમર (વર્ષ અને મહિનામાં) : {data.get('Age', '')}")
+                            
+                            y += 25
+                            pdf.text(20, y, f"બાળકના પિતાનું પુરું નામ : {data.get('Father', '')}")
+                            pdf.text(320, y, f"પિતાનો મોબાઈલ નં. : {data.get('Contact', '')}")
+                            
+                            y += 25
+                            pdf.text(20, y, f"ગામ/શહેર: {data.get('Village', '')}")
+                            pdf.text(220, y, "તાલુકો : VISAVADAR")
+                            pdf.text(400, y, "જિલ્લો : JUNAGADH")
+                            
+                            y += 25
+                            def draw_checkbox(x, y_pos, label):
+                                pdf.rect(x, y_pos - 10, 10, 10)
+                                pdf.text(x + 15, y_pos, label)
+                                
                             draw_checkbox(20, y, "શાળાએ જતું")
                             draw_checkbox(120, y, "શાળાને ન જતું")
                             draw_checkbox(230, y, "આંગણવાડી")
                             draw_checkbox(330, y, "ડીલીવરી પોઈન્ટ (નવજાત બાળક)")
-
-                            y -= 25
-                            c.drawString(20, y, f"શાળા/આંગણવાડીનું નામ : {data.get('Institution', '')}")
-                            c.drawString(320, y, "શાળા/આંગણવાડીનો સંપર્ક નં.: ________")
-
-                            y -= 25
-                            c.drawString(20, y, "શાળા/આંગણવાડીનું પુરું સરનામું : _______________________________________________")
-
-                            y -= 25
-                            c.drawString(20, y, "માતાનું નામ : ____________________")
-                            c.drawString(220, y, "જાતિ :")
+                            
+                            y += 25
+                            pdf.text(20, y, f"શાળા/આંગણવાડીનું નામ : {data.get('Institution', '')}")
+                            pdf.text(320, y, "શાળા/આંગણવાડીનો સંપર્ક નં.: ________")
+                            
+                            y += 25
+                            pdf.text(20, y, "શાળા/આંગણવાડીનું પુરું સરનામું : _______________________________________________")
+                            
+                            y += 25
+                            pdf.text(20, y, "માતાનું નામ : ____________________")
+                            pdf.text(220, y, "જાતિ :")
                             draw_checkbox(250, y, "જનરલ")
                             draw_checkbox(310, y, "SC")
                             draw_checkbox(360, y, "ST")
                             draw_checkbox(410, y, "OBC")
-
-                            y -= 25
-                            c.drawString(20, y, "રહેઠાણનું પુરું સરનામું : _______________________________________________________")
-
-                            # Checkbox Row 2 (4D)
-                            y -= 25
-                            c.drawString(20, y, "4D :")
+                            
+                            y += 25
+                            pdf.text(20, y, "રહેઠાણનું પુરું સરનામું : _______________________________________________________")
+                            
+                            y += 25
+                            pdf.text(20, y, "4D :")
                             draw_checkbox(50, y, "બર્થ ડીફેકટ")
                             draw_checkbox(140, y, "ડેફિસિએન્સી ડીસીઝ")
                             draw_checkbox(250, y, "ડેવલોપમેન્ટ-ડિલે/ડિસેબિલિટી")
                             draw_checkbox(410, y, "અન્ય (વિગતમાં)")
-
-                            c.line(15, y - 15, width - 15, y - 15)
-
-                            # ==========================================
-                            # SECTION 2: પ્રાથમિક તપાસણીની વિગત
-                            # ==========================================
-                            y -= 35
-                            c.setFont(font_guj, 12)
-                            c.drawString(20, y, "પ્રાથમિક તપાસણીની વિગત")
-
-                            c.setFont(font_guj, 10)
-                            y -= 25
-                            c.drawString(20, y, "RBSK મોબાઈલ હેલ્થ ટીમ નંબર : MHT-1")
-                            c.drawString(320, y, f"પ્રાથમિક તપાસણી કર્યા તારીખ : {data.get('Date', '')}")
-
-                            y -= 25
-                            c.drawString(20, y, f"બાળકને પ્રાથમિક તપાસણીમાં જોવા મળેલ તક્લીફ (રોગ) : {data.get('Condition', '')}")
-                            c.drawString(450, y, f"HT: {data.get('Height', '')} WT: {data.get('Weight', '')}")
-
-                            y -= 25
-                            c.drawString(20, y, f"પ્રાથમિક તપાસમાં આપેલ સારવાર : {data.get('Remarks', '')}")
-
-                            y -= 25
-                            c.drawString(20, y, f"સંદર્ભ સેવા માટે કઈ હોસ્પિટલ / DEIC રીફર કર્યું : {data.get('Referred_To', '')}")
-
-                            y -= 25
-                            c.drawString(20, y, f"પ્રાથમિક તપાસ કરનાર તબીબનું નામ : {data.get('MO_Name', '')}")
-                            c.drawString(320, y, "રીફર કરવાનું કારણ : _________________")
-
-                            y -= 25
-                            c.drawString(20, y, "હોદ્દો : MEDICAL OFFICER")
-                            c.drawString(320, y, "સંપર્ક નં. : _________________")
-
-                            # 🚀 REAL IMAGE INJECTION FOR SEAL AND SIGNATURE
-                            y -= 20
-                            c.drawString(20, y, "સહી અને સિક્કો :")
                             
-                            # Real SEAL Injection
+                            pdf.line(15, y + 15, 595.27 - 15, y + 15)
+                            
+                            # --- 2. પ્રાથમિક તપાસણીની વિગત ---
+                            y += 25
+                            pdf.set_fill_color(220, 220, 220)
+                            pdf.rect(15, y, 595.27 - 30, 25, style='F')
+                            pdf.set_font('Gujarati', '', 12)
+                            pdf.text(25, y + 17, "પ્રાથમિક તપાસણીની વિગત")
+                            
+                            pdf.set_font('Gujarati', '', 10)
+                            y += 45
+                            pdf.text(20, y, "RBSK મોબાઈલ હેલ્થ ટીમ નંબર : MHT-1")
+                            pdf.text(320, y, f"પ્રાથમિક તપાસણી કર્યા તારીખ : {data.get('Date', '')}")
+                            
+                            y += 25
+                            pdf.text(20, y, f"બાળકને પ્રાથમિક તપાસણીમાં જોવા મળેલ તક્લીફ (રોગ/4D) : {data.get('Condition', '')}")
+                            pdf.text(430, y, f"HT: {data.get('Height', '')}  WT: {data.get('Weight', '')}")
+                            
+                            y += 25
+                            pdf.text(20, y, f"પ્રાથમિક તપાસમાં આપેલ સારવાર : {data.get('Remarks', '')}")
+                            
+                            y += 25
+                            pdf.text(20, y, f"સંદર્ભ સેવા માટે કઈ હોસ્પિટલ / DEIC રીફર કર્યું : {data.get('Referred_To', '')}")
+                            
+                            y += 25
+                            pdf.text(20, y, f"પ્રાથમિક તપાસ કરનાર તબીબનું નામ : {data.get('MO_Name', '')}")
+                            pdf.text(320, y, "રીફર કરવાનું કારણ : _________________")
+                            
+                            y += 25
+                            pdf.text(20, y, "હોદ્દો : MEDICAL OFFICER")
+                            pdf.text(320, y, "સંપર્ક નં. : _________________")
+                            
+                            y += 25
+                            pdf.text(20, y, "સહી અને સિક્કો :")
+                            
+                            # SEAL and SIGNATURE Logic
                             seal_path = "SEAL.jpeg"
                             if os.path.exists(seal_path):
-                                c.drawImage(seal_path, 80, y - 45, width=65, height=65, preserveAspectRatio=True, mask='auto')
+                                pdf.image(seal_path, x=80, y=y, w=65)
                             else:
-                                c.rect(80, y - 45, 65, 65)
-                                c.drawString(90, y - 15, "SEAL MISSING")
-
-                            # Real Signature Injection
+                                pdf.rect(80, y, 65, 65)
+                                pdf.text(90, y + 30, "SEAL")
+                                
                             sign_path = "sign.jpg"
                             if os.path.exists(sign_path):
-                                c.drawImage(sign_path, 350, y - 45, width=90, height=60, preserveAspectRatio=True, mask='auto')
-
-                            c.drawString(350, y - 55, "મેડીકલ ઓફિસર વિસાવદર")
-
-                            c.line(15, y - 75, width - 15, y - 75)
-
-                            # ==========================================
-                            # SECTION 3: સંદર્ભ સેવાની વિગત
-                            # ==========================================
-                            y -= 95
-                            c.setFont(font_guj, 12)
-                            c.drawString(20, y, "સંદર્ભ સેવાની વિગત (સંદર્ભ સેવાના સ્થળે તજજ્ઞ ડોકટરે જ ભરવું.)")
-
-                            c.setFont(font_guj, 10)
-                            y -= 25
-                            c.drawString(20, y, "સારવાર આપનાર નિષ્ણાંત તબીબનું નામ : ________________________________________")
-                            c.drawString(350, y, "હોદો : ________________")
-
-                            y -= 15
-                            c.drawString(20, y, "(સરકારી / ખાનગી / સી. એમ. સેતુ / ચિરંજીવી)")
-                            c.drawString(350, y, "સહી : ________________")
-
-                            y -= 25
-                            c.drawString(20, y, "રિફર કરેલ સ્થળ / સંસ્થા : _____________________________________________________")
+                                pdf.image(sign_path, x=350, y=y, w=90)
+                                
+                            pdf.text(350, y + 70, "મેડીકલ ઓફિસર વિસાવદર")
                             
-                            y -= 25
-                            c.drawString(20, y, "તપાસ અને તારણ : ______________________________________________________________")
+                            y += 85
+                            pdf.line(15, y, 595.27 - 15, y)
                             
-                            y -= 25
-                            c.drawString(20, y, "ફોલોઅપ સર્વિસ : ______________________________________________________________")
-
-                            y -= 25
-                            c.drawString(20, y, "મોબાઈલ હેલ્થ ટીમના તબીબ માટેની સુચના : _________________________________________")
-
-                            y -= 25
-                            c.drawString(20, y, "વધુ સારવારની જરૂર છે : _________________________________________________________")
+                            # --- 3. સંદર્ભ સેવાની વિગત ---
+                            y += 10
+                            pdf.set_fill_color(220, 220, 220)
+                            pdf.rect(15, y, 595.27 - 30, 25, style='F')
+                            pdf.set_font('Gujarati', '', 12)
+                            pdf.text(25, y + 17, "સંદર્ભ સેવાની વિગત (સંદર્ભ સેવાના સ્થળે તજજ્ઞ ડોકટરે જ ભરવું.)")
                             
-                            c.drawString(400, y - 15, "હોસ્પિટલ/સંસ્થાનો સિક્કો")
+                            pdf.set_font('Gujarati', '', 10)
+                            y += 45
+                            pdf.text(20, y, "સારવાર આપનાર નિષ્ણાંત તબીબનું નામ : ________________________________________")
+                            pdf.text(350, y, "હોદો : ________________")
                             
-                            # Footer Elements
-                            c.drawString(20, 20, "સૂચના : વધુ લખાણની જરૂર પડે તો પાછળના પાને લખવું.")
-                            c.drawString(350, 20, "આરોગ્ય અને પરિવાર કલ્યાણ વિભાગ, ગુજરાત સરકાર")
-
-                            c.save()
-                            buffer.seek(0)
-                            return buffer.getvalue()
+                            y += 15
+                            pdf.text(20, y, "(સરકારી / ખાનગી / સી. એમ. સેતુ / ચિરંજીવી)")
+                            pdf.text(350, y, "સહી : ________________")
+                            
+                            y += 25
+                            pdf.text(20, y, "રિફર કરેલ સ્થળ / સંસ્થા : _____________________________________________________")
+                            
+                            y += 25
+                            pdf.text(20, y, "તપાસ અને તારણ : ______________________________________________________________")
+                            
+                            y += 25
+                            pdf.text(20, y, "ફોલોઅપ સર્વિસ : ______________________________________________________________")
+                            
+                            y += 25
+                            pdf.text(20, y, "મોબાઈલ હેલ્થ ટીમના તબીબ માટેની સુચના : _________________________________________")
+                            
+                            y += 25
+                            pdf.text(20, y, "વધુ સારવારની જરૂર છે : _________________________________________________________")
+                            pdf.text(400, y + 10, "હોસ્પિટલ/સંસ્થાનો સિક્કો")
+                            
+                            # Footer
+                            pdf.set_font('Gujarati', '', 8)
+                            pdf.text(20, 825, "સૂચના : વધુ લખાણની જરૂર પડે તો પાછળના પાને લખવું.")
+                            pdf.text(350, 825, "આરોગ્ય અને પરિવાર કલ્યાણ વિભાગ, ગુજરાત સરકાર")
+                            
+                            return bytes(pdf.output())
 
                         pdf_bytes = generate_gujarati_refer_card(st.session_state.report_data)
                         
@@ -1732,6 +1723,9 @@ elif menu == "3. 4D Defect Registry":
                         b64 = base64.b64encode(pdf_bytes).decode()
                         st.markdown(f'<a href="data:application/pdf;base64,{b64}" download="ReferCard_{st.session_state.report_data["Name"]}.pdf" style="display:block;padding:12px;background:#2563eb;color:white;text-align:center;font-weight:bold;border-radius:6px;text-decoration:none;">📄 Click Here to Download Perfect Replica PDF</a>', unsafe_allow_html=True)
                         
+                    except ImportError:
+                        st.error("🚨 Missing System Packages! Please add 'fpdf2' and 'uharfbuzz' to your requirements.txt file and let Streamlit reboot.")
+                        st.stop()
                     except Exception as e:
                         st.error(f"Error generating PDF. Details: {e}")
         else:
