@@ -1573,7 +1573,7 @@ elif menu == "3. 4D Defect Registry":
                             pdf.text(25, 112, "બાળકની વિગત")
                             
                             pdf.set_font('Gujarati', '', 10)
-                            y = 110
+                            y = 210
                             pdf.text(20, y, f"બાળકનું પુરું નામ : {data.get('Name', '')}")
                             pdf.text(320, y, f"FEMALE/MALE : {data.get('Gender', '')}")
                             pdf.text(450, y, "આઈ.ડી. નંબર : ________")
@@ -1624,35 +1624,35 @@ elif menu == "3. 4D Defect Registry":
                             draw_checkbox(50, y, "BIRTH DEFECT")
                             draw_checkbox(140, y, "DEFICIENCIES")
                             draw_checkbox(240, y, "DISEASES")
-                            draw_checkbox(350, y, "DEVELOPMENTAL DEALYS AND DISABILITIES")
+                            draw_checkbox(350, y, "DEVELOPMENTAL DEALYS")
                             draw_checkbox(510, y, "OTHERS")
                             
                             pdf.line(15, y + 15, 595.27 - 15, y + 15)
                             
-                            # --- 2. પ્રાથમિક તપાસણીની વિગત ---
+                            # --- 2. તપાસણીની વિગત ---
                             y += 25
                             pdf.set_fill_color(220, 220, 220)
                             pdf.rect(15, y, 595.27 - 30, 25, style='F')
                             pdf.set_font('Gujarati', '', 12)
-                            pdf.text(25, y + 17, "પ્રાથમિક તપાસણીની વિગત")
+                            pdf.text(25, y + 17, "તપાસણીની વિગત")
                             
                             pdf.set_font('Gujarati', '', 10)
                             y += 35
                             pdf.text(20, y, "RBSK મોબાઈલ હેલ્થ ટીમ નંબર : MHT-1")
-                            pdf.text(320, y, f"પ્રાથમિક તપાસણી કર્યા તારીખ : {data.get('Date', '')}")
+                            pdf.text(320, y, f"તપાસણી કર્યા તારીખ : {data.get('Date', '')}")
                             
                             y += 20
-                            pdf.text(20, y, f"બાળકને પ્રાથમિક તપાસણીમાં જોવા મળેલ તક્લીફ (રોગ/4D) : {data.get('Condition', '')}")
+                            pdf.text(20, y, f"બાળકને તપાસણીમાં જોવા મળેલ તક્લીફ (રોગ/4D) : {data.get('Condition', '')}")
                             pdf.text(430, y, f"HT: {data.get('Height', '')}  WT: {data.get('Weight', '')}")
                             
                             y += 20
-                            pdf.text(20, y, f"પ્રાથમિક તપાસમાં આપેલ સારવાર : {data.get('Remarks', '')}")
+                            pdf.text(20, y, f"તપાસમાં આપેલ સારવાર : {data.get('Remarks', '')}")
                             
                             y += 20
                             pdf.text(20, y, f"સંદર્ભ સેવા માટે કઈ હોસ્પિટલ / DEIC રીફર કર્યું : {data.get('Referred_To', '')}")
                             
                             y += 20
-                            pdf.text(20, y, f"પ્રાથમિક તપાસ કરનાર તબીબનું નામ : {data.get('MO_Name', '')}")
+                            pdf.text(20, y, f"તપાસ કરનાર તબીબનું નામ : {data.get('MO_Name', '')}")
                             pdf.text(320, y, "રીફર કરવાનું કારણ : _________________")
                             
                             y += 20
