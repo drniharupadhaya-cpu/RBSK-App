@@ -487,7 +487,7 @@ elif menu == "1. Daily Tour Plan":
                                 
                                 # Header Title
                                 pdf.set_font('Gujarati', '', 14)
-                                pdf.cell(0, 20, "પ્રવાસ ડાયરી/મંથલી કામગીરી પત્રક (એન.એચ.એમ)", align='C', ln=True)
+                                pdf.cell(0, 20, "TOUR ડાયરી/મંથલી કામગીરી (એન.એચ.એમ)", align='C', ln=True)
                                 
                                 pdf.set_font('Gujarati', '', 11)
                                 pdf.cell(0, 15, f"માહે : {selected_month_str}", align='R', ln=True)
@@ -499,10 +499,10 @@ elif menu == "1. Daily Tour Plan":
                                     pdf.set_font('Helvetica', 'B', 11) 
                                     pdf.cell(200, 15, str(value).upper(), border=0, ln=True)
 
-                                header_row("કર્મચારી/અઘિકારીશ્રી નું નામ :-", selected_pdf_staff)
-                                header_row("કર્મચારી/અઘિકારીશ્રી નો હોદ્દો :-", "R.B.S.K. M.O")
-                                header_row("કર્મચારી/અઘિકારીશ્રી નું હેડક્વાર્ટર:-", "VISAVADAR")
-                                header_row("પ્રાથમીક આરોગ્ય કેન્દ્ર :-", "N/A")
+                                header_row("અઘિકારીશ્રી નું નામ :-", selected_pdf_staff)
+                                header_row("અઘિકારીશ્રી નો હોદ્દો :-", "R.B.S.K. M.O")
+                                header_row("અઘિકારીશ્રી નું હેડક્વાર્ટર:-", "VISAVADAR")
+                                header_row("પ્રાHEADQUARTER :-", "TALUKA HEALTH OFFICE")
                                 pdf.ln(15)
 
                                 # Table Header
