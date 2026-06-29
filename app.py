@@ -398,7 +398,6 @@ elif menu == "1. Daily Tour Plan":
                 try:
                     tour_sheet = spreadsheet.worksheet("tour_plans")
                     date_str = tour_date.strftime("%d-%m-%Y")
-                    # 🚀 FIXED: Added tour_activity to the append_row so it actually saves to the database!
                     tour_sheet.append_row([staff_name, date_str, tour_village, tour_school, tour_awc, tour_activity])
                     st.toast(f"✅ Tour Plan for {tour_village} saved!", icon="🎉")
                 except Exception as e:
@@ -425,130 +424,151 @@ elif menu == "1. Daily Tour Plan":
             st.dataframe(df_tour_display, use_container_width=True)
             
             # ==========================================
-            # 🚀 NEW: GUJARATI MONTHLY DIARY GENERATOR
+            # 🚀 GUJARATI MONTHLY DIARY GENERATOR
             # ==========================================
             st.divider()
             st.markdown("#### 🖨️ Auto-Generate Monthly Tour Diary (Gujarati PDF)")
-            st.info("Select a staff member below to generate their official monthly tour diary PDF.")
+            st.info("Select a staff member and a DATE RANGE to generate their official tour diary PDF.")
             
-            # Adaptive column naming to match whatever is in your live Google Sheet
+            # Adaptive column naming
             name_col = 'name' if 'name' in df_tour.columns else df_tour.columns[0]
             date_col = 'Date' if 'Date' in df_tour.columns else df_tour.columns[1]
             village_col = 'Village' if 'Village' in df_tour.columns else df_tour.columns[2]
             activity_col = 'tour_activity' if 'tour_activity' in df_tour.columns else (df_tour.columns[5] if len(df_tour.columns) > 5 else None)
 
-            pdf_c1, pdf_c2 = st.columns(2)
+            pdf_c1, pdf_c2, pdf_c3 = st.columns(3)
             with pdf_c1:
                 unique_staff = sorted([str(x) for x in df_tour[name_col].dropna().unique()])
                 selected_pdf_staff = st.selectbox("Select Team Member for PDF:", unique_staff)
             with pdf_c2:
                 import datetime
                 current_month = datetime.datetime.now().strftime("%B %Y").upper()
-                selected_month_str = st.text_input("Report Month/Year:", value=current_month)
+                selected_month_str = st.text_input("Report Month Title:", value=current_month)
+            with pdf_c3:
+                # 🚀 FIX 1: New Date Range Selector!
+                today = datetime.date.today()
+                first_day = today.replace(day=1)
+                date_range = st.date_input("Select Date Range (Start - End):", [first_day, today])
             
             if st.button("📄 Generate Gujarati Monthly Diary PDF", type="primary"):
-                try:
-                    import os
-                    from fpdf import FPDF
-                    import base64
-                    
-                    if not os.path.exists("NotoSansGujarati-Regular.ttf"):
-                        st.error("🚨 CRITICAL: 'NotoSansGujarati-Regular.ttf' Font Missing from GitHub!")
-                    else:
-                        # 1. Filter Data for selected staff member
-                        df_pdf = df_tour[df_tour[name_col].astype(str) == selected_pdf_staff].copy()
+                if len(date_range) != 2:
+                    st.warning("⚠️ Please select BOTH a start date and an end date!")
+                else:
+                    try:
+                        import os
+                        from fpdf import FPDF
+                        import base64
                         
-                        # 2. Parse dates for sorting and assigning Days of the Week
-                        df_pdf['Parsed_Date'] = pd.to_datetime(df_pdf[date_col], errors='coerce', dayfirst=True)
-                        df_pdf = df_pdf.sort_values(by='Parsed_Date')
-                        df_pdf['Day_Name'] = df_pdf['Parsed_Date'].dt.strftime('%A').str.upper()
-                        df_pdf['Day_Name'] = df_pdf['Day_Name'].fillna('')
-                        
-                        # 3. Setup FPDF2
-                        pdf = FPDF(unit='pt', format='A4')
-                        pdf.add_page()
-                        pdf.add_font('Gujarati', '', 'NotoSansGujarati-Regular.ttf')
-                        
-                        # Header Title
-                        pdf.set_font('Gujarati', '', 14)
-                        pdf.cell(0, 20, "ટૂર ડાયરી/મંથલી કામગીરી (એન.એચ.એમ)", align='C', ln=True)
-                        
-                        pdf.set_font('Gujarati', '', 11)
-                        pdf.cell(0, 15, f"માહે : {selected_month_str}", align='R', ln=True)
-                        pdf.ln(10)
-
-                        def header_row(label, value):
-                            pdf.set_font('Gujarati', '', 11)
-                            pdf.cell(200, 15, label, border=0)
-                            pdf.set_font('Helvetica', 'B', 11) 
-                            pdf.cell(200, 15, str(value).upper(), border=0, ln=True)
-
-                        header_row("અઘિકારી નું નામ :-", selected_pdf_staff)
-                        header_row("અઘિકારીશ્રી નો હોદ્દો :-", "R.B.S.K. M.O")
-                        header_row("અઘિકારીશ્રી નું હેડક્વાર્ટર:-", "VISAVADAR")
-                        header_row("PHC:-", "TALUKA HEALTH OFFICE")
-                        pdf.ln(15)
-
-                        # Table Header
-                        pdf.set_font('Gujarati', '', 10)
-                        pdf.set_fill_color(220, 220, 220)
-                        
-                        col_widths = [30, 70, 75, 120, 80, 40, 130]
-                        headers = ["ક્રમ", "તારીખ", "વાર", "મુલાકાત લીધેલ ગામનું નામ", "મુસા. નું વાહન", "કી.મી.", "કરવામાં આવેલ કામગીરી"]
-                        
-                        for i, head in enumerate(headers):
-                            pdf.cell(col_widths[i], 25, head, border=1, fill=True, align='C')
-                        pdf.ln()
-
-                        # Table Rows
-                        pdf.set_font('Gujarati', '', 9)
-                        for index, row in enumerate(df_pdf.itertuples(), start=1):
-                            d_val = str(getattr(row, date_col, ''))
-                            day_val = str(getattr(row, 'Day_Name', ''))
-                            v_val = str(getattr(row, village_col, ''))
-                            a_val = str(getattr(row, activity_col, '')) if activity_col else ''
+                        if not os.path.exists("NotoSansGujarati-Regular.ttf"):
+                            st.error("🚨 CRITICAL: 'NotoSansGujarati-Regular.ttf' Font Missing from GitHub!")
+                        else:
+                            # 1. Filter Data for selected staff member
+                            df_pdf = df_tour[df_tour[name_col].astype(str) == selected_pdf_staff].copy()
                             
-                            pdf.cell(col_widths[0], 20, str(index), border=1, align='C')
-                            pdf.cell(col_widths[1], 20, d_val, border=1, align='C')
-                            pdf.cell(col_widths[2], 20, day_val, border=1, align='C')
-                            pdf.cell(col_widths[3], 20, v_val[:18], border=1, align='C') # Truncate long names
-                            pdf.cell(col_widths[4], 20, "RBSK VEHICLE", border=1, align='C') 
-                            pdf.cell(col_widths[5], 20, "0", border=1, align='C')
-                            pdf.cell(col_widths[6], 20, a_val[:22], border=1, align='C')
-                            pdf.ln()
+                            # 2. Parse dates for sorting and assigning Days of the Week
+                            df_pdf['Parsed_Date'] = pd.to_datetime(df_pdf[date_col], errors='coerce', dayfirst=True)
                             
-                        pdf.ln(30)
-                        
-                        # Signature & Seal Injection Block
-                        y = pdf.get_y()
-                        
-                        seal_path = "SEAL.jpeg"
-                        if os.path.exists(seal_path):
-                            pdf.image(seal_path, x=80, y=y, w=50)
-                        
-                        sign_path = "sign.jpg"
-                        if os.path.exists(sign_path):
-                            pdf.image(sign_path, x=420, y=y, w=70)
+                            # 🚀 APPLY DATE RANGE FILTER
+                            start_date, end_date = date_range
+                            mask = (df_pdf['Parsed_Date'].dt.date >= start_date) & (df_pdf['Parsed_Date'].dt.date <= end_date)
+                            df_pdf = df_pdf.loc[mask]
                             
-                        pdf.set_font('Gujarati', '', 10)
-                        pdf.text(80, y + 60, "RBSK SEAL")
-                        pdf.text(420, y + 60, "કર્મચારી/અઘિકારીની સહી")
+                            if df_pdf.empty:
+                                st.warning(f"No tour data found for {selected_pdf_staff} between {start_date.strftime('%d-%m-%Y')} and {end_date.strftime('%d-%m-%Y')}.")
+                            else:
+                                df_pdf = df_pdf.sort_values(by='Parsed_Date')
+                                df_pdf['Day_Name'] = df_pdf['Parsed_Date'].dt.strftime('%A').str.upper()
+                                df_pdf['Day_Name'] = df_pdf['Day_Name'].fillna('')
+                                
+                                # 3. Setup FPDF2
+                                pdf = FPDF(unit='pt', format='A4')
+                                pdf.add_page()
+                                pdf.add_font('Gujarati', '', 'NotoSansGujarati-Regular.ttf')
+                                
+                                # Header Title
+                                pdf.set_font('Gujarati', '', 14)
+                                pdf.cell(0, 20, "પ્રવાસ ડાયરી/મંથલી કામગીરી પત્રક (એન.એચ.એમ)", align='C', ln=True)
+                                
+                                pdf.set_font('Gujarati', '', 11)
+                                pdf.cell(0, 15, f"માહે : {selected_month_str}", align='R', ln=True)
+                                pdf.ln(10)
 
-                        # Export
-                        pdf_bytes = bytes(pdf.output())
-                        b64 = base64.b64encode(pdf_bytes).decode()
+                                def header_row(label, value):
+                                    pdf.set_font('Gujarati', '', 11)
+                                    pdf.cell(200, 15, label, border=0)
+                                    pdf.set_font('Helvetica', 'B', 11) 
+                                    pdf.cell(200, 15, str(value).upper(), border=0, ln=True)
+
+                                header_row("કર્મચારી/અઘિકારીશ્રી નું નામ :-", selected_pdf_staff)
+                                header_row("કર્મચારી/અઘિકારીશ્રી નો હોદ્દો :-", "R.B.S.K. M.O")
+                                header_row("કર્મચારી/અઘિકારીશ્રી નું હેડક્વાર્ટર:-", "VISAVADAR")
+                                header_row("પ્રાથમીક આરોગ્ય કેન્દ્ર :-", "N/A")
+                                pdf.ln(15)
+
+                                # Table Header
+                                pdf.set_font('Gujarati', '', 10)
+                                pdf.set_fill_color(220, 220, 220)
+                                
+                                col_widths = [30, 70, 75, 120, 80, 40, 130]
+                                headers = ["ક્રમ", "તારીખ", "વાર", "મુલાકાત લીધેલ ગામનું નામ", "મુસા. નું વાહન", "કી.મી.", "કરવામાં આવેલ કામગીરી"]
+                                
+                                for i, head in enumerate(headers):
+                                    pdf.cell(col_widths[i], 25, head, border=1, fill=True, align='C')
+                                pdf.ln()
+
+                                # Table Rows
+                                pdf.set_font('Gujarati', '', 9)
+                                for index, row in enumerate(df_pdf.itertuples(), start=1):
+                                    d_val = str(getattr(row, date_col, ''))
+                                    day_val = str(getattr(row, 'Day_Name', ''))
+                                    v_val = str(getattr(row, village_col, ''))
+                                    
+                                    # 🚀 FIX 2: Smart Auto-Fill for Activity Column
+                                    a_val = str(getattr(row, activity_col, '')).strip() if activity_col else ''
+                                    if a_val.lower() in ['', 'nan', 'none', 'null']:
+                                        a_val = "AW/SCHOOL VISIT"
+                                    
+                                    pdf.cell(col_widths[0], 20, str(index), border=1, align='C')
+                                    pdf.cell(col_widths[1], 20, d_val, border=1, align='C')
+                                    pdf.cell(col_widths[2], 20, day_val, border=1, align='C')
+                                    pdf.cell(col_widths[3], 20, v_val[:18], border=1, align='C') # Truncate long names
+                                    pdf.cell(col_widths[4], 20, "RBSK VEHICLE", border=1, align='C') 
+                                    pdf.cell(col_widths[5], 20, "0", border=1, align='C')
+                                    pdf.cell(col_widths[6], 20, a_val[:22], border=1, align='C')
+                                    pdf.ln()
+                                    
+                                pdf.ln(30)
+                                
+                                # Signature & Seal Injection Block
+                                y = pdf.get_y()
+                                
+                                seal_path = "SEAL.jpeg"
+                                if os.path.exists(seal_path):
+                                    pdf.image(seal_path, x=80, y=y, w=50)
+                                
+                                sign_path = "sign.jpg"
+                                if os.path.exists(sign_path):
+                                    pdf.image(sign_path, x=420, y=y, w=70)
+                                    
+                                pdf.set_font('Gujarati', '', 10)
+                                pdf.text(80, y + 60, "RBSK SEAL")
+                                pdf.text(420, y + 60, "કર્મચારી/અઘિકારીની સહી")
+
+                                # Export
+                                pdf_bytes = bytes(pdf.output())
+                                b64 = base64.b64encode(pdf_bytes).decode()
+                                
+                                st.success(f"✅ Tour Diary Generated for {selected_pdf_staff} ({start_date.strftime('%d-%m-%Y')} to {end_date.strftime('%d-%m-%Y')})!")
+                                st.markdown(
+                                    f'<a href="data:application/pdf;base64,{b64}" download="Tour_Diary_{selected_pdf_staff}.pdf" '
+                                    f'style="display:block;padding:12px;background:#10b981;color:white;text-align:center;'
+                                    f'font-weight:bold;border-radius:6px;text-decoration:none;">'
+                                    f'⬇️ Download Official Tour Diary PDF</a>', 
+                                    unsafe_allow_html=True
+                                )
+                    except Exception as e:
+                        st.error(f"🚨 Error generating PDF: {e}")
                         
-                        st.success(f"✅ {selected_month_str} Tour Diary Generated for {selected_pdf_staff}!")
-                        st.markdown(
-                            f'<a href="data:application/pdf;base64,{b64}" download="Tour_Diary_{selected_pdf_staff}.pdf" '
-                            f'style="display:block;padding:12px;background:#10b981;color:white;text-align:center;'
-                            f'font-weight:bold;border-radius:6px;text-decoration:none;">'
-                            f'⬇️ Download Official Tour Diary PDF</a>', 
-                            unsafe_allow_html=True
-                        )
-                except Exception as e:
-                    st.error(f"🚨 Error generating PDF: {e}")
-                    
         else:
             st.info("No tour plans have been saved yet! Click 'Refresh Data & Load Table' to load data.")
             
