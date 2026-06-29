@@ -4075,8 +4075,7 @@ elif menu == "15. Clinical & IFA Tracker":
         
         
         seal_path = "SEAL.jpeg"
-        if os.path.exists(sign_path):
-            c.drawImage(sign_path, 400, y-10, width=90, height=50, preserveAspectRatio=True, mask='auto')
+        
         if os.path.exists(seal_path):
             c.drawImage(seal_path, 330, y-10, width=60, height=60, preserveAspectRatio=True, mask='auto')
             
