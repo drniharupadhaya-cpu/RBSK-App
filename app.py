@@ -4268,50 +4268,115 @@ elif menu == "15. Clinical & IFA Tracker":
     # --- 2. IFA STOCK TRACKER ---
     # ==========================================
     with tab_ifa:
-        st.subheader("💊 IFA Inventory Control")
+        st.subheader("💊 IFA Inventory & Projection Engine")
         ifa_level = st.radio("Select Level:", ["👶 Anganwadi (Syrups)", "🏫 School (Tablets)"], horizontal=True)
         current_options = aw_list if "Anganwadi" in ifa_level else school_list
 
         try:
-            # 🚀 THE FIX: SMART SHEET CONNECTION
+            # 🚀 SMART SHEET CONNECTION
             try: 
                 inventory_sheet = spreadsheet.worksheet("ifa_inventory")
             except gspread.exceptions.WorksheetNotFound: 
-                # ONLY create it if Google explicitly confirms it does not exist
                 inventory_sheet = spreadsheet.add_worksheet(title="ifa_inventory", rows="1000", cols="10")
-                inventory_sheet.append_row(["Timestamp", "Level", "Institute Name", "Stock Quantity", "Expiry Date", "Status"])
+                inventory_sheet.append_row(["Timestamp", "Level", "Institute Name", "Stock Quantity", "Expiry Date", "Status", "Weeks Left (Projection)"])
             except Exception as conn_err:
                 st.warning(f"Temporary connection glitch: {conn_err}. Retrying usually fixes this.")
                 st.stop()
+                
+            selected_inst = st.selectbox("Select Institute Name:", ["-- Select --"] + current_options)
 
-            with st.form("ifa_stock_form", clear_on_submit=True):
-                st.write("### 📝 Log Stock Audit")
-                c1, c2 = st.columns(2)
-                with c1:
-                    selected_inst = st.selectbox("Select Institute Name:", ["-- Select --"] + current_options)
-                    stock_qty = st.number_input("Current Stock (Units)", min_value=0)
-                with c2:
-                    expiry_date = st.date_input("Batch Expiry Date")
-                    stock_status = st.selectbox("Stock Status:", ["Sufficient", "Low (<25%)", "Critical (<10%)", "Stock Out"])
+            # --- 🚀 ADVANCED CALCULATION ENGINE ---
+            small_demand, large_demand = 0, 0
+            
+            if "School" in ifa_level and selected_inst != "-- Select --" and not master_sch_data.empty:
+                # Find the column containing the school name (Fallback to column 0)
+                sch_col = next((c for c in master_sch_data.columns if any(k in str(c).upper() for k in ["INSTITUTION", "SCHOOL", "NAME"])), master_sch_data.columns[0])
+                school_df = master_sch_data[master_sch_data[sch_col].astype(str).str.strip() == selected_inst]
+                
+                # Find the standard/class column
+                std_col = next((c for c in school_df.columns if any(k in str(c).upper() for k in ['STD', 'CLASS', 'STANDARD', 'ધોરણ'])), None)
+                
+                if std_col:
+                    import re
+                    for val in school_df[std_col].astype(str):
+                        nums = re.findall(r'\d+', val)
+                        if nums:
+                            std = int(nums[0])
+                            if 1 <= std <= 5:
+                                small_demand += 1
+                            elif 6 <= std <= 12:
+                                large_demand += 1
+                
+                st.info(f"📊 **Auto-Detected Enrollment for {selected_inst}:** {small_demand} students in Stds 1-5 | {large_demand} students in Stds 6-12")
 
-                if st.form_submit_button("🚀 Submit Inventory Report"):
+            with st.form("ifa_stock_form", clear_on_submit=False):
+                st.write("### 📝 Log Stock Audit & Projections")
+                
+                import datetime
+                
+                if "Anganwadi" in ifa_level:
+                    # ORIGINAL ANGANWADI LOGIC
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        stock_qty = st.number_input("Current Syrup Bottles", min_value=0)
+                    with c2:
+                        expiry_date = st.date_input("Batch Expiry Date")
+                        stock_status = st.selectbox("Stock Status:", ["Sufficient", "Low (<25%)", "Critical (<10%)", "Stock Out"])
+                        
+                else:
+                    # NEW DUAL-TABLET SCHOOL LOGIC
+                    st.write("#### 🌸 Small IFA (WIFS Junior - Stds 1-5)")
+                    s1, s2, s3 = st.columns(3)
+                    with s1: small_qty = st.number_input("Small IFA Stock (Tablets)", min_value=0)
+                    with s2: small_expiry = st.date_input("Small IFA Expiry", key="s_exp")
+                    with s3: 
+                        small_weeks = round(small_qty / small_demand) if small_demand > 0 else 0
+                        st.metric("Will last for (Weeks):", small_weeks)
+                        small_status = "Stock Out" if small_qty == 0 else "Critical (< 4 Weeks)" if small_weeks < 4 else "Low (< 8 Weeks)" if small_weeks < 8 else "Sufficient"
+                        st.caption(f"Status: **{small_status}**")
+
+                    st.divider()
+                    st.write("#### 🔵 Large IFA (WIFS Senior - Stds 6-12)")
+                    l1, l2, l3 = st.columns(3)
+                    with l1: large_qty = st.number_input("Large IFA Stock (Tablets)", min_value=0)
+                    with l2: large_expiry = st.date_input("Large IFA Expiry", key="l_exp")
+                    with l3:
+                        large_weeks = round(large_qty / large_demand) if large_demand > 0 else 0
+                        st.metric("Will last for (Weeks):", large_weeks)
+                        large_status = "Stock Out" if large_qty == 0 else "Critical (< 4 Weeks)" if large_weeks < 4 else "Low (< 8 Weeks)" if large_weeks < 8 else "Sufficient"
+                        st.caption(f"Status: **{large_status}**")
+
+                if st.form_submit_button("🚀 Submit Inventory Report", type="primary"):
                     if selected_inst != "-- Select --":
-                        import datetime
-                        new_entry = [
-                            datetime.datetime.now().strftime("%Y-%m-%d %H:%M"),
-                            ifa_level, selected_inst, stock_qty, str(expiry_date), stock_status
-                        ]
-                        inventory_sheet.append_row(new_entry)
+                        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                        
+                        if "Anganwadi" in ifa_level:
+                            inventory_sheet.append_row([timestamp, "Anganwadi (Syrup)", selected_inst, stock_qty, str(expiry_date), stock_status, "N/A"])
+                        else:
+                            # Save School data as two separate rows for easy analysis later!
+                            updates = []
+                            if small_demand > 0 or small_qty > 0:
+                                updates.append([timestamp, "School (Small IFA/Pink)", selected_inst, small_qty, str(small_expiry), small_status, f"{small_weeks} Weeks"])
+                            if large_demand > 0 or large_qty > 0:
+                                updates.append([timestamp, "School (Large IFA/Blue)", selected_inst, large_qty, str(large_expiry), large_status, f"{large_weeks} Weeks"])
+                            
+                            for row in updates:
+                                inventory_sheet.append_row(row)
+                                import time
+                                time.sleep(0.5) # Prevent Google API Rate Limit
+                                
                         get_ifa_data.clear() 
-                        st.success(f"Stock record for {selected_inst} saved!")
+                        st.success(f"✅ Advanced Stock Projections for {selected_inst} saved securely!")
                     else:
-                        st.warning("Please select a valid Institute Name.")
+                        st.warning("Please select a valid Institute Name first.")
 
             st.divider()
             st.write("### 📊 Recent Inventory Updates")
             all_inv = get_ifa_data().fillna("") 
             if not all_inv.empty:
-                filtered_inv = all_inv[all_inv['Level'] == ifa_level].tail(10)
+                # Show relevant rows based on radio selection
+                filter_word = "Anganwadi" if "Anganwadi" in ifa_level else "School"
+                filtered_inv = all_inv[all_inv['Level'].str.contains(filter_word, na=False)].tail(10)
                 st.dataframe(filtered_inv.iloc[::-1], use_container_width=True, hide_index=True)
 
         except Exception as e:
