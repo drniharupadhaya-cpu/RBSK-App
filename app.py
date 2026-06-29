@@ -4073,7 +4073,7 @@ elif menu == "15. Clinical & IFA Tracker":
         y -= 50
         c.drawString(400, y+30, "REGARDS,")
         
-        sign_path = "sign.jpg"
+        
         seal_path = "SEAL.jpeg"
         if os.path.exists(sign_path):
             c.drawImage(sign_path, 400, y-10, width=90, height=50, preserveAspectRatio=True, mask='auto')
