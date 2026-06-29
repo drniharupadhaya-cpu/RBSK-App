@@ -3991,7 +3991,53 @@ elif menu == "14. TECHO Entry Queue":
 elif menu == "15. Clinical & IFA Tracker":
     import gspread
     import textwrap
+    import os
+    import datetime
+    from io import BytesIO
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import A4
+    import pandas as pd
     
+    render_header("Clinical Operations", "Referrals, Inventory & Monitoring", "🏥", "#0ea5e9")
+    
+    # --- CACHING FUNCTIONS ---
+    @st.cache_data(ttl=600)
+    def get_master_lists():
+        try:
+            aw_df = pd.DataFrame(spreadsheet.worksheet("aw new data").get_all_records())
+        except:
+            aw_df = pd.DataFrame()
+            
+        try:
+            sch_df = pd.DataFrame(spreadsheet.worksheet("1240315 ALL STUDENTS NAMES").get_all_records())
+        except:
+            sch_df = pd.DataFrame()
+            
+        return aw_df, sch_df
+
+    @st.cache_data(ttl=600)
+    def get_cmtc_data():
+        try: return spreadsheet.worksheet("cmtc_referral").get_all_records()
+        except: return []
+
+    @st.cache_data(ttl=600)
+    def get_ifa_data():
+        try: return pd.DataFrame(spreadsheet.worksheet("ifa_inventory").get_all_records())
+        except: return pd.DataFrame()
+
+    # --- FETCH INSTITUTE LISTS ROBUSTLY (Fixes the School Dropdown Bug) ---
+    master_aw_data, master_sch_data = get_master_lists()
+
+    def get_inst_list(df, keywords):
+        if df.empty: return []
+        col = next((c for c in df.columns if any(k in str(c).upper() for k in keywords)), None)
+        target_col = col if col else df.columns[0]
+        raw_list = df[target_col].astype(str).unique().tolist()
+        return sorted([x.strip() for x in raw_list if x.strip().lower() not in ['nan', 'none', '']])
+
+    aw_list = get_inst_list(master_aw_data, ["INSTITUTE", "AWC", "CENTER"])
+    school_list = get_inst_list(master_sch_data, ["INSTITUTION", "SCHOOL", "NAME"])
+
     # --- PDF GENERATION ENGINE ---
     def generate_visit_report(data):
         buffer = BytesIO()
@@ -4017,11 +4063,12 @@ elif menu == "15. Clinical & IFA Tracker":
                 y -= line_height
             return y
 
-        intro = f"TODAY, RBSK TEAM VISAVADAR VISITED AND SCREENED ALL CHILDREN OF – {data['name']} – THIS INSTITUTION."
+        intro = f"TODAY, RBSK TEAM VISAVADAR VISITED AND SCREENED ALL CHILDREN OF - {data['name']} - THIS INSTITUTION."
         body = "THE HEALTH SCREENING WAS CARRIED OUT ACCORDING TO 4D AND ALL NEEDFUL CHILDREN WERE COUNSELLED AND REFERRED TO NEAREST REFERRAL POINT FOR FURTHER TREATMENT. ALSO, IEC ABOUT VARIOUS GOVT. HEALTH PROGRAMS LIKE TOBACCO CONTROL, TB, LEPROSY, AMB (ANEMIA MUKT BHARAT), NUTRITION, VECTOR BORN DISEASES WERE ALSO GIVEN TO THE STUDENTS."
         
-        y = draw_wrapped_text(intro, 50, height-160, 95)
-        y = draw_wrapped_text(body, 50, y-20, 95)
+        # 🚀 FIX: Reduced max_chars to 75 so it stops cutting off!
+        y = draw_wrapped_text(intro, 50, height-160, 75)
+        y = draw_wrapped_text(body, 50, y-20, 75)
         
         y -= 50
         c.drawString(400, y+30, "REGARDS,")
@@ -4029,56 +4076,62 @@ elif menu == "15. Clinical & IFA Tracker":
         sign_path = "sign.jpg"
         seal_path = "SEAL.jpeg"
         if os.path.exists(sign_path):
-            c.drawImage(sign_path, 400, y, width=100, height=50, preserveAspectRatio=True, mask='auto')
+            c.drawImage(sign_path, 400, y-10, width=90, height=50, preserveAspectRatio=True, mask='auto')
         if os.path.exists(seal_path):
-            c.drawImage(seal_path, 320, y, width=60, height=60, preserveAspectRatio=True, mask='auto')
+            c.drawImage(seal_path, 330, y-10, width=60, height=60, preserveAspectRatio=True, mask='auto')
             
-        c.line(400, y-5, 500, y-5)
-        c.drawString(400, y-20, "RBSK MEDICAL OFFICER")
+        c.line(400, y-15, 530, y-15)
+        c.drawString(400, y-30, "RBSK MEDICAL OFFICER")
         
         c.save()
         buffer.seek(0)
         return buffer.getvalue()
 
-    render_header("Clinical Operations", "Referrals, Inventory & Monitoring", "🏥", "#0ea5e9")
-    
-      
-    # --- CACHING FUNCTIONS (Memorizes data for 10 minutes) ---
-    @st.cache_data(ttl=600)
-    def get_master_lists():
-        try:
-            aw_df = pd.DataFrame(spreadsheet.worksheet("aw new data").get_all_records())
-            sch_df = pd.DataFrame(spreadsheet.worksheet("1240315 ALL STUDENTS NAMES").get_all_records())
-            return aw_df, sch_df
-        except: return pd.DataFrame(), pd.DataFrame()
-
-    @st.cache_data(ttl=600)
-    def get_cmtc_data():
-        try: return spreadsheet.worksheet("cmtc_referral").get_all_records()
-        except: return []
-
-    @st.cache_data(ttl=600)
-    def get_ifa_data():
-        try: return pd.DataFrame(spreadsheet.worksheet("ifa_inventory").get_all_records())
-        except: return pd.DataFrame()
-
-    
     # --- INTEGRATED TABS ---
     tab_cmtc, tab_ifa, tab_visits = st.tabs(["🔴 CMTC Follow-up", "💊 IFA Stock Tracker", "🏫 Institution Visit Report"])
+    
+    # 🔴 CMTC TAB
+    with tab_cmtc:
+        st.info("CMTC Follow-up dashboard will render here.")
+        
+    # 💊 IFA TAB
+    with tab_ifa:
+        st.info("IFA Stock Tracker will render here.")
 
-    master_aw_data, master_sch_data = get_master_lists()
-    aw_list = sorted(master_aw_data.iloc[:, 0].unique().tolist()) if not master_aw_data.empty else []
-    school_list = sorted(master_sch_data.iloc[:, 0].unique().tolist()) if not master_sch_data.empty else []
+    # 🏫 VISIT REPORT TAB
+    with tab_visits:
+        st.subheader("🏫 Institution Visit PDF Generator")
+        
+        # 1. Initialize session state to hold report data
+        if "report_ready" not in st.session_state:
+            st.session_state.report_ready = False
+        
+        with st.form("visit_report_form"):
+            v_level = st.radio("Level:", ["Anganwadi", "School"], horizontal=True)
+            # 🚀 FIX: Uses the correctly populated lists
+            inst_options = aw_list if v_level == "Anganwadi" else school_list
+            v_name = st.selectbox("Select Institution:", ["-- Select --"] + inst_options)
+            
+            submitted = st.form_submit_button("📄 Prepare Official PDF")
+            
+            if submitted:
+                if v_name != "-- Select --":
+                    st.session_state.report_data = {"name": v_name}
+                    st.session_state.report_ready = True
+                else:
+                    st.warning("Please select an institution.")
+                    st.session_state.report_ready = False
 
-    # --- 0. FETCH INSTITUTE LISTS (FROM MEMORY) ---
-    master_aw_data, master_sch_data = get_master_lists()
-
-    def get_inst_list(df, keywords):
-        col = next((c for c in df.columns if any(k in str(c).upper() for k in keywords)), None)
-        return sorted(df[col].astype(str).unique().tolist()) if col else []
-
-    aw_list = get_inst_list(master_aw_data, ["INSTITUTE", "AWC", "CENTER"])
-    school_list = get_inst_list(master_sch_data, ["INSTITUTION", "SCHOOL"])
+        # 2. DOWNLOAD BUTTON IS OUTSIDE THE FORM (Your perfect UI logic!)
+        if st.session_state.report_ready:
+            pdf_bytes = generate_visit_report(st.session_state.report_data)
+            st.download_button(
+                label="⬇️ Download Official Report",
+                data=pdf_bytes,
+                file_name=f"Visit_Report_{st.session_state.report_data['name']}.pdf",
+                mime="application/pdf",
+                type="primary"
+            )
 
     # ==========================================
     # --- 1. CMTC FOLLOW-UP (SMART ENGINE) ---
