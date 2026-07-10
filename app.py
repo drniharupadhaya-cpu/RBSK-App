@@ -3664,12 +3664,12 @@ elif menu == "13. Offline Batch Sync":
         st.subheader("Get the Offline Template")
         st.write("Download this blank CSV file to your phone or tablet before heading into areas with no internet. You can open and edit this file in any spreadsheet app (like Excel or Google Sheets offline).")
         
-        # 🟢 ADDED "Class" to the template columns for School classes
+        # 🟢 MOVED "Class" to the very end of the template columns
         template_cols = [
             "Location Type (Anganwadi or School)", "Screening Date (DD-MM-YYYY)", 
-            "Location Name", "Class", "Child Name", "DOB (DD-MM-YYYY)", "Gender", 
+            "Location Name", "Child Name", "DOB (DD-MM-YYYY)", "Gender", 
             "Height (cm)", "Weight (kg)", "MUAC (cm - AW only)", "Hemoglobin", 
-            "Disease or 4D", "Contact Number"
+            "Disease or 4D", "Contact Number", "Class"
         ]
         df_template = pd.DataFrame(columns=template_cols)
         
@@ -3700,7 +3700,7 @@ elif menu == "13. Offline Batch Sync":
                         cmtc_rows_to_add = []
 
                         for index, row in df_offline.iterrows():
-                            # 🟢 Robust Location Column extraction
+                            # Robust Location Column extraction
                             try:
                                 loc_col = [c for c in df_offline.columns if 'type' in c.lower()][0]
                                 loc_type = str(row[loc_col]).strip().lower()
@@ -3715,7 +3715,7 @@ elif menu == "13. Offline Batch Sync":
                                 
                             inst = str(row.get("Location Name", "")).strip()
                             
-                            # 🟢 GET CLASS SAFELY (Works for both old CSVs and new template)
+                            # GET CLASS SAFELY
                             student_class = str(row.get("Class", "")).strip()
                             if student_class.lower() in ['nan', 'none', 'null']:
                                 student_class = ""
@@ -3744,7 +3744,7 @@ elif menu == "13. Offline Batch Sync":
                                 
                             contact = "" if contact.lower() in ['nan', ''] else contact
 
-                            # 🟢 ROBUST FILTER: Captures "Shala" perfectly
+                            # ROBUST FILTER: Captures "Shala" perfectly
                             is_awc = any(kw in loc_type for kw in ["ang", "aw", "anganwadi", "nand"])
                             
                             if is_awc:
@@ -3762,9 +3762,9 @@ elif menu == "13. Offline Batch Sync":
                                     cmtc_rows_to_add.append([s_date, inst, name, dob, contact, weight, height, muac, final_status, "Pending"])
 
                             else:
-                                # 🟢 Fallback to school logic prevents data loss for regional school names
-                                # 🟢 Appended 'student_class' to the database sync row
-                                sch_rows_to_add.append([s_date, inst, student_class, name, dob, gender, height, weight, hb, disease, contact, "Offline Sync", "Pending"])
+                                # 🟢 REORDERED: Placed 'student_class' at the absolute end to match your master sheet
+                                # [Screening Date, Institution, Student Name, DOB, Gender, Height, Weight, Hb, Diseases, Contact Number, Entry_Source, TECHO_Status, Class]
+                                sch_rows_to_add.append([s_date, inst, name, dob, gender, height, weight, hb, disease, contact, "Offline Sync", "Pending", student_class])
 
                         if aw_rows_to_add: spreadsheet.worksheet("daily_screenings_aw").append_rows(aw_rows_to_add)
                         if sch_rows_to_add: spreadsheet.worksheet("daily_screenings_schools").append_rows(sch_rows_to_add)
