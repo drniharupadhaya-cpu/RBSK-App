@@ -215,7 +215,10 @@ def load_all_data():
         for attempt in range(retries):
             try:
                 df = pd.DataFrame(sheet.worksheet(tab_name).get_all_records()).astype(str)
-                df.columns = df.columns.str.strip() 
+                
+                # 🚀 ARCHITECT FIX: Force all column headers to strings before stripping spaces!
+                # This prevents the app from crashing if Google Sheets returns an integer header.
+                df.columns = df.columns.astype(str).str.strip() 
                 
                 time.sleep(1.5)  # 🚦 Keeps Google from blocking us during initial boot!
                 
