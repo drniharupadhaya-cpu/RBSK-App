@@ -3698,6 +3698,56 @@ elif menu == "13. Offline Batch Sync":
 
                 if st.button("🚀 Sync All to Master Database"):
                     with st.spinner("Processing calculations and syncing in batches... Please wait."):
+                        
+                        # 🚀 PORTED: WHO Gold Standard Interpolation Engine
+                        def get_whz_status_offline(gender, height_cm, weight_kg):
+                            if not height_cm or not weight_kg or height_cm < 45 or height_cm > 120:
+                                return "Out of bounds"
+
+                            who_boys = {
+                                45.0: [1.9, 2.1], 50.0: [2.4, 2.7], 55.0: [3.4, 3.8], 60.0: [4.4, 4.9],
+                                65.0: [5.5, 6.0], 70.0: [6.6, 7.1], 75.0: [7.6, 8.2], 80.0: [8.5, 9.2],
+                                85.0: [9.4, 10.1], 90.0: [10.3, 11.1], 95.0: [11.3, 12.1], 100.0: [12.2, 13.2],
+                                105.0: [13.3, 14.4], 110.0: [14.4, 15.7], 115.0: [15.6, 17.0], 120.0: [16.8, 18.3]
+                            }
+                            who_girls = {
+                                45.0: [1.9, 2.1], 50.0: [2.5, 2.7], 55.0: [3.3, 3.6], 60.0: [4.2, 4.6],
+                                65.0: [5.2, 5.6], 70.0: [6.3, 6.8], 75.0: [7.3, 7.9], 80.0: [8.2, 8.9],
+                                85.0: [9.1, 9.8], 90.0: [10.0, 10.8], 95.0: [10.9, 11.8], 100.0: [11.9, 12.9],
+                                105.0: [13.1, 14.2], 110.0: [14.3, 15.5], 115.0: [15.5, 16.9], 120.0: [16.8, 18.3]
+                            }
+                            table = who_boys if str(gender).strip().upper().startswith('M') else who_girls
+
+                            if height_cm in table:
+                                sam_cutoff, mam_cutoff = table[height_cm]
+                            else:
+                                heights = sorted(table.keys())
+                                lower_h = max([h for h in heights if h <= height_cm])
+                                upper_h = min([h for h in heights if h >= height_cm])
+                                lower_sam, lower_mam = table[lower_h]
+                                upper_sam, upper_mam = table[upper_h]
+                                ratio = (height_cm - lower_h) / (upper_h - lower_h)
+                                sam_cutoff = lower_sam + (ratio * (upper_sam - lower_sam))
+                                mam_cutoff = lower_mam + (ratio * (upper_mam - lower_mam))
+
+                            if weight_kg < sam_cutoff: return "SAM"
+                            elif weight_kg < mam_cutoff: return "MAM"
+                            else: return "Normal"
+                            
+                        # 🩸 PORTED: Anemia Bifurcation Engine
+                        def get_anemia_status_offline(hb_val, location_category):
+                            if not hb_val or hb_val <= 0: return "Normal"
+                            if location_category == "👶 Anganwadi":
+                                if hb_val < 7.0: return "🔴 Severe Anemia"
+                                elif hb_val < 10.0: return "🟡 Moderate Anemia"
+                                elif hb_val < 11.0: return "🔵 Mild Anemia"
+                                else: return "Normal"
+                            else:
+                                if hb_val < 8.0: return "🔴 Severe Anemia"
+                                elif hb_val < 11.0: return "🟡 Moderate Anemia"
+                                elif hb_val < 11.5: return "🔵 Mild Anemia"
+                                else: return "Normal"
+
                         aw_rows_to_add = []
                         sch_rows_to_add = []
                         cmtc_rows_to_add = []
@@ -3708,7 +3758,7 @@ elif menu == "13. Offline Batch Sync":
                                 loc_col = [c for c in df_offline.columns if 'type' in c.lower()][0]
                                 loc_type = str(row[loc_col]).strip().lower()
                             except IndexError:
-                                loc_type = "school" # fallback if column renamed unexpectedly
+                                loc_type = "school" 
                             
                             raw_date = str(row.get("Screening Date (DD-MM-YYYY)", "")).strip()
                             try:
@@ -3749,25 +3799,33 @@ elif menu == "13. Offline Batch Sync":
 
                             # ROBUST FILTER: Captures "Shala" perfectly
                             is_awc = any(kw in loc_type for kw in ["ang", "aw", "anganwadi", "nand"])
+                            loc_category = "👶 Anganwadi" if is_awc else "🏫 Schools"
+                            
+                            # 🩸 APPLY ANEMIA OVERRIDE
+                            anemia_diagnosis = get_anemia_status_offline(hb, loc_category)
+                            final_disease = str(disease).strip()
+                            if anemia_diagnosis != "Normal":
+                                if final_disease.lower() in ["none", "", "nan"]:
+                                    final_disease = anemia_diagnosis
+                                elif anemia_diagnosis not in final_disease:
+                                    final_disease = f"{final_disease} + {anemia_diagnosis}"
                             
                             if is_awc:
-                                final_status = "Normal"
-                                try:
-                                    h_m = height / 100
-                                    bmi = weight / (h_m * h_m) if h_m > 0 else 0
-                                    if (muac > 0 and muac < 11.5) or (bmi > 0 and bmi < 13.0): final_status = "SAM"
-                                    elif (muac >= 11.5 and muac < 12.5) or (bmi >= 13.0 and bmi < 14.5): final_status = "MAM"
-                                except: final_status = "Error"
+                                # 🚀 APPLY WHO GOLD STANDARD
+                                final_status = get_whz_status_offline(gender, height, weight)
 
-                                aw_rows_to_add.append([s_date, inst, name, dob, gender, height, weight, muac, hb, disease, contact, "Offline Sync", final_status, "Pending"])
+                                # 🟢 ALIGNED 15 COLUMNS: Matches Module 2 perfectly for green ticks to trigger
+                                # [Date, Inst, Name, DOB, Gender, Height, Weight, MUAC, Hb, Disease, Contact, TechoID, Status, TECHO_Status, Class]
+                                aw_rows_to_add.append([s_date, inst, name, dob, gender, height, weight, muac, hb, final_disease, contact, "Offline Sync", final_status, "Pending", student_class])
                                 
                                 if final_status in ["SAM", "MAM"]:
-                                    cmtc_rows_to_add.append([s_date, inst, name, dob, contact, weight, height, muac, final_status, "Pending"])
+                                    # 🛠️ FIXED: Re-aligned Height and Weight for CMTC sheet
+                                    cmtc_rows_to_add.append([s_date, inst, name, dob, contact, height, weight, muac, final_status, "Pending"])
 
                             else:
-                                # 🟢 REORDERED: Placed 'student_class' at the absolute end to match your master sheet
-                                # [Screening Date, Institution, Student Name, DOB, Gender, Height, Weight, Hb, Diseases, Contact Number, Entry_Source, TECHO_Status, Class]
-                                sch_rows_to_add.append([s_date, inst, name, dob, gender, height, weight, hb, disease, contact, "Offline Sync", "Pending", student_class])
+                                # 🟢 ALIGNED 13 COLUMNS: Matches Module 2 perfectly for green ticks to trigger
+                                # [Date, Inst, Name, DOB, Gender, Height, Weight, Hb, Disease, Contact, Source, TECHO_Status, Class]
+                                sch_rows_to_add.append([s_date, inst, name, dob, gender, height, weight, hb, final_disease, contact, "Offline Sync", "Pending", student_class])
 
                         if aw_rows_to_add: spreadsheet.worksheet("daily_screenings_aw").append_rows(aw_rows_to_add)
                         if sch_rows_to_add: spreadsheet.worksheet("daily_screenings_schools").append_rows(sch_rows_to_add)
