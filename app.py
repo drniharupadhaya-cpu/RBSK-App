@@ -3667,12 +3667,12 @@ elif menu == "13. Offline Batch Sync":
         st.subheader("Get the Offline Template")
         st.write("Download this blank CSV file to your phone or tablet before heading into areas with no internet. You can open and edit this file in any spreadsheet app (like Excel or Google Sheets offline).")
         
-        # 🟢 MOVED "Class" to the very end of the template columns
+        # 🟢 MOVED "Class" to the end & ADDED "Techo ID (AW only)" for seamless Mod 14 Integration
         template_cols = [
             "Location Type (Anganwadi or School)", "Screening Date (DD-MM-YYYY)", 
             "Location Name", "Child Name", "DOB (DD-MM-YYYY)", "Gender", 
             "Height (cm)", "Weight (kg)", "MUAC (cm - AW only)", "Hemoglobin", 
-            "Disease or 4D", "Contact Number", "Class"
+            "Disease or 4D", "Contact Number", "Techo ID (AW only)", "Class"
         ]
         df_template = pd.DataFrame(columns=template_cols)
         
@@ -3699,39 +3699,53 @@ elif menu == "13. Offline Batch Sync":
                 if st.button("🚀 Sync All to Master Database"):
                     with st.spinner("Processing calculations and syncing in batches... Please wait."):
                         
-                        # 🚀 PORTED: WHO Gold Standard Interpolation Engine
-                        def get_whz_status_offline(gender, height_cm, weight_kg):
-                            if not height_cm or not weight_kg or height_cm < 45 or height_cm > 120:
-                                return "Out of bounds"
+                        # 🚀 PORTED & FIXED: WHO Gold Standard Interpolation Engine NOW INCLUDES MUAC!
+                        def get_nutrition_status_offline(gender, height_cm, weight_kg, muac_cm):
+                            sam_flag = False
+                            mam_flag = False
+                            
+                            # 1. Strict MUAC Cutoffs (Takes precedence if detected)
+                            if muac_cm and muac_cm > 0:
+                                if muac_cm < 11.5:
+                                    sam_flag = True
+                                elif 11.5 <= muac_cm < 12.5:
+                                    mam_flag = True
 
-                            who_boys = {
-                                45.0: [1.9, 2.1], 50.0: [2.4, 2.7], 55.0: [3.4, 3.8], 60.0: [4.4, 4.9],
-                                65.0: [5.5, 6.0], 70.0: [6.6, 7.1], 75.0: [7.6, 8.2], 80.0: [8.5, 9.2],
-                                85.0: [9.4, 10.1], 90.0: [10.3, 11.1], 95.0: [11.3, 12.1], 100.0: [12.2, 13.2],
-                                105.0: [13.3, 14.4], 110.0: [14.4, 15.7], 115.0: [15.6, 17.0], 120.0: [16.8, 18.3]
-                            }
-                            who_girls = {
-                                45.0: [1.9, 2.1], 50.0: [2.5, 2.7], 55.0: [3.3, 3.6], 60.0: [4.2, 4.6],
-                                65.0: [5.2, 5.6], 70.0: [6.3, 6.8], 75.0: [7.3, 7.9], 80.0: [8.2, 8.9],
-                                85.0: [9.1, 9.8], 90.0: [10.0, 10.8], 95.0: [10.9, 11.8], 100.0: [11.9, 12.9],
-                                105.0: [13.1, 14.2], 110.0: [14.3, 15.5], 115.0: [15.5, 16.9], 120.0: [16.8, 18.3]
-                            }
-                            table = who_boys if str(gender).strip().upper().startswith('M') else who_girls
+                            # 2. WHO Height/Weight Z-Score Interpolation
+                            if height_cm and weight_kg and 45 <= height_cm <= 120:
+                                who_boys = {
+                                    45.0: [1.9, 2.1], 50.0: [2.4, 2.7], 55.0: [3.4, 3.8], 60.0: [4.4, 4.9],
+                                    65.0: [5.5, 6.0], 70.0: [6.6, 7.1], 75.0: [7.6, 8.2], 80.0: [8.5, 9.2],
+                                    85.0: [9.4, 10.1], 90.0: [10.3, 11.1], 95.0: [11.3, 12.1], 100.0: [12.2, 13.2],
+                                    105.0: [13.3, 14.4], 110.0: [14.4, 15.7], 115.0: [15.6, 17.0], 120.0: [16.8, 18.3]
+                                }
+                                who_girls = {
+                                    45.0: [1.9, 2.1], 50.0: [2.5, 2.7], 55.0: [3.3, 3.6], 60.0: [4.2, 4.6],
+                                    65.0: [5.2, 5.6], 70.0: [6.3, 6.8], 75.0: [7.3, 7.9], 80.0: [8.2, 8.9],
+                                    85.0: [9.1, 9.8], 90.0: [10.0, 10.8], 95.0: [10.9, 11.8], 100.0: [11.9, 12.9],
+                                    105.0: [13.1, 14.2], 110.0: [14.3, 15.5], 115.0: [15.5, 16.9], 120.0: [16.8, 18.3]
+                                }
+                                table = who_boys if str(gender).strip().upper().startswith('M') else who_girls
 
-                            if height_cm in table:
-                                sam_cutoff, mam_cutoff = table[height_cm]
-                            else:
-                                heights = sorted(table.keys())
-                                lower_h = max([h for h in heights if h <= height_cm])
-                                upper_h = min([h for h in heights if h >= height_cm])
-                                lower_sam, lower_mam = table[lower_h]
-                                upper_sam, upper_mam = table[upper_h]
-                                ratio = (height_cm - lower_h) / (upper_h - lower_h)
-                                sam_cutoff = lower_sam + (ratio * (upper_sam - lower_sam))
-                                mam_cutoff = lower_mam + (ratio * (upper_mam - lower_mam))
+                                if height_cm in table:
+                                    sam_cutoff, mam_cutoff = table[height_cm]
+                                else:
+                                    heights = sorted(table.keys())
+                                    lower_h = max([h for h in heights if h <= height_cm])
+                                    upper_h = min([h for h in heights if h >= height_cm])
+                                    lower_sam, lower_mam = table[lower_h]
+                                    upper_sam, upper_mam = table[upper_h]
+                                    ratio = (height_cm - lower_h) / (upper_h - lower_h)
+                                    sam_cutoff = lower_sam + (ratio * (upper_sam - lower_sam))
+                                    mam_cutoff = lower_mam + (ratio * (upper_mam - lower_mam))
 
-                            if weight_kg < sam_cutoff: return "SAM"
-                            elif weight_kg < mam_cutoff: return "MAM"
+                                if weight_kg < sam_cutoff: 
+                                    sam_flag = True
+                                elif weight_kg < mam_cutoff: 
+                                    mam_flag = True
+                                    
+                            if sam_flag: return "SAM"
+                            elif mam_flag: return "MAM"
                             else: return "Normal"
                             
                         # 🩸 PORTED: Anemia Bifurcation Engine
@@ -3768,10 +3782,14 @@ elif menu == "13. Offline Batch Sync":
                                 
                             inst = str(row.get("Location Name", "")).strip()
                             
-                            # GET CLASS SAFELY
+                            # GET CLASS & TECHO SAFELY
                             student_class = str(row.get("Class", "")).strip()
                             if student_class.lower() in ['nan', 'none', 'null']:
                                 student_class = ""
+                                
+                            techo_id = str(row.get("Techo ID (AW only)", "")).strip()
+                            if techo_id.lower() in ['nan', 'none', 'null', '']:
+                                techo_id = "Offline Sync"
 
                             name = str(row.get("Child Name", "")).strip()
                             dob = str(row.get("DOB (DD-MM-YYYY)", "")).strip()
@@ -3811,12 +3829,12 @@ elif menu == "13. Offline Batch Sync":
                                     final_disease = f"{final_disease} + {anemia_diagnosis}"
                             
                             if is_awc:
-                                # 🚀 APPLY WHO GOLD STANDARD
-                                final_status = get_whz_status_offline(gender, height, weight)
+                                # 🚀 APPLY WHO GOLD STANDARD (NOW CLINICALLY SOUND WITH MUAC)
+                                final_status = get_nutrition_status_offline(gender, height, weight, muac)
 
                                 # 🟢 ALIGNED 15 COLUMNS: Matches Module 2 perfectly for green ticks to trigger
                                 # [Date, Inst, Name, DOB, Gender, Height, Weight, MUAC, Hb, Disease, Contact, TechoID, Status, TECHO_Status, Class]
-                                aw_rows_to_add.append([s_date, inst, name, dob, gender, height, weight, muac, hb, final_disease, contact, "Offline Sync", final_status, "Pending", student_class])
+                                aw_rows_to_add.append([s_date, inst, name, dob, gender, height, weight, muac, hb, final_disease, contact, techo_id, final_status, "Pending", student_class])
                                 
                                 if final_status in ["SAM", "MAM"]:
                                     # 🛠️ FIXED: Re-aligned Height and Weight for CMTC sheet
@@ -3831,7 +3849,11 @@ elif menu == "13. Offline Batch Sync":
                         if sch_rows_to_add: spreadsheet.worksheet("daily_screenings_schools").append_rows(sch_rows_to_add)
                         if cmtc_rows_to_add: spreadsheet.worksheet("cmtc_referral").append_rows(cmtc_rows_to_add)
 
-                        st.cache_data.clear() 
+                        # 🚀 SMART CACHE CLEARING
+                        try:
+                            get_daily_logs.clear()
+                        except:
+                            st.cache_data.clear() 
                         
                         st.toast(f"✅ Synced {len(aw_rows_to_add)} AWC & {len(sch_rows_to_add)} School records!", icon="🎉")
                         if cmtc_rows_to_add:
@@ -3842,7 +3864,6 @@ elif menu == "13. Offline Batch Sync":
 
             except Exception as e:
                 st.error(f"⚠️ Error reading file. Please ensure you are using the exact template. Detail: {e}")
-
 # ==========================================
 # MODULE 14: 💻 TECHO PORTAL ENTRY QUEUE (Multi-Tier + Phonetic + Full UI)
 # ==========================================
