@@ -348,6 +348,7 @@ if current_role == "Admin":
         "14. TECHO Entry Queue",
         "15. Clinical & IFA Tracker",
         "16. CMTC Inpatient Tracker"
+        "17. Village-Wise Analysis"
     ]
 
 elif current_role == "CMTC":
@@ -4689,4 +4690,195 @@ elif menu == "16. CMTC Inpatient Tracker":
                 st.download_button("⬇️ Download CMTC History", data=csv, file_name="CMTC_Discharge_History.csv", mime="text/csv")
             else:
                 st.info("No children have been discharged yet.")
+    # ==========================================
+# MODULE 17: VILLAGE-WISE DATA ANALYSIS
+# ==========================================
+elif menu == "17. Village-Wise Analysis":
+    render_header("Village-Wise Data Analysis", "Comprehensive village health & institution stats", "🏡", "#059669")
 
+    # 1. Fetch live daily logs instantly using your optimized cache
+    aw_daily, sch_daily, _ = get_daily_logs()
+
+    # 2. Build Unified Village Master List from both Master Sheets
+    aw_villages = set()
+    sch_villages = set()
+    
+    if not df_aw.empty and 'VILLAGE' in df_aw.columns:
+        aw_villages = set(df_aw['VILLAGE'].dropna().astype(str).str.strip().str.upper())
+    if not df_students.empty and 'Village' in df_students.columns:
+        sch_villages = set(df_students['Village'].dropna().astype(str).str.strip().str.upper())
+        
+    all_villages = sorted(list(aw_villages.union(sch_villages)))
+    all_villages = [v for v in all_villages if v not in ['', 'NAN', 'NONE']]
+
+    selected_village = st.selectbox("🏘️ Select a Village:", ["-- Select Village --"] + all_villages)
+
+    if selected_village != "-- Select Village --":
+        st.divider()
+        
+        with st.spinner(f"Aggregating clinical and demographic data for {selected_village}..."):
+            # --- Gather Institutions in this Village ---
+            village_awcs = []
+            village_schools = []
+            
+            if not df_aw.empty:
+                v_aw_df = df_aw[df_aw['VILLAGE'].astype(str).str.strip().str.upper() == selected_village]
+                if 'AWC Name' in v_aw_df.columns:
+                    village_awcs = v_aw_df['AWC Name'].dropna().astype(str).unique().tolist()
+                    
+            if not df_students.empty:
+                v_sch_df = df_students[df_students['Village'].astype(str).str.strip().str.upper() == selected_village]
+                if 'School' in v_sch_df.columns:
+                    village_schools = v_sch_df['School'].dropna().astype(str).unique().tolist()
+            
+            total_inst = len(village_awcs) + len(village_schools)
+            st.subheader(f"📍 Institutions in {selected_village} ({total_inst} Total)")
+            
+            # --- Build Statistical Data Engine ---
+            stats_data = []
+            sick_children_data = []
+            
+            # Helper: Bulletproof clinical condition checker
+            def is_sick(disease_val, status_val):
+                d = str(disease_val).strip().lower()
+                s = str(status_val).strip().lower()
+                has_disease = d not in ['', 'nan', 'none', 'no', 'null', 'false']
+                has_malnutrition = s in ['sam', 'mam']
+                return has_disease or has_malnutrition
+            
+            # Process Anganwadi Centers
+            for awc in village_awcs:
+                total_reg = len(df_aw[df_aw['AWC Name'].astype(str).str.strip() == awc])
+                
+                awc_screened_df = pd.DataFrame()
+                if not aw_daily.empty:
+                    inst_col = next((c for c in aw_daily.columns if any(k in str(c).lower() for k in ['inst', 'awc', 'center', 'anganwadi'])), None)
+                    if inst_col:
+                        awc_screened_df = aw_daily[aw_daily[inst_col].astype(str).str.strip() == awc]
+                
+                if not awc_screened_df.empty:
+                    child_col = next((c for c in awc_screened_df.columns if 'child' in str(c).lower() or 'name' in str(c).lower()), None)
+                    if child_col:
+                        # Exclude absences from the screened count
+                        valid_screenings = awc_screened_df[~awc_screened_df.apply(lambda r: 'ABSENT' in str(r.values).upper(), axis=1)]
+                        total_screened = valid_screenings[child_col].nunique()
+                        
+                        # Find sick kids
+                        for _, row in valid_screenings.iterrows():
+                            # Safely extract dynamic columns
+                            dis = next((row[c] for c in valid_screenings.columns if 'disease' in str(c).lower() or '4d' in str(c).lower()), 'None')
+                            stat = next((row[c] for c in valid_screenings.columns if 'status' in str(c).lower() or 'sam' in str(c).lower()), 'Normal')
+                            contact = next((row[c] for c in valid_screenings.columns if 'contact' in str(c).lower()), 'N/A')
+                            s_date = next((row[c] for c in valid_screenings.columns if 'date' in str(c).lower()), 'Unknown')
+                            
+                            if is_sick(dis, stat):
+                                sick_children_data.append({
+                                    "Institution": awc,
+                                    "Type": "Anganwadi 👶",
+                                    "Child Name": row.get(child_col, 'Unknown'),
+                                    "Condition / Disease": str(dis).strip(),
+                                    "Malnutrition Status": str(stat).strip(),
+                                    "Contact Number": str(contact),
+                                    "Screening Date": str(s_date)
+                                })
+                        
+                        total_sick = len([1 for _, row in valid_screenings.iterrows() if is_sick(
+                            next((row[c] for c in valid_screenings.columns if 'disease' in str(c).lower() or '4d' in str(c).lower()), 'None'),
+                            next((row[c] for c in valid_screenings.columns if 'status' in str(c).lower() or 'sam' in str(c).lower()), 'Normal')
+                        )])
+                    else:
+                        total_screened, total_sick = 0, 0
+                else:
+                    total_screened, total_sick = 0, 0
+                    
+                stats_data.append({
+                    "Institution Name": awc,
+                    "Type": "Anganwadi 👶",
+                    "Total Registered": total_reg,
+                    "Total Screened": total_screened,
+                    "Total with Conditions": total_sick
+                })
+                
+            # Process Schools
+            for sch in village_schools:
+                total_reg = len(df_students[df_students['School'].astype(str).str.strip() == sch])
+                
+                sch_screened_df = pd.DataFrame()
+                if not sch_daily.empty:
+                    inst_col = next((c for c in sch_daily.columns if any(k in str(c).lower() for k in ['inst', 'school'])), None)
+                    if inst_col:
+                        sch_screened_df = sch_daily[sch_daily[inst_col].astype(str).str.strip() == sch]
+                
+                if not sch_screened_df.empty:
+                    student_col = next((c for c in sch_screened_df.columns if 'student' in str(c).lower() or 'name' in str(c).lower()), None)
+                    if student_col:
+                        valid_screenings = sch_screened_df[~sch_screened_df.apply(lambda r: 'ABSENT' in str(r.values).upper(), axis=1)]
+                        total_screened = valid_screenings[student_col].nunique()
+                        
+                        for _, row in valid_screenings.iterrows():
+                            dis = next((row[c] for c in valid_screenings.columns if 'disease' in str(c).lower() or '4d' in str(c).lower()), 'None')
+                            contact = next((row[c] for c in valid_screenings.columns if 'contact' in str(c).lower()), 'N/A')
+                            s_date = next((row[c] for c in valid_screenings.columns if 'date' in str(c).lower()), 'Unknown')
+
+                            if is_sick(dis, "Normal"): # Schools usually don't track SAM/MAM natively
+                                sick_children_data.append({
+                                    "Institution": sch,
+                                    "Type": "School 🏫",
+                                    "Child Name": row.get(student_col, 'Unknown'),
+                                    "Condition / Disease": str(dis).strip(),
+                                    "Malnutrition Status": "N/A",
+                                    "Contact Number": str(contact),
+                                    "Screening Date": str(s_date)
+                                })
+                        total_sick = len([1 for _, row in valid_screenings.iterrows() if is_sick(next((row[c] for c in valid_screenings.columns if 'disease' in str(c).lower() or '4d' in str(c).lower()), 'None'), "Normal")])
+                    else:
+                        total_screened, total_sick = 0, 0
+                else:
+                    total_screened, total_sick = 0, 0
+                    
+                stats_data.append({
+                    "Institution Name": sch,
+                    "Type": "School 🏫",
+                    "Total Registered": total_reg,
+                    "Total Screened": total_screened,
+                    "Total with Conditions": total_sick
+                })
+                
+        # --- Render Statistical Outputs ---
+        if stats_data:
+            df_stats = pd.DataFrame(stats_data)
+            
+            # KPI Dashboard
+            k1, k2, k3 = st.columns(3)
+            k1.metric("Total Registered (Village)", df_stats["Total Registered"].sum())
+            k2.metric("Total Screened (Village)", df_stats["Total Screened"].sum())
+            k3.metric("🚨 Total Conditions Found", df_stats["Total with Conditions"].sum())
+            
+            st.markdown("#### 📊 Institution-Wise Breakdown")
+            st.dataframe(df_stats, use_container_width=True, hide_index=True)
+            
+            st.divider()
+            
+            # --- Render Affected Children Roster ---
+            st.markdown(f"### 🚨 Affected Children Roster ({len(sick_children_data)} Cases)")
+            st.write("Below is the consolidated list of all children in this village identified with a 4D Condition, SAM, or MAM.")
+            
+            if sick_children_data:
+                df_sick = pd.DataFrame(sick_children_data)
+                st.dataframe(df_sick, use_container_width=True, hide_index=True)
+                
+                import datetime
+                csv_sick = df_sick.to_csv(index=False).encode('utf-8-sig')
+                st.download_button(
+                    label=f"⬇️ Download Disease Roster for {selected_village} (CSV)",
+                    data=csv_sick,
+                    file_name=f"Disease_Roster_{selected_village}_{datetime.date.today()}.csv",
+                    mime="text/csv",
+                    type="primary"
+                )
+            else:
+                st.success("🎉 Incredible! No diseases or malnutrition conditions have been identified in this village yet.")
+        else:
+            st.info("No institutions found for this village in your master databases.")
+            
+    
