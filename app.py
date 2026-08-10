@@ -347,7 +347,7 @@ if current_role == "Admin":
         "13. Offline Batch Sync",
         "14. TECHO Entry Queue",
         "15. Clinical & IFA Tracker",
-        "16. CMTC Inpatient Tracker"
+        "16. CMTC Inpatient Tracker",
         "17. Village-Wise Analysis"
     ]
 
