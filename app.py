@@ -1622,7 +1622,7 @@ elif menu == "3. 4D Defect Registry":
                          use_container_width=True, hide_index=True)
         else: st.info("No defects screened today.")
 
-   # 🪪 TAB 4: REFER CARD PRINT (GUJARATI)
+  # 🪪 TAB 4: REFER CARD PRINT (GUJARATI)
     with tab_card:
         st.subheader("🪪 Official Refer Card Center (Perfect Gujarati)")
         
@@ -1659,16 +1659,38 @@ elif menu == "3. 4D Defect Registry":
                 if submitted:
                     if sel_c != "-- Select --":
                         p = display_map[sel_c]
+                        
+                        # 🚀 SMART VILLAGE LOOKUP: Match the Institution to Master Database dynamically
+                        village_name = "VISAVADAR" # Fallback Default
+                        inst_type = p.get("Type", "")
+                        inst_name = p.get("Institution", "")
+                        
+                        if inst_type == "Anganwadi" and not df_aw.empty:
+                            aw_vlg_col = next((c for c in df_aw.columns if "VILLAGE" in str(c).upper()), None)
+                            aw_inst_col = next((c for c in df_aw.columns if any(k in str(c).upper() for k in ["AWC NAME", "AWC", "INSTITUTE"])), None)
+                            if aw_vlg_col and aw_inst_col:
+                                v_match = df_aw[df_aw[aw_inst_col].astype(str).str.strip() == inst_name]
+                                if not v_match.empty:
+                                    village_name = str(v_match.iloc[0][aw_vlg_col]).strip().upper()
+                        elif inst_type == "School" and not df_schools.empty: # Using df_schools global var
+                            sch_vlg_col = next((c for c in df_schools.columns if "VILLAGE" in str(c).upper()), None)
+                            sch_inst_col = next((c for c in df_schools.columns if any(k in str(c).upper() for k in ["SCHOOL", "INSTITUTION"])), None)
+                            if sch_vlg_col and sch_inst_col:
+                                v_match = df_schools[df_schools[sch_inst_col].astype(str).str.strip() == inst_name]
+                                if not v_match.empty:
+                                    village_name = str(v_match.iloc[0][sch_vlg_col]).strip().upper()
+
                         st.session_state.report_data = {
                             "Name": p.get("Name", ""),
                             "DOB": p.get("DOB", ""), 
                             "Father": p.get("Father", ""),
                             "Mother": "", 
-                            "Village": p.get("Village", "Visavadar"),
+                            "Village": village_name,
                             "Gender": p.get("Gender", ""),
                             "Age": get_age(p.get("DOB", "")) if "DOB" in p else "",
                             "Contact": p.get("Contact", ""),
                             "Institution": p.get("Institution", ""),
+                            "Type": inst_type,
                             "Date": p.get("Date", str(datetime.date.today().strftime("%d-%m-%Y"))),
                             "Condition": p.get("Condition", ""),
                             "Height": p.get("Height", "N/A"),
@@ -1733,6 +1755,7 @@ elif menu == "3. 4D Defect Registry":
                             pdf.text(20, y, f"બાળકની જન્મ તારીખ : {data.get('DOB', '')}")
                             pdf.text(320, y, f"ઉંમર (વર્ષ અને મહિનામાં) : {data.get('Age', '')}")
                             
+                            # 🚀 AUTO POPULATE: FATHER NAME & CONTACT
                             y += 20
                             pdf.text(20, y, f"બાળકના પિતાનું પુરું નામ : {data.get('Father', '')}")
                             pdf.text(320, y, f"પિતાનો મોબાઈલ નં. : {data.get('Contact', '')}")
@@ -1743,21 +1766,31 @@ elif menu == "3. 4D Defect Registry":
                             pdf.text(400, y, "DISTRICT : JUNAGADH")
                             
                             y += 25
-                            def draw_checkbox(x, y_pos, label):
+                            def draw_checkbox(x, y_pos, label, is_checked=False):
                                 pdf.rect(x, y_pos - 10, 10, 10)
+                                if is_checked:
+                                    pdf.set_line_width(1.5)
+                                    pdf.line(x + 2, y_pos - 5, x + 4, y_pos - 2)
+                                    pdf.line(x + 4, y_pos - 2, x + 9, y_pos - 9)
+                                    pdf.set_line_width(1) # Reset
                                 pdf.text(x + 15, y_pos, label)
                                 
-                            draw_checkbox(20, y, "શાળાએ જતું")
-                            draw_checkbox(120, y, "શાળાને ન જતું")
-                            draw_checkbox(230, y, "આંગણવાડી")
-                            draw_checkbox(330, y, "ડીલીવરી પોઈન્ટ (નવજાત બાળક)")
+                            # 🚀 AUTO POPULATE: INSTITUTION TYPE CHECKBOXES
+                            inst_type = data.get("Type", "")
+                            draw_checkbox(20, y, "શાળાએ જતું", is_checked=(inst_type == "School"))
+                            draw_checkbox(120, y, "શાળાને ન જતું", is_checked=False)
+                            draw_checkbox(230, y, "આંગણવાડી", is_checked=(inst_type == "Anganwadi"))
+                            draw_checkbox(330, y, "ડીલીવરી પોઈન્ટ (નવજાત બાળક)", is_checked=False)
                             
                             y += 25
                             pdf.text(20, y, f"શાળા/આંગણવાડીનું નામ : {data.get('Institution', '')}")
-                            pdf.text(320, y, "શાળા/આંગણવાડીનો સંપર્ક નં.: ________")
+                            pdf.text(320, y, f"શાળા/આંગણવાડીનો સંપર્ક નં.: {data.get('Contact', '________')}")
                             
+                            # 🚀 AUTO POPULATE: SCHOOL/AW FULL ADDRESS USING VILLAGE
                             y += 25
-                            pdf.text(20, y, "શાળા/આંગણવાડીનું પુરું સરનામું : _______________________________________________")
+                            vlg_str = data.get('Village', '')
+                            address_str = f"મુ. {vlg_str}, તા. વિસાવદર, જી. જુનાગઢ" if vlg_str else "_______________________________________________"
+                            pdf.text(20, y, f"શાળા/આંગણવાડીનું પુરું સરનામું : {address_str}")
                             
                             y += 25
                             pdf.text(20, y, "માતાનું નામ : ____________________")
@@ -1767,16 +1800,26 @@ elif menu == "3. 4D Defect Registry":
                             draw_checkbox(360, y, "ST")
                             draw_checkbox(410, y, "OBC")
                             
+                            # 🚀 AUTO POPULATE: RESIDENTIAL ADDRESS USING VILLAGE
                             y += 25
-                            pdf.text(20, y, "રહેઠાણનું પુરું સરનામું : _______________________________________________________")
+                            pdf.text(20, y, f"રહેઠાણનું પુરું સરનામું : {address_str}")
                             
+                            # 🚀 AUTO POPULATE: SMART 4D CONDITION CHECKBOXES
                             y += 20
                             pdf.text(20, y, "4D :")
-                            draw_checkbox(50, y, "BIRTH DEFECT")
-                            draw_checkbox(140, y, "DEFICIENCIES")
-                            draw_checkbox(240, y, "DISEASES")
-                            draw_checkbox(350, y, "DEVELOPMENTAL DELAY")
-                            draw_checkbox(510, y, "OTHERS")
+                            
+                            cond = str(data.get("Condition", "")).lower()
+                            is_bd = any(w in cond for w in ["defect", "cleft", "club", "chd", "heart"])
+                            is_def = any(w in cond for w in ["anemia", "deficiency", "sam", "mam", "vitamin", "goiter"])
+                            is_dis = any(w in cond for w in ["disease", "caries", "otitis", "skin", "asthma", "fever", "cough", "dogbite"])
+                            is_del = any(w in cond for w in ["delay", "development", "autism", "vision", "hearing", "motor", "speech"])
+                            is_oth = bool(cond and not any([is_bd, is_def, is_dis, is_del]))
+                            
+                            draw_checkbox(50, y, "BIRTH DEFECT", is_checked=is_bd)
+                            draw_checkbox(140, y, "DEFICIENCIES", is_checked=is_def)
+                            draw_checkbox(240, y, "DISEASES", is_checked=is_dis)
+                            draw_checkbox(350, y, "DEVELOPMENTAL DELAY", is_checked=is_del)
+                            draw_checkbox(510, y, "OTHERS", is_checked=is_oth)
                             
                             pdf.line(15, y + 15, 595.27 - 15, y + 15)
                             
