@@ -379,7 +379,8 @@ if st.sidebar.button("🔓 Logout"):
 elif menu == "1. Daily Tour Plan":
     render_header("Executive Dashboard", "Live team overview and daily screening stats", "📊", "#3b82f6")
 
-    tab_tour, tab_charts = st.tabs(["📅 Daily Tour Plan", "📈 Executive Analytics"])
+    # 👇 New Tab initialized here
+    tab_tour, tab_charts, tab_review = st.tabs(["📅 Daily Tour Plan", "📈 Executive Analytics", "🏆 State Review Matrix"])
 
     with tab_tour:
         st.markdown("#### 🗺️ Manage Daily Tour Plan")
@@ -581,6 +582,7 @@ elif menu == "1. Daily Tour Plan":
         st.checkbox("Check weighing scale and height tape calibration")
         st.checkbox("Ensure blank referral cards are printed (Backup)")
         st.checkbox("Charge tablet/mobile to 100%")
+
     with tab_charts:
         import plotly.express as px
         aw_logs, sch_logs, df = get_daily_logs()
@@ -714,6 +716,242 @@ elif menu == "1. Daily Tour Plan":
                     st.plotly_chart(fig_dis, use_container_width=True)
                 else:
                     st.info("No referral conditions to map yet. Great job MHT-1!")
+
+    # 👇 New State Review Matrix Tab Integrated Here
+    with tab_review:
+        st.subheader("🏆 Visavadar Block Executive Summary")
+        st.write("Optimized Zero-Lag view designed for State & District Review Meetings.")
+
+        # ==========================================
+        # STEP 1: ZERO-LAG DATA AGGREGATION ENGINE
+        # ==========================================
+        with st.spinner("Crunching Block-Level Matrix..."):
+            # 1. Compile Denominator (Targets) from Master Sheets
+            target_data = []
+            if not df_aw_master.empty:
+                team_col_aw = next((c for c in df_aw_master.columns if 'TEAM' in str(c).upper()), None)
+                if team_col_aw:
+                    target_data.extend(df_aw_master[team_col_aw].dropna().astype(str).str.strip().str.upper().tolist())
+                    
+            if not df_all_students.empty:
+                team_col_sch = next((c for c in df_all_students.columns if 'TEAM' in str(c).upper()), None)
+                if team_col_sch:
+                    target_data.extend(df_all_students[team_col_sch].dropna().astype(str).str.strip().str.upper().tolist())
+
+            df_targets = pd.DataFrame(target_data, columns=['Team'])
+            df_targets['Team'] = df_targets['Team'].replace('', 'UNASSIGNED')
+            team_targets = df_targets['Team'].value_counts().reset_index()
+            team_targets.columns = ['Team', 'Total Target']
+
+            # 2. Compile Numerator (Achievements) from Daily Logs
+            aw_logs, sch_logs, df_combined = get_daily_logs()
+            
+            # Reconstruct global team mapping dictionary for absolute safety
+            team_map = {}
+            if not df_aw_master.empty and team_col_aw:
+                aw_inst_col = next((c for c in df_aw_master.columns if any(k in str(c).upper() for k in ["INSTITUTE", "AWC", "CENTER"])), None)
+                if aw_inst_col:
+                    team_map.update(dict(zip(df_aw_master[aw_inst_col].astype(str).str.strip(), df_aw_master[team_col_aw].astype(str).str.strip().str.upper())))
+                    
+            if not df_all_students.empty and team_col_sch:
+                sch_inst_col = next((c for c in df_all_students.columns if any(k in str(c).upper() for k in ["INSTITUTION", "SCHOOL"])), None)
+                if sch_inst_col:
+                    team_map.update(dict(zip(df_all_students[sch_inst_col].astype(str).str.strip(), df_all_students[team_col_sch].astype(str).str.strip().str.upper())))
+
+            achieved_data = []
+            inst_col_comb = None
+            if not df_combined.empty:
+                inst_col_comb = next((c for c in df_combined.columns if any(k in str(c).upper() for k in ["INST", "SCHOOL", "AWC", "CENTER"])), None)
+                if inst_col_comb:
+                    df_combined['Mapped Team'] = df_combined[inst_col_comb].astype(str).str.strip().map(team_map).fillna("UNASSIGNED")
+                    achieved_data = df_combined['Mapped Team'].tolist()
+
+            df_achieved = pd.DataFrame(achieved_data, columns=['Team'])
+            team_achieved = df_achieved['Team'].value_counts().reset_index()
+            team_achieved.columns = ['Team', 'Total Screened']
+
+            # 3. Merge Matrix
+            df_matrix = pd.merge(team_targets, team_achieved, on='Team', how='outer').fillna(0)
+            df_matrix = df_matrix[df_matrix['Team'] != "UNASSIGNED"]
+            df_matrix['Pending'] = (df_matrix['Total Target'] - df_matrix['Total Screened']).clip(lower=0)
+            df_matrix['Coverage %'] = (df_matrix['Total Screened'] / df_matrix['Total Target'] * 100).fillna(0).round(1)
+
+            # 4. 4D Extraction Pipeline
+            df_4d_cases = pd.DataFrame()
+            disease_col = None
+            if not df_combined.empty:
+                disease_col = next((c for c in df_combined.columns if any(k in str(c).upper() for k in ["DISEASE", "4D", "DEFECT"])), None)
+                if disease_col and 'Mapped Team' in df_combined.columns:
+                    def is_disease(val):
+                        v = str(val).strip().lower()
+                        return v not in ['', 'nan', 'none', 'no', 'null', 'na', 'false', 'normal']
+                    df_4d_cases = df_combined[df_combined[disease_col].apply(is_disease)].copy()
+
+        # ==========================================
+        # STEP 2: TOP ROW KPIs
+        # ==========================================
+        total_target_block = df_matrix['Total Target'].sum()
+        total_screened_block = df_matrix['Total Screened'].sum()
+        overall_pct = (total_screened_block / total_target_block * 100) if total_target_block > 0 else 0
+        total_4d_detected = len(df_4d_cases) if not df_4d_cases.empty else 0
+
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("🎯 Block Total Target", f"{int(total_target_block):,}")
+        k2.metric("✅ Total Screened", f"{int(total_screened_block):,}")
+        k3.metric("📈 Overall Coverage", f"{overall_pct:.1f}%")
+        k4.metric("🚨 Total 4D Cases", total_4d_detected)
+
+        st.divider()
+
+        # ==========================================
+        # STEP 3: MIDDLE ROW (COVERAGE MATRIX)
+        # ==========================================
+        st.markdown("#### 👥 Team-Wise Coverage Matrix")
+        c1, c2 = st.columns([1, 1.5])
+        with c1:
+            st.dataframe(df_matrix[['Team', 'Total Target', 'Total Screened', 'Pending', 'Coverage %']], hide_index=True, use_container_width=True)
+        with c2:
+            import plotly.express as px
+            fig_cov = px.bar(
+                df_matrix.melt(id_vars='Team', value_vars=['Total Target', 'Total Screened'], var_name='Metric', value_name='Children'),
+                x='Team', y='Children', color='Metric', barmode='group',
+                color_discrete_map={'Total Target': '#94a3b8', 'Total Screened': '#10b981'}
+            )
+            fig_cov.update_layout(margin=dict(l=0, r=0, t=30, b=0), legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+            st.plotly_chart(fig_cov, use_container_width=True)
+
+        st.divider()
+
+        # ==========================================
+        # STEP 4: BOTTOM ROW (4D DISEASE MATRIX)
+        # ==========================================
+        st.markdown("#### 🦠 Cross-Tabulation: 4D Disease Matrix")
+        if not df_4d_cases.empty and disease_col:
+            disease_pivot = pd.crosstab(df_4d_cases[disease_col], df_4d_cases['Mapped Team'])
+            st.dataframe(disease_pivot, use_container_width=True)
+        else:
+            st.info("No 4D cases recorded across the block yet.")
+
+        st.divider()
+
+        # ==========================================
+        # STEP 5: MAJOR BIRTH DEFECTS REGISTRY
+        # ==========================================
+        st.markdown("#### 🚨 Major Birth Defects (Category 1) Registry")
+        critical_keywords = ['cleft lip', 'cleft palate', 'club foot', 'chd', 'congenital heart', 'neural tube', 'congenital cataract', 'down syndrome']
+
+        if not df_4d_cases.empty and disease_col:
+            df_4d_cases['Is_Critical'] = df_4d_cases[disease_col].apply(lambda x: any(k in str(x).lower() for k in critical_keywords))
+            critical_cases = df_4d_cases[df_4d_cases['Is_Critical']].copy()
+
+            if not critical_cases.empty:
+                child_name_col = next((c for c in critical_cases.columns if any(k in str(c).upper() for k in ["NAME", "CHILD", "STUDENT"])), None)
+                contact_col = next((c for c in critical_cases.columns if any(k in str(c).upper() for k in ["CONTACT", "PHONE", "MOBILE"])), None)
+
+                disp_cols = {}
+                if child_name_col: disp_cols['Child Name'] = critical_cases[child_name_col]
+                if inst_col_comb: disp_cols['Institution'] = critical_cases[inst_col_comb]
+                disp_cols['Team'] = critical_cases['Mapped Team']
+                disp_cols['Condition (4D)'] = critical_cases[disease_col]
+                if contact_col: disp_cols['Contact'] = critical_cases[contact_col]
+
+                st.dataframe(pd.DataFrame(disp_cols), hide_index=True, use_container_width=True)
+            else:
+                st.success("No critical Category 1 Birth Defects detected currently.")
+        else:
+             st.info("No cases to filter.")
+
+        st.divider()
+
+        # ==========================================
+        # STEP 6: SAM/MAM TRIAGE SUMMARY
+        # ==========================================
+        st.markdown("#### ⚖️ Nutrition: SAM/MAM Triage & Recovery")
+        try:
+            df_cmtc = pd.DataFrame(spreadsheet.worksheet("cmtc_referral").get_all_records())
+            df_cmtc = df_cmtc.loc[:, ~df_cmtc.columns.str.contains('^Unnamed')]
+
+            if not df_cmtc.empty and 'Status' in df_cmtc.columns and 'Current Status' in df_cmtc.columns:
+                total_sam = len(df_cmtc[df_cmtc['Status'].astype(str).str.strip().str.upper() == 'SAM'])
+                total_mam = len(df_cmtc[df_cmtc['Status'].astype(str).str.strip().str.upper() == 'MAM'])
+                recovered = len(df_cmtc[df_cmtc['Current Status'].astype(str).str.strip().str.title().isin(['Recovered', 'Discharged'])])
+
+                m1, m2, m3 = st.columns(3)
+                m1.error(f"🔴 Total SAM Cases: {total_sam}")
+                m2.warning(f"🟡 Total MAM Cases: {total_mam}")
+                m3.success(f"🟢 Successfully Recovered: {recovered}")
+            else:
+                st.info("No nutritional cases logged in CMTC referral.")
+        except:
+            st.warning("Could not establish connection to CMTC Referral data.")
+
+        st.divider()
+
+        # ==========================================
+        # STEP 7: EXECUTIVE PDF EXPORT
+        # ==========================================
+        st.markdown("#### 🖨️ Generate Executive Report")
+        if st.button("📄 Generate Block Executive Summary (PDF)", type="primary"):
+            with st.spinner("Compiling PDF..."):
+                try:
+                    from fpdf import FPDF
+                    import base64
+                    import datetime
+
+                    pdf = FPDF(unit='pt', format='A4')
+                    pdf.add_page()
+                    pdf.set_font('Helvetica', 'B', 18)
+                    pdf.cell(0, 30, "VISAVADAR BLOCK - RBSK EXECUTIVE SUMMARY", align='C', ln=True)
+
+                    pdf.set_font('Helvetica', '', 12)
+                    pdf.cell(0, 20, f"Generated On: {datetime.date.today().strftime('%d-%m-%Y')}", align='C', ln=True)
+                    pdf.ln(20)
+
+                    # KPI Table
+                    pdf.set_font('Helvetica', 'B', 14)
+                    pdf.set_fill_color(220, 220, 220)
+                    pdf.cell(0, 25, " 1. OVERALL KPI", border=1, ln=True, fill=True)
+
+                    pdf.set_font('Helvetica', '', 12)
+                    pdf.cell(150, 25, "Block Target:", border=1)
+                    pdf.cell(120, 25, f"{int(total_target_block)}", border=1, ln=True)
+                    pdf.cell(150, 25, "Total Screened:", border=1)
+                    pdf.cell(120, 25, f"{int(total_screened_block)}", border=1, ln=True)
+                    pdf.cell(150, 25, "Coverage:", border=1)
+                    pdf.cell(120, 25, f"{overall_pct:.1f}%", border=1, ln=True)
+                    pdf.ln(10)
+
+                    # Matrix Table
+                    pdf.set_font('Helvetica', 'B', 14)
+                    pdf.cell(0, 25, " 2. TEAM PERFORMANCE", border=1, ln=True, fill=True)
+                    
+                    pdf.set_font('Helvetica', 'B', 11)
+                    pdf.cell(150, 20, "Team Name", border=1)
+                    pdf.cell(100, 20, "Target", border=1)
+                    pdf.cell(100, 20, "Screened", border=1)
+                    pdf.cell(100, 20, "Pending", border=1)
+                    pdf.cell(80, 20, "Coverage %", border=1, ln=True)
+
+                    pdf.set_font('Helvetica', '', 11)
+                    for _, row in df_matrix.iterrows():
+                        pdf.cell(150, 20, str(row['Team']), border=1)
+                        pdf.cell(100, 20, str(int(row['Total Target'])), border=1)
+                        pdf.cell(100, 20, str(int(row['Total Screened'])), border=1)
+                        pdf.cell(100, 20, str(int(row['Pending'])), border=1)
+                        pdf.cell(80, 20, f"{row['Coverage %']}%", border=1, ln=True)
+
+                    pdf_bytes = bytes(pdf.output())
+                    b64 = base64.b64encode(pdf_bytes).decode()
+
+                    st.markdown(
+                        f'<a href="data:application/pdf;base64,{b64}" download="Executive_Summary_{datetime.date.today()}.pdf" '
+                        f'style="display:block;padding:12px;background:#3b82f6;color:white;text-align:center;'
+                        f'font-weight:bold;border-radius:6px;text-decoration:none;">'
+                        f'⬇️ Download Executive Summary PDF</a>',
+                        unsafe_allow_html=True
+                    )
+                except Exception as e:
+                    st.error(f"Failed to generate PDF: {e}")
 
 # ==========================================
 # MODULE 2: EMR SCREENING (180-Day Roster & Manual Sync)
