@@ -2834,6 +2834,13 @@ elif menu == "7. Anemia Tracker":
                 # 🚀 THE MAGIC: We only look at the Hb number, entirely ignoring the Disease text column!
                 live_cases = df_combined[df_combined[hb_col] > 0].copy()
                 
+                # 🛡️ THE FIX: Bulletproof gender extraction that prevents IndexError on blank cells
+                def safe_gender(val):
+                    s = str(val).strip().upper()
+                    if s in ["", "NAN", "NONE", "NULL", "NA", "NAT"]:
+                        return "U"
+                    return s[0]
+
                 for _, row in live_cases.iterrows():
                     hb_val = row[hb_col]
                     loc_type = row.get('Location_Type', 'School')
@@ -2856,7 +2863,7 @@ elif menu == "7. Anemia Tracker":
                             'VILLAGE': str(row[inst_col]) if inst_col else "Unknown",
                             'CHILD NAME': str(row[name_col]) if name_col else "Unknown",
                             'DOB': str(row[dob_col]) if dob_col else "",
-                            'GENDER': str(row[gender_col])[0].upper() if gender_col else "U",
+                            'GENDER': safe_gender(row[gender_col]) if gender_col else "U",
                             'HB LEVEL': hb_val,
                             'SEVERITY': severity,
                             'Source_Type': f"Live ({loc_type})"
@@ -2915,11 +2922,12 @@ elif menu == "7. Anemia Tracker":
             
             with c1:
                 st.write("**1. Demographic Heatmap (Severity by Gender)**")
-                filtered_df['Clean_Gender'] = filtered_df['GENDER'].astype(str).str.upper().str[0].map({'M': 'Boys', 'F': 'Girls'})
+                # 🛡️ Bulletproof mapping that won't crash on 'U' or NaN
+                filtered_df['Clean_Gender'] = filtered_df['GENDER'].astype(str).str.upper().str[0].map({'M': 'Boys', 'F': 'Girls'}).fillna('Unknown')
                 if not filtered_df['Clean_Gender'].dropna().empty:
                     gender_sev = filtered_df.groupby(['Clean_Gender', 'SEVERITY']).size().reset_index(name='Count')
                     fig_gen = px.bar(gender_sev, x='SEVERITY', y='Count', color='Clean_Gender', barmode='group',
-                                     color_discrete_map={'Boys': '#3b82f6', 'Girls': '#ec4899'})
+                                     color_discrete_map={'Boys': '#3b82f6', 'Girls': '#ec4899', 'Unknown': '#94a3b8'})
                     st.plotly_chart(fig_gen, use_container_width=True)
                 else:
                     st.info("No gender data available for this slice.")
@@ -2979,7 +2987,6 @@ elif menu == "7. Anemia Tracker":
                     mime="text/csv",
                     type="primary"
                 )
-
 # ==========================================
 # MODULE 8: SCHOOL DIRECTORY
 # ==========================================
