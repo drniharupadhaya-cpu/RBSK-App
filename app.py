@@ -2794,119 +2794,98 @@ elif menu == "6. Success Story Builder":
                     st.error(f"⚠️ An error occurred while painting the PDF: {e}")
 
 # ==========================================
-# MODULE 7: ANEMIA TRACKER (Automated Micro-Analytics & Institution Command Center)
+# MODULE 7: ANEMIA TRACKER (Live School Command Center)
 # ==========================================
 elif menu == "7. Anemia Tracker":
-    render_header("Advanced Anemia Micro-Analytics", "Automated T3 tracking, institution breakdowns, and full spectrum analysis", "🩸", "#f59e0b")
-    st.write("This module automatically extracts all Anemia cases from your daily screenings, merges them with historical T3 data, and provides institution-wise micro-analytics.")
+    render_header("School Anemia Analytics (Live)", "Live school-wise tracking and full spectrum Hb analysis", "🩸", "#f59e0b")
+    st.write("This module extracts all Hemoglobin readings strictly from your live daily school screenings and provides deep institution-wise micro-analytics.")
 
-    # --- 1. DATA AGGREGATION & HYBRID MERGE ENGINE ---
-    with st.spinner("Crunching historical and live screening data..."):
-        # A. Process Historical Data (From 'ANEMIA' sheet)
-        hist_df = pd.DataFrame()
-        if not df_anemia.empty:
-            hist_df = df_anemia.copy()
-            hist_df['HB LEVEL'] = pd.to_numeric(hist_df['HB LEVEL'], errors='coerce')
-            hist_df['CAMP DATE'] = pd.to_datetime(hist_df['CAMP DATE'], errors='coerce', dayfirst=True)
-            hist_df = hist_df.dropna(subset=['HB LEVEL'])
-            hist_df['Source_Type'] = "Historical (Manual)"
-
-        # B. Process Live Data (From 'daily_screenings')
-        live_anemia_list = []
+    # --- 1. DATA AGGREGATION (LIVE SCHOOLS ONLY) ---
+    with st.spinner("Crunching live school screening data..."):
         aw_logs, sch_logs, df_combined = get_daily_logs()
         
-        if not df_combined.empty:
+        master_anemia = pd.DataFrame()
+        if not sch_logs.empty:
             # Find columns dynamically to prevent key errors
             def get_col(df, keywords):
                 for c in df.columns:
                     if any(k in str(c).lower() for k in keywords): return c
                 return None
                 
-            hb_col = get_col(df_combined, ['hb', 'hemoglobin'])
-            date_col = get_col(df_combined, ['date'])
-            name_col = get_col(df_combined, ['name', 'child', 'student'])
-            dob_col = get_col(df_combined, ['dob', 'birth'])
-            gender_col = get_col(df_combined, ['gender', 'sex'])
-            inst_col = get_col(df_combined, ['inst', 'school', 'awc', 'center', 'anganwadi'])
+            hb_col = get_col(sch_logs, ['hb', 'hemoglobin'])
+            date_col = get_col(sch_logs, ['date'])
+            name_col = get_col(sch_logs, ['name', 'child', 'student'])
+            dob_col = get_col(sch_logs, ['dob', 'birth'])
+            gender_col = get_col(sch_logs, ['gender', 'sex'])
+            inst_col = get_col(sch_logs, ['inst', 'school'])
+            class_col = get_col(sch_logs, ['class', 'std', 'standard'])
+            contact_col = get_col(sch_logs, ['contact', 'phone', 'mobile'])
+            ht_col = get_col(sch_logs, ['height'])
+            wt_col = get_col(sch_logs, ['weight'])
             
             if hb_col:
-                df_combined[hb_col] = pd.to_numeric(df_combined[hb_col], errors='coerce').fillna(0.0)
-                # 🚀 We look at the Hb number, capturing everyone with an Hb reading!
-                live_cases = df_combined[df_combined[hb_col] > 0].copy()
+                # Convert to numeric, filtering only those who actually had Hb checked (>0)
+                sch_logs[hb_col] = pd.to_numeric(sch_logs[hb_col], errors='coerce').fillna(0.0)
+                live_cases = sch_logs[sch_logs[hb_col] > 0].copy()
                 
-                # 🛡️ Bulletproof gender extraction that prevents IndexError on blank cells
+                # Bulletproof gender extraction
                 def safe_gender(val):
                     s = str(val).strip().upper()
-                    if s in ["", "NAN", "NONE", "NULL", "NA", "NAT"]:
-                        return "U"
+                    if s in ["", "NAN", "NONE", "NULL", "NA", "NAT"]: return "U"
                     return s[0]
 
-                for _, row in live_cases.iterrows():
-                    hb_val = row[hb_col]
-                    loc_type = row.get('Location_Type', 'School')
+                # Strict School Severity Logic
+                def calc_severity(hb):
+                    if hb < 8.0: return "Severe"
+                    elif hb < 11.0: return "Moderate"
+                    elif hb < 11.5: return "Mild"
+                    else: return "Normal"
                     
-                    # Severity Logic (Mirrors your clinical logic)
-                    severity = "Normal"
-                    if loc_type == 'Anganwadi':
-                        if hb_val < 7.0: severity = "Severe"
-                        elif hb_val < 10.0: severity = "Moderate"
-                        elif hb_val < 11.0: severity = "Mild"
-                    else:
-                        if hb_val < 8.0: severity = "Severe"
-                        elif hb_val < 11.0: severity = "Moderate"
-                        elif hb_val < 11.5: severity = "Mild"
-                        
-                    live_anemia_list.append({
-                        'PHC/CHC/UPHC': "Visavadar Block",
-                        'CAMP DATE': pd.to_datetime(row[date_col], errors='coerce', dayfirst=True) if date_col else pd.NaT,
-                        'VILLAGE': str(row[inst_col]) if inst_col else "Unknown",
-                        'CHILD NAME': str(row[name_col]) if name_col else "Unknown",
-                        'DOB': str(row[dob_col]) if dob_col else "",
-                        'GENDER': safe_gender(row[gender_col]) if gender_col else "U",
-                        'HB LEVEL': hb_val,
-                        'SEVERITY': severity,
-                        'Source_Type': f"Live ({loc_type})"
+                if not live_cases.empty:
+                    master_anemia = pd.DataFrame({
+                        'Screening Date': pd.to_datetime(live_cases[date_col], errors='coerce', dayfirst=True) if date_col else pd.NaT,
+                        'Institution': live_cases[inst_col].astype(str).str.strip().str.upper() if inst_col else "Unknown",
+                        'Child Name': live_cases[name_col].astype(str).str.strip().str.upper() if name_col else "Unknown",
+                        'DOB': live_cases[dob_col].astype(str) if dob_col else "",
+                        'Gender': live_cases[gender_col].apply(safe_gender) if gender_col else "U",
+                        'Class': live_cases[class_col].astype(str) if class_col else "",
+                        'Contact Number': live_cases[contact_col].astype(str).str.replace(r'\.0$', '', regex=True) if contact_col else "",
+                        'Height (cm)': live_cases[ht_col].astype(str) if ht_col else "",
+                        'Weight (kg)': live_cases[wt_col].astype(str) if wt_col else "",
+                        'Hb Level': live_cases[hb_col],
+                        'Severity': live_cases[hb_col].apply(calc_severity)
                     })
-                        
-        live_df = pd.DataFrame(live_anemia_list)
 
-        # C. Merge Both Datasets
-        master_anemia = pd.concat([hist_df, live_df], ignore_index=True)
-        
     # --- 2. UI TABS ---
     if master_anemia.empty:
-        st.info("No Anemia data found in either historical records or live screenings.")
+        st.info("No School Anemia data found in the live daily screenings. Ensure teams are entering Hb values in Module 2.")
     else:
-        tab_dash, tab_action = st.tabs(["📈 Micro-Analytics Dashboard", "📋 Institution Anemia Line-List & Analytics"])
+        tab_dash, tab_action = st.tabs(["📈 Micro-Analytics Dashboard", "📋 School-Wise Anemia Line-List"])
 
         with tab_dash:
             st.markdown("### 🔍 Filter Global Data")
-            f_col1, f_col2, f_col3 = st.columns(3)
+            f_col1, f_col2 = st.columns(2)
             
-            source_list = ["All"] + sorted([str(x) for x in master_anemia['Source_Type'].unique() if str(x) != 'nan'])
-            # 🚀 UPDATED: Institution-wise filter dropdown instead of village
-            inst_list = ["All"] + sorted([str(x) for x in master_anemia['VILLAGE'].unique() if str(x) != 'nan'])
-            sev_list = ["All"] + sorted([str(x) for x in master_anemia['SEVERITY'].unique() if str(x) != 'nan'])
+            inst_list = ["All"] + sorted([str(x) for x in master_anemia['Institution'].unique() if str(x) != 'nan'])
+            sev_list = ["All", "Normal", "Mild", "Moderate", "Severe"]
 
-            with f_col1: selected_source = st.selectbox("🗄️ Data Source:", source_list, key="dash_source")
-            with f_col2: selected_institution = st.selectbox("🏫 Filter by Institution:", inst_list, key="dash_inst")
-            with f_col3: selected_sev = st.selectbox("🩸 Filter by Severity:", sev_list, key="dash_sev")
+            with f_col1: selected_institution = st.selectbox("🏫 Filter by Institution (School):", inst_list, key="dash_inst")
+            with f_col2: selected_sev = st.selectbox("🩸 Filter by Severity:", sev_list, key="dash_sev")
 
             filtered_df = master_anemia.copy()
-            if selected_source != "All": filtered_df = filtered_df[filtered_df['Source_Type'] == selected_source]
-            if selected_institution != "All": filtered_df = filtered_df[filtered_df['VILLAGE'].astype(str) == selected_institution]
-            if selected_sev != "All": filtered_df = filtered_df[filtered_df['SEVERITY'].astype(str) == selected_sev]
+            if selected_institution != "All": filtered_df = filtered_df[filtered_df['Institution'] == selected_institution]
+            if selected_sev != "All": filtered_df = filtered_df[filtered_df['Severity'] == selected_sev]
 
             st.divider()
 
             st.markdown(f"### 📊 Key Metrics (Showing: {len(filtered_df)} Screened Children)")
             m1, m2, m3, m4, m5 = st.columns(5)
-            m1.metric("Total Screened", len(filtered_df))
+            m1.metric("Total Hb Checked", len(filtered_df))
             
-            severe_cases = len(filtered_df[filtered_df['SEVERITY'].astype(str).str.strip().str.upper() == 'SEVERE'])
-            moderate_cases = len(filtered_df[filtered_df['SEVERITY'].astype(str).str.strip().str.upper() == 'MODERATE'])
-            mild_cases = len(filtered_df[filtered_df['SEVERITY'].astype(str).str.strip().str.upper() == 'MILD'])
-            normal_cases = len(filtered_df[filtered_df['SEVERITY'].astype(str).str.strip().str.upper() == 'NORMAL'])
+            severe_cases = len(filtered_df[filtered_df['Severity'] == 'Severe'])
+            moderate_cases = len(filtered_df[filtered_df['Severity'] == 'Moderate'])
+            mild_cases = len(filtered_df[filtered_df['Severity'] == 'Mild'])
+            normal_cases = len(filtered_df[filtered_df['Severity'] == 'Normal'])
             
             m2.metric("🔴 Severe", severe_cases)
             m3.metric("🟡 Moderate", moderate_cases)
@@ -2915,7 +2894,6 @@ elif menu == "7. Anemia Tracker":
 
             st.divider()
             
-            # --- DEEP DIVE ANALYTICS ---
             import plotly.express as px
             st.markdown("### 📈 Deep Dive Analytics")
             
@@ -2923,64 +2901,67 @@ elif menu == "7. Anemia Tracker":
             
             with c1:
                 st.write("**1. Demographic Heatmap (Severity by Gender)**")
-                filtered_df['Clean_Gender'] = filtered_df['GENDER'].astype(str).str.upper().str[0].map({'M': 'Boys', 'F': 'Girls'}).fillna('Unknown')
-                if not filtered_df['Clean_Gender'].dropna().empty:
-                    gender_sev = filtered_df.groupby(['Clean_Gender', 'SEVERITY']).size().reset_index(name='Count')
-                    fig_gen = px.bar(gender_sev, x='SEVERITY', y='Count', color='Clean_Gender', barmode='group',
-                                     color_discrete_map={'Boys': '#3b82f6', 'Girls': '#ec4899', 'Unknown': '#94a3b8'})
+                filtered_df['Clean_Gender'] = filtered_df['Gender'].map({'M': 'Boys', 'F': 'Girls'}).fillna('Unknown')
+                if not filtered_df['Clean_Gender'].empty:
+                    gender_sev = filtered_df.groupby(['Clean_Gender', 'Severity']).size().reset_index(name='Count')
+                    # Ensure color consistency
+                    color_map = {'Boys': '#3b82f6', 'Girls': '#ec4899', 'Unknown': '#94a3b8'}
+                    fig_gen = px.bar(gender_sev, x='Severity', y='Count', color='Clean_Gender', barmode='group', color_discrete_map=color_map)
                     st.plotly_chart(fig_gen, use_container_width=True)
                 else:
                     st.info("No gender data available for this slice.")
                     
             with c2:
                 st.write("**2. Timeline: Average Hb Levels Over Time**")
-                if not filtered_df['CAMP DATE'].isnull().all():
-                    trend_df = filtered_df.dropna(subset=['CAMP DATE']).copy()
-                    trend_df = trend_df.groupby(trend_df['CAMP DATE'].dt.to_period('M'))['HB LEVEL'].mean().reset_index()
-                    trend_df['CAMP DATE'] = trend_df['CAMP DATE'].dt.to_timestamp()
-                    fig_trend = px.line(trend_df, x='CAMP DATE', y='HB LEVEL', markers=True, color_discrete_sequence=["#1f77b4"])
-                    fig_trend.update_layout(yaxis_title="Avg Hb (g/dL)", xaxis_title="Month")
+                if not filtered_df['Screening Date'].isnull().all():
+                    trend_df = filtered_df.dropna(subset=['Screening Date']).copy()
+                    trend_df = trend_df.groupby(trend_df['Screening Date'].dt.to_period('W'))['Hb Level'].mean().reset_index()
+                    trend_df['Screening Date'] = trend_df['Screening Date'].dt.to_timestamp()
+                    fig_trend = px.line(trend_df, x='Screening Date', y='Hb Level', markers=True, color_discrete_sequence=["#1f77b4"])
+                    fig_trend.update_layout(yaxis_title="Avg Hb (g/dL)", xaxis_title="Week")
                     st.plotly_chart(fig_trend, use_container_width=True)
                 else:
                     st.info("Not enough valid date data to show trends.")
 
-            st.write("**3. The 'Red Zone' Hotspot Mapper (Top 10 Locations with Severe/Moderate Anemia)**")
-            hotspot_df = filtered_df[filtered_df['SEVERITY'].str.upper().isin(['SEVERE', 'MODERATE'])].copy()
+            st.write("**3. The 'Red Zone' Hotspot Mapper (Top 10 Schools with Severe/Moderate Anemia)**")
+            hotspot_df = filtered_df[filtered_df['Severity'].isin(['Severe', 'Moderate'])].copy()
             if not hotspot_df.empty:
-                village_counts = hotspot_df['VILLAGE'].value_counts().head(10).reset_index()
-                village_counts.columns = ['Location', 'High-Risk Cases']
-                fig_hot = px.bar(village_counts, x='High-Risk Cases', y='Location', orientation='h', color='High-Risk Cases', color_continuous_scale='Reds')
+                school_counts = hotspot_df['Institution'].value_counts().head(10).reset_index()
+                school_counts.columns = ['Institution', 'High-Risk Cases']
+                fig_hot = px.bar(school_counts, x='High-Risk Cases', y='Institution', orientation='h', color='High-Risk Cases', color_continuous_scale='Reds')
                 fig_hot.update_layout(yaxis={'categoryorder':'total ascending'})
                 st.plotly_chart(fig_hot, use_container_width=True)
             else:
                 st.success("No Severe or Moderate cases found in this dataset!")
 
         with tab_action:
-            st.subheader("🏫 Institution-Wise Anemia Analytics & Line-List")
-            st.write("Select a specific school or Anganwadi to view the complete screening roster and detailed severity breakdown.")
+            st.subheader("🏫 School-Wise Anemia Analytics & Line-List")
+            st.write("Select a specific school to view the complete screening roster and detailed severity breakdown.")
             
-            # Institution filter for tab 2
-            inst_options_action = ["All"] + sorted([str(x) for x in master_anemia['VILLAGE'].unique() if str(x) != 'nan'])
-            selected_act_inst = st.selectbox("🎯 Select Target Institution:", inst_options_action, key="act_inst_dropdown")
+            act_col1, act_col2 = st.columns(2)
+            with act_col1:
+                selected_act_inst = st.selectbox("🎯 Select Target School:", inst_list, key="act_inst_dropdown")
+            with act_col2:
+                selected_sev_filter = st.selectbox("🩸 Filter Roster by Severity:", sev_list, key="roster_sev_filter")
             
             act_df = master_anemia.copy()
             if selected_act_inst != "All":
-                act_df = act_df[act_df['VILLAGE'].astype(str) == selected_act_inst]
+                act_df = act_df[act_df['Institution'] == selected_act_inst]
                 
             if act_df.empty:
                 st.info("No records found for this institution.")
             else:
                 # --- INSTITUTION ANALYTICS SUMMARY CARD ---
-                st.markdown("#### 📊 Institution Summary Matrix")
+                st.markdown(f"#### 📊 Summary Matrix: {selected_act_inst if selected_act_inst != 'All' else 'All Schools'}")
                 tot_screened = len(act_df)
-                norm_cnt = len(act_df[act_df['SEVERITY'].str.upper() == 'NORMAL'])
-                mild_cnt = len(act_df[act_df['SEVERITY'].str.upper() == 'MILD'])
-                mod_cnt = len(act_df[act_df['SEVERITY'].str.upper() == 'MODERATE'])
-                sev_cnt = len(act_df[act_df['SEVERITY'].str.upper() == 'SEVERE'])
-                avg_inst_hb = act_df['HB LEVEL'].mean()
+                norm_cnt = len(act_df[act_df['Severity'] == 'Normal'])
+                mild_cnt = len(act_df[act_df['Severity'] == 'Mild'])
+                mod_cnt = len(act_df[act_df['Severity'] == 'Moderate'])
+                sev_cnt = len(act_df[act_df['Severity'] == 'Severe'])
+                avg_inst_hb = act_df['Hb Level'].mean()
                 
                 ic1, ic2, ic3, ic4, ic5, ic6 = st.columns(6)
-                ic1.metric("Total Hb Screened", tot_screened)
+                ic1.metric("Total Screened", tot_screened)
                 ic2.metric("🟢 Normal", norm_cnt)
                 ic3.metric("🔵 Mild", mild_cnt)
                 ic4.metric("🟡 Moderate", mod_cnt)
@@ -2990,24 +2971,23 @@ elif menu == "7. Anemia Tracker":
                 st.divider()
                 
                 # --- SEVERITY FILTER FOR LINE LIST ---
-                sev_filter_list = ["All", "Normal", "Mild", "Moderate", "Severe"]
-                selected_sev_filter = st.selectbox("Filter Roster by Severity Category:", sev_filter_list, key="roster_sev_filter")
-                
                 roster_df = act_df.copy()
                 if selected_sev_filter != "All":
-                    roster_df = roster_df[roster_df['SEVERITY'].str.upper() == selected_sev_filter.upper()]
+                    roster_df = roster_df[roster_df['Severity'] == selected_sev_filter]
                     
-                # Clean up display columns
-                disp_action = roster_df[['CAMP DATE', 'VILLAGE', 'CHILD NAME', 'GENDER', 'HB LEVEL', 'SEVERITY', 'Source_Type']].copy()
-                disp_action['CAMP DATE'] = disp_action['CAMP DATE'].dt.strftime('%d-%m-%Y')
-                disp_action = disp_action.sort_values(by='HB LEVEL') # Lowest Hb first
+                st.markdown(f"**📑 Full Student Roster (Showing: {len(roster_df)} Records)**")
+                
+                # Format Dates for Display and Sort by Hb Level
+                disp_action = roster_df.copy()
+                disp_action['Screening Date'] = disp_action['Screening Date'].dt.strftime('%d-%m-%Y')
+                disp_action = disp_action.sort_values(by='Hb Level') # Sort by lowest Hb first (highest risk)
                 
                 st.dataframe(disp_action, use_container_width=True, hide_index=True)
                 
                 import datetime
                 csv_action = disp_action.to_csv(index=False).encode('utf-8-sig')
                 st.download_button(
-                    label="⬇️ Download Institution Anemia Report (CSV)",
+                    label="⬇️ Download School Anemia Report (CSV)",
                     data=csv_action,
                     file_name=f"Anemia_Report_{selected_act_inst}_{datetime.date.today()}.csv",
                     mime="text/csv",
