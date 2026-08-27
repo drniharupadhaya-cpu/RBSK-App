@@ -5068,16 +5068,16 @@ elif menu == "17. Village-Wise Analysis":
     # 1. Fetch live daily logs
     aw_daily, sch_daily, _ = get_daily_logs()
 
-    # 2. Robust Column Sniffers for Master Data
+    # 2. Robust Column Sniffers for Master Data (FIXED "SC" BUG)
     def get_geo_col(df, keywords):
         return next((c for c in df.columns if any(k in str(c).upper() for k in keywords)), None)
 
     aw_phc_col = get_geo_col(df_aw, ["PHC", "PRIMARY HEALTH"])
-    aw_sc_col = get_geo_col(df_aw, ["SUB CENTER", "SUBCENTER", "SUB-CENTER", "SC"])
+    aw_sc_col = get_geo_col(df_aw, ["SUB CENTER", "SUBCENTER", "SUB-CENTER"]) # Removed 'SC' to prevent 'SCHOOL' mismatch
     aw_vil_col = get_geo_col(df_aw, ["VILLAGE"])
 
     sch_phc_col = get_geo_col(df_students, ["PHC", "PRIMARY HEALTH"])
-    sch_sc_col = get_geo_col(df_students, ["SUB CENTER", "SUBCENTER", "SUB-CENTER", "SC"])
+    sch_sc_col = get_geo_col(df_students, ["SUB CENTER", "SUBCENTER", "SUB-CENTER"]) # Removed 'SC' to prevent 'SCHOOL' mismatch
     sch_vil_col = get_geo_col(df_students, ["VILLAGE"])
 
     # 3. Build Unified Geographic Master Mapping
