@@ -959,6 +959,40 @@ elif menu == "1. Daily Tour Plan":
 elif menu == "2. Child Screening":
     render_header("Child Screening & EMR", "Record vitals and auto-calculate SAM/MAM", "🩺", "#10b981")
 
+    # 🏗️ PHASE 1: THE MASTER DICTIONARY (Zero-Lag Python Embedded)
+    MASTER_4D_DICT = [
+        "None",
+        "[Defect] Neural Tube Defect",
+        "[Defect] Down's Syndrome",
+        "[Defect] Cleft Lip & Palate / Cleft Palate alone",
+        "[Defect] Club Foot",
+        "[Defect] Developmental Dysplasia of the Hip",
+        "[Defect] Congenital Cataract",
+        "[Defect] Congenital Deafness",
+        "[Defect] Congenital Heart Disease",
+        "[Defect] Retinopathy of Prematurity",
+        "[Deficiency] Severe Acute Malnutrition (SAM)",
+        "[Deficiency] Goiter",
+        "[Deficiency] Vitamin A Deficiency (Bitot Spots)",
+        "[Deficiency] Vitamin D Deficiency (Rickets)",
+        "[Disease] Dental Conditions / Dental Caries",
+        "[Disease] Skin Conditions",
+        "[Disease] Otitis Media",
+        "[Disease] Rheumatic Heart Disease",
+        "[Disease] Reactive Airways Disease",
+        "[Disease] Convulsive Disorders",
+        "[Delay] Vision Impairment",
+        "[Delay] Hearing Impairment",
+        "[Delay] Neuro-motor Impairment",
+        "[Delay] Motor Delay",
+        "[Delay] Cognitive Delay",
+        "[Delay] Language Delay",
+        "[Delay] Behavior Disorder (Autism)",
+        "[Delay] Learning Disorder",
+        "[Delay] Attention Deficit Hyperactivity Disorder (ADHD)",
+        "[Other] Specify Below"
+    ]
+
     # 🚀 NEW: The Manual Override Sync Button!
     if st.button("🔄 Sync & Refresh Roster"):
         try: get_recent_screenings.clear()
@@ -1219,7 +1253,12 @@ elif menu == "2. Child Screening":
                         with v3: m_str = st.text_input("MUAC (cm)") if category == "👶 Anganwadi" else "0"
                         with v4: hb_str = st.text_input("Hb %")
                         
-                        disease = st.text_input("🦠 Disease Identified (4D)", value="None")
+                        # ⚙️ PHASE 2 & 4: THE UI UPGRADE & ESCAPE HATCH
+                        disease_selections = st.multiselect("🦠 Disease Identified (4D)", MASTER_4D_DICT, default=["None"])
+                        other_disease = ""
+                        if "[Other] Specify Below" in disease_selections:
+                            other_disease = st.text_input("Additional Clinical Remarks (Specify 'Other' condition)")
+
                         save_new = st.form_submit_button("💾 Save New Child & Screening")
                         
                     if save_new:
@@ -1234,9 +1273,16 @@ elif menu == "2. Child Screening":
                             
                             final_status = get_whz_status(new_gender, height_val, weight_val) if category == "👶 Anganwadi" else "Normal"
                             
-                            # 🩸 ANEMIA OVERRIDE LOGIC
+                            # 🗄️ PHASE 3: THE DATA TRANSFORMER
+                            final_disease_list = [d for d in disease_selections if d != "None" and d != "[Other] Specify Below"]
+                            if "[Other] Specify Below" in disease_selections and other_disease.strip():
+                                final_disease_list.append(other_disease.strip())
+                                
+                            raw_disease = " + ".join(final_disease_list) if final_disease_list else "None"
+                            
+                            # 🩸 ANEMIA OVERRIDE LOGIC (Integrated with String Transformer)
                             anemia_diagnosis = get_anemia_status(hb_val, category)
-                            final_disease = str(disease).strip()
+                            final_disease = raw_disease.strip()
                             if anemia_diagnosis != "Normal":
                                 if final_disease.lower() in ["none", "", "nan"]:
                                     final_disease = anemia_diagnosis
@@ -1338,10 +1384,24 @@ elif menu == "2. Child Screening":
                                 with v2: w_str = st.text_input("Weight (kg)")
                                 with v3: m_str = st.text_input("MUAC (cm)") if category == "👶 Anganwadi" else "0"
                                 with v4: hb_str = st.text_input("Hb %")
-                                disease = st.text_input("🦠 Disease Identified (4D)", value="None")
+                                
+                                # ⚙️ PHASE 2 & 4: THE UI UPGRADE & ESCAPE HATCH
+                                disease_selections = st.multiselect("🦠 Disease Identified (4D)", MASTER_4D_DICT, default=["None"])
+                                other_disease = ""
+                                if "[Other] Specify Below" in disease_selections:
+                                    other_disease = st.text_input("Additional Clinical Remarks (Specify 'Other' condition)")
+
                                 save_btn = st.form_submit_button("💾 Save Screening Data")
 
                             if save_btn:
+                                # 🗄️ PHASE 3: THE DATA TRANSFORMER
+                                final_disease_list = [d for d in disease_selections if d != "None" and d != "[Other] Specify Below"]
+                                if "[Other] Specify Below" in disease_selections and other_disease.strip():
+                                    final_disease_list.append(other_disease.strip())
+                                    
+                                raw_disease_input = " + ".join(final_disease_list) if final_disease_list else "None"
+                                has_new_disease = raw_disease_input.lower() not in ["", "none"]
+
                                 ws = spreadsheet.worksheet(target_sheet)
                                 all_recs = ws.get_all_values()
                                 
@@ -1358,7 +1418,6 @@ elif menu == "2. Child Screening":
                                 has_new_w = str(w_str).strip() != ""
                                 has_new_m = str(m_str).strip() != "" if category == "👶 Anganwadi" else False
                                 has_new_hb = str(hb_str).strip() != ""
-                                has_new_disease = str(disease).strip().lower() not in ["", "none"]
 
                                 if row_to_update:
                                     merged_h = safe_float(h_str) if has_new_h else safe_float(existing_row[5])
@@ -1367,7 +1426,7 @@ elif menu == "2. Child Screening":
                                     if category == "👶 Anganwadi":
                                         merged_m = safe_float(m_str) if has_new_m else safe_float(existing_row[7])
                                         merged_hb = safe_float(hb_str) if has_new_hb else safe_float(existing_row[8])
-                                        raw_disease = disease if has_new_disease else (existing_row[9] if str(existing_row[9]).strip() != "" else "None")
+                                        raw_disease = raw_disease_input if has_new_disease else (existing_row[9] if str(existing_row[9]).strip() != "" else "None")
                                         merged_contact = updated_contact if str(updated_contact).strip() != "" else existing_row[10]
                                         merged_techo = techo_id if str(techo_id).strip() not in ["", "N/A"] else existing_row[11]
                                         
@@ -1386,7 +1445,7 @@ elif menu == "2. Child Screening":
                                         new_row = [str(screening_date), selected_inst, final_child_name, str(dob), str(gender), merged_h, merged_w, merged_m, merged_hb, merged_disease, merged_contact, merged_techo, merged_status, "Pending", merged_class]
                                     else:
                                         merged_hb = safe_float(hb_str) if has_new_hb else safe_float(existing_row[7])
-                                        raw_disease = disease if has_new_disease else (existing_row[8] if str(existing_row[8]).strip() != "" else "None")
+                                        raw_disease = raw_disease_input if has_new_disease else (existing_row[8] if str(existing_row[8]).strip() != "" else "None")
                                         merged_contact = updated_contact if str(updated_contact).strip() != "" else existing_row[9]
                                         merged_class = updated_class if str(updated_class).strip() != "" else existing_row[12]
                                         
@@ -1429,7 +1488,7 @@ elif menu == "2. Child Screening":
                                     
                                     # 🩸 ANEMIA OVERRIDE LOGIC
                                     anemia_diagnosis = get_anemia_status(hb_val, category)
-                                    final_disease = str(disease).strip()
+                                    final_disease = raw_disease_input.strip()
                                     if anemia_diagnosis != "Normal":
                                         if final_disease.lower() in ["none", "", "nan"]:
                                             final_disease = anemia_diagnosis
