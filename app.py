@@ -2288,63 +2288,105 @@ elif menu == "3. 4D Defect Registry":
         else:
             st.info("No children found in the live registry matching your filters today.")
 
-    # 🗂️ TAB 5: DISEASE BIFURCATION (NEW DATA SCRUBBING ENGINE)
+    # 🗂️ TAB 5: DISEASE BIFURCATION (4D CATEGORIZATION)
     with tab_bifurcation:
-        st.subheader("🗂️ Disease-Wise Bifurcation Dashboard")
-        st.write("Automatically extracts and filters the exact cases of any condition found in the live registry.")
+        st.subheader("🗂️ Smart Disease Categorization Engine (4D)")
+        st.write("Automatically groups manually typed field conditions into standardized 4D categories using your custom scrubbing pipeline.")
         
-        df_bifurcation_base = pd.DataFrame(all_live_defects)
-        
-        if not df_bifurcation_base.empty:
-            # 1. Explode conditions to find exactly which unique diseases exist right now!
-            all_conditions = df_bifurcation_base['Condition'].dropna().astype(str).str.split(r" \+ ")
-            exploded_conditions = all_conditions.explode().str.strip()
-            unique_active_diseases = sorted([c for c in exploded_conditions.unique() if c and c.lower() not in ['none', 'nan', '']])
+        # 🗄️ STEP 1: THE MASTER DISEASE DICTIONARY (You can expand this as your team finds new variations)
+        rbsk_disease_map = {
+            # Deficiencies
+            'SAM': 'Deficiency (SAM)',
+            'MAM': 'Deficiency (MAM)',
+            'SEVERE ANEMIA': 'Deficiency (Severe Anemia)',
+            'MODERATE ANEMIA': 'Deficiency (Moderate Anemia)',
+            'MILD ANEMIA': 'Deficiency (Mild Anemia)',
+            'ANEMIA': 'Deficiency (Anemia)',
+            'VITAMIN A': 'Deficiency (Vitamin A)',
+            'RICKETS': 'Deficiency (Rickets)',
+            'MALNUTRITION': 'Deficiency (Malnutrition)',
             
-            if unique_active_diseases:
-                b_f1, b_f2 = st.columns(2)
-                with b_f1:
-                    selected_bifurcation_disease = st.selectbox("🦠 Select Active Disease Category:", unique_active_diseases, key="bifurc_disease")
-                with b_f2:
-                    b_type_filter = st.selectbox("🏫 Filter by Location Type:", ["All", "Anganwadi", "School"], key="bifurc_type")
-                    
-                # Filter the dataframe safely without regex breaking
-                df_bifurc_filtered = df_bifurcation_base[df_bifurcation_base['Condition'].astype(str).str.contains(selected_bifurcation_disease, regex=False, na=False)]
+            # Defects at Birth
+            'CLEFT LIP': 'Defect at Birth (Cleft Lip)',
+            'CLEFT PALATE': 'Defect at Birth (Cleft Palate)',
+            'CLUB FOOT': 'Defect at Birth (Club Foot)',
+            'CHD': 'Defect at Birth (CHD)',
+            'NEURAL TUBE': 'Defect at Birth (Neural Tube Defect)',
+            'DOWN SYNDROME': 'Defect at Birth (Down Syndrome)',
+            
+            # Childhood Diseases
+            'DENTAL CARIES': 'Childhood Disease (Dental Caries)',
+            'CARIES': 'Childhood Disease (Dental Caries)',
+            'TOOTH DECAY': 'Childhood Disease (Dental Caries)',
+            'SCABIES': 'Childhood Disease (Scabies)',
+            'SKIN INFECTION': 'Childhood Disease (Skin Infection)',
+            'OTITIS MEDIA': 'Childhood Disease (Otitis Media)',
+            'EAR DISCHARGE': 'Childhood Disease (Otitis Media)',
+            'ASTHMA': 'Childhood Disease (Asthma)',
+            
+            # Developmental Delays
+            'VISION DELAY': 'Developmental Delay (Vision)',
+            'VISION': 'Developmental Delay (Vision)',
+            'HEARING DELAY': 'Developmental Delay (Hearing)',
+            'HEARING': 'Developmental Delay (Hearing)',
+            'SPEECH DELAY': 'Developmental Delay (Speech)',
+            'SPEECH': 'Developmental Delay (Speech)',
+            'MOTOR DELAY': 'Developmental Delay (Motor)',
+            'AUTISM': 'Developmental Delay (Autism)',
+            'ADHD': 'Developmental Delay (ADHD)'
+        }
+
+        # 🗄️ STEP 2: THE DATA SCRUBBING PIPELINE (THE FILTER)
+        import re
+        def scrub_disease_string(raw_text):
+            if not isinstance(raw_text, str) or raw_text.strip() == "":
+                return "None"
+            
+            # Uppercase and split by comma or plus sign
+            chunks = re.split(r'[,+]', raw_text.upper())
+            cleaned_chunks = []
+            
+            for chunk in chunks:
+                c = chunk.strip()
+                if c and c not in ['NONE', 'NAN', 'N/A', 'NULL', 'NORMAL', 'FALSE']:
+                    # Lookup in map. If not found, keep the original text to prevent data loss.
+                    mapped = rbsk_disease_map.get(c, c.title()) 
+                    if mapped not in cleaned_chunks:
+                        cleaned_chunks.append(mapped)
+                        
+            return " + ".join(cleaned_chunks) if cleaned_chunks else "Normal / None"
+        
+        df_bifurcation = pd.DataFrame(all_live_defects)
+        
+        if not df_hist.empty and '4D' in df_hist.columns:
+            hist_conds = df_hist[['NAME', '4D']].copy()
+            hist_conds.columns = ['Name', 'Condition']
+            df_bifurcation = pd.concat([df_bifurcation, hist_conds], ignore_index=True)
+            
+        if not df_bifurcation.empty and 'Condition' in df_bifurcation.columns:
+            df_bifurcation = df_bifurcation[df_bifurcation['Condition'].astype(str).str.strip() != '']
+            
+            # 🔥 Pass all raw manual entries through your scrubbing pipeline!
+            df_bifurcation['4D_Category'] = df_bifurcation['Condition'].apply(scrub_disease_string)
+            
+            # Exclude Normal/None for the charts
+            chart_df = df_bifurcation[df_bifurcation['4D_Category'] != 'Normal / None'].copy()
+            
+            c_f1, c_f2 = st.columns(2)
+            with c_f1:
+                st.markdown("#### 📊 Standardized 4D Distribution")
+                cat_summary = chart_df['4D_Category'].value_counts().reset_index()
+                cat_summary.columns = ['Categorized Condition', 'Total Cases']
+                st.dataframe(cat_summary, use_container_width=True, hide_index=True)
                 
-                if b_type_filter != "All":
-                    df_bifurc_filtered = df_bifurc_filtered[df_bifurc_filtered['Type'] == b_type_filter]
-                    
-                # Calculate the KPIs
-                total_cases = len(df_bifurc_filtered)
-                boys_cases = len(df_bifurc_filtered[df_bifurc_filtered['Gender'] == 'Male'])
-                girls_cases = len(df_bifurc_filtered[df_bifurc_filtered['Gender'] == 'Female'])
-                
-                m1, m2, m3 = st.columns(3)
-                m1.metric(f"Total '{selected_bifurcation_disease}' Cases", total_cases)
-                m2.metric("👦 Boys Affected", boys_cases)
-                m3.metric("👧 Girls Affected", girls_cases)
-                
-                st.divider()
-                st.markdown("### 📋 Filtered Roster Line-List")
-                
-                # Secure the display columns to avoid KeyError
-                display_cols = ['Date', 'Name', 'Institution', 'Gender', 'DOB', 'Contact', 'Type']
-                actual_cols = [c for c in display_cols if c in df_bifurc_filtered.columns]
-                
-                st.dataframe(df_bifurc_filtered[actual_cols], use_container_width=True, hide_index=True)
-                
-                # Zero-Lag CSV Export
-                csv_bifurc = df_bifurc_filtered[actual_cols].to_csv(index=False).encode('utf-8-sig')
-                st.download_button(
-                    label=f"⬇️ Download {selected_bifurcation_disease} Line-List (CSV)",
-                    data=csv_bifurc,
-                    file_name=f"{selected_bifurcation_disease}_Roster.csv",
-                    mime="text/csv"
-                )
-            else:
-                st.success("No active diseases found in the registry!")
+            with c_f2:
+                st.markdown("#### 🔍 Raw Entry vs. Scrubbed Mapping")
+                mapping_df = chart_df.groupby(['Condition', '4D_Category']).size().reset_index(name='Frequency')
+                mapping_df = mapping_df.sort_values(by='Frequency', ascending=False)
+                mapping_df.columns = ['Raw Field Entry', 'Pipeline Result', 'Frequency']
+                st.dataframe(mapping_df, use_container_width=True, hide_index=True)
         else:
-            st.info("Live registry is currently empty.")
+            st.info("No clinical conditions logged yet to categorize.")
 # ==========================================
 # MODULE 4: VISUAL ANALYSIS
 # ==========================================
