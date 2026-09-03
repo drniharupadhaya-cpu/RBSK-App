@@ -1662,6 +1662,58 @@ elif menu == "3. 4D Defect Registry":
         time.sleep(0.5)
         st.rerun()
 
+    # 🏗️ STEP 1: THE MASTER CLINICAL DICTIONARY (THE BRAIN)
+    # Maps field shorthand to official RBSK terminology instantly in-memory.
+    rbsk_disease_map = {
+        "RE": "Refractive Error (RE)",
+        "DC": "Dental Caries (DC)",
+        "DENTAL C": "Dental Caries (DC)",
+        "CHD": "Congenital Heart Disease (CHD)",
+        "SAM": "Severe Acute Malnutrition (SAM)",
+        "MAM": "Moderate Acute Malnutrition (MAM)",
+        "OM": "Otitis Media (OM/CSOM)",
+        "CSOM": "Otitis Media (OM/CSOM)",
+        "CLEFT LIP": "Cleft Lip & Palate",
+        "CLEFT PALATE": "Cleft Lip & Palate",
+        "CLUB FOOT": "Club Foot",
+        "CLUBFOOT": "Club Foot",
+        "DDH": "Developmental Dysplasia of Hip",
+        "BITOT": "Vitamin A Deficiency (Bitot's Spots)",
+        "BITOTS": "Vitamin A Deficiency (Bitot's Spots)",
+        "RICKETS": "Vitamin D Deficiency (Rickets)",
+        "GOITER": "Goiter",
+        "SKIN": "Skin Conditions (Scabies/Fungal)",
+        "SCABIES": "Skin Conditions (Scabies/Fungal)",
+        "RHD": "Rheumatic Heart Disease (RHD)",
+        "ASTHMA": "Reactive Airway Disease / Asthma",
+        "RAD": "Reactive Airway Disease / Asthma",
+        "WORMS": "Worms / Krimi",
+        "KRIMI": "Worms / Krimi",
+        "MOTOR DELAY": "Motor Delay",
+        "SPEECH DELAY": "Speech & Language Delay",
+        "COGNITIVE DELAY": "Cognitive Delay",
+        "AUTISM": "Suspected Autism / ADHD",
+        "ADHD": "Suspected Autism / ADHD",
+        "FEVER": "Fever / Viral Illness"
+    }
+
+    # 🗄️ STEP 2: THE DATA SCRUBBING PIPELINE (THE FILTER)
+    import re
+    def scrub_disease_string(raw_text):
+        if not isinstance(raw_text, str) or raw_text.strip() == "":
+            return "None"
+        # Uppercase and split by comma or plus sign
+        chunks = re.split(r'[,+]', raw_text.upper())
+        cleaned_chunks = []
+        for chunk in chunks:
+            c = chunk.strip()
+            if c and c not in ['NONE', 'NAN', 'N/A', 'NULL']:
+                # Lookup in map. If not found, keep the original text to prevent data loss.
+                mapped = rbsk_disease_map.get(c, c) 
+                if mapped not in cleaned_chunks:
+                    cleaned_chunks.append(mapped)
+        return " + ".join(cleaned_chunks) if cleaned_chunks else "None"
+
     # --- 1. DATA PRE-PROCESSING ---
     team_lookup = {}
     if not df_aw.empty:
@@ -1722,9 +1774,23 @@ elif menu == "3. 4D Defect Registry":
                     clean_g = "Male" if raw_g.startswith('M') else "Female" if raw_g.startswith('F') else "Unknown"
                     
                     cond_list = []
-                    if has_disease: cond_list.append(str(row[d_col]))
-                    if has_status: cond_list.append(str(row[s_col]))
-                    if has_anemia: cond_list.append(anemia_status)
+                    
+                    # ⚙️ STEP 3: INJECT INTO THE GLOBAL DATA ENGINE
+                    # Now every condition entering the live registry is instantly purified!
+                    if has_disease: 
+                        scrubbed_d = scrub_disease_string(str(row[d_col]))
+                        if scrubbed_d != "None": cond_list.extend(scrubbed_d.split(" + "))
+                    
+                    if has_status: 
+                        scrubbed_s = scrub_disease_string(str(row[s_col]))
+                        if scrubbed_s != "None": cond_list.extend(scrubbed_s.split(" + "))
+                    
+                    if has_anemia: 
+                        if anemia_status not in cond_list: cond_list.append(anemia_status)
+                    
+                    # Deduplicate any overlapping conditions cleanly
+                    unique_conds = list(dict.fromkeys(cond_list))
+                    final_condition_string = " + ".join(unique_conds)
 
                     all_live_defects.append({
                         "Date": str(row.get('Date', row.get('Screening Date', 'Unknown'))),
@@ -1732,7 +1798,7 @@ elif menu == "3. 4D Defect Registry":
                         "Institution": inst_name,
                         "Team": team_lookup.get(inst_name, "Unassigned"),
                         "Gender": clean_g,
-                        "Condition": " + ".join(cond_list),
+                        "Condition": final_condition_string,
                         "Contact": str(row.get('Contact', row.get('Mobile No', 'N/A'))),
                         "DOB": str(row.get('DOB', 'N/A')),
                         "Father": str(row.get('Father', row.get('Parent Name', 'N/A'))),
@@ -1760,9 +1826,9 @@ elif menu == "3. 4D Defect Registry":
         if t_col:
             hist_team_options = sorted([str(x).strip() for x in df_hist[t_col].unique() if str(x).strip() and str(x).lower() not in ['nan', 'none']])
 
-    # --- 3. TABBED INTERFACE ---
-    tab_action, tab_logger, tab_live, tab_card = st.tabs([
-        "🚨 1. Action Desk", "📞 2. Follow-Up Logger", "🌍 3. Live Daily Registry", "🪪 4. Refer Card Print"
+    # --- 3. TABBED INTERFACE (UPGRADED WITH TAB 5) ---
+    tab_action, tab_logger, tab_live, tab_card, tab_bifurcation = st.tabs([
+        "🚨 1. Action Desk", "📞 2. Follow-Up Logger", "🌍 3. Live Daily Registry", "🪪 4. Refer Card Print", "🗂️ 5. Disease Bifurcation"
     ])
 
     # 🚨 TAB 1: ACTION DESK
@@ -1919,7 +1985,7 @@ elif menu == "3. 4D Defect Registry":
                          use_container_width=True, hide_index=True)
         else: st.info("No defects screened today.")
 
-  # 🪪 TAB 4: REFER CARD PRINT (GUJARATI)
+    # 🪪 TAB 4: REFER CARD PRINT (GUJARATI)
     with tab_card:
         st.subheader("🪪 Official Refer Card Center (Perfect Gujarati)")
         
@@ -2221,6 +2287,64 @@ elif menu == "3. 4D Defect Registry":
                         st.error(f"Error generating PDF. Details: {e}")
         else:
             st.info("No children found in the live registry matching your filters today.")
+
+    # 🗂️ TAB 5: DISEASE BIFURCATION (NEW DATA SCRUBBING ENGINE)
+    with tab_bifurcation:
+        st.subheader("🗂️ Disease-Wise Bifurcation Dashboard")
+        st.write("Automatically extracts and filters the exact cases of any condition found in the live registry.")
+        
+        df_bifurcation_base = pd.DataFrame(all_live_defects)
+        
+        if not df_bifurcation_base.empty:
+            # 1. Explode conditions to find exactly which unique diseases exist right now!
+            all_conditions = df_bifurcation_base['Condition'].dropna().astype(str).str.split(r" \+ ")
+            exploded_conditions = all_conditions.explode().str.strip()
+            unique_active_diseases = sorted([c for c in exploded_conditions.unique() if c and c.lower() not in ['none', 'nan', '']])
+            
+            if unique_active_diseases:
+                b_f1, b_f2 = st.columns(2)
+                with b_f1:
+                    selected_bifurcation_disease = st.selectbox("🦠 Select Active Disease Category:", unique_active_diseases, key="bifurc_disease")
+                with b_f2:
+                    b_type_filter = st.selectbox("🏫 Filter by Location Type:", ["All", "Anganwadi", "School"], key="bifurc_type")
+                    
+                # Filter the dataframe safely without regex breaking
+                df_bifurc_filtered = df_bifurcation_base[df_bifurcation_base['Condition'].astype(str).str.contains(selected_bifurcation_disease, regex=False, na=False)]
+                
+                if b_type_filter != "All":
+                    df_bifurc_filtered = df_bifurc_filtered[df_bifurc_filtered['Type'] == b_type_filter]
+                    
+                # Calculate the KPIs
+                total_cases = len(df_bifurc_filtered)
+                boys_cases = len(df_bifurc_filtered[df_bifurc_filtered['Gender'] == 'Male'])
+                girls_cases = len(df_bifurc_filtered[df_bifurc_filtered['Gender'] == 'Female'])
+                
+                m1, m2, m3 = st.columns(3)
+                m1.metric(f"Total '{selected_bifurcation_disease}' Cases", total_cases)
+                m2.metric("👦 Boys Affected", boys_cases)
+                m3.metric("👧 Girls Affected", girls_cases)
+                
+                st.divider()
+                st.markdown("### 📋 Filtered Roster Line-List")
+                
+                # Secure the display columns to avoid KeyError
+                display_cols = ['Date', 'Name', 'Institution', 'Gender', 'DOB', 'Contact', 'Type']
+                actual_cols = [c for c in display_cols if c in df_bifurc_filtered.columns]
+                
+                st.dataframe(df_bifurc_filtered[actual_cols], use_container_width=True, hide_index=True)
+                
+                # Zero-Lag CSV Export
+                csv_bifurc = df_bifurc_filtered[actual_cols].to_csv(index=False).encode('utf-8-sig')
+                st.download_button(
+                    label=f"⬇️ Download {selected_bifurcation_disease} Line-List (CSV)",
+                    data=csv_bifurc,
+                    file_name=f"{selected_bifurcation_disease}_Roster.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.success("No active diseases found in the registry!")
+        else:
+            st.info("Live registry is currently empty.")
 # ==========================================
 # MODULE 4: VISUAL ANALYSIS
 # ==========================================
