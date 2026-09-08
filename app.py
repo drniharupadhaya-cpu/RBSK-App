@@ -990,7 +990,14 @@ elif menu == "2. Child Screening":
         "[Delay] Behavior Disorder (Autism)",
         "[Delay] Learning Disorder",
         "[Delay] Attention Deficit Hyperactivity Disorder (ADHD)",
-        "[Other] Specify Below"
+        "[Other] Specify Below",
+        "[Delay] Refractive error",
+        "[Delay] Worms",
+        "[Deficiency] G6PD ",
+        "[Deficiency] Obesity ",
+        "[Disease] Tonsilitis",
+        "[Delay] Locomotor Impairment"
+        
     ]
 
     # 🚀 NEW: The Manual Override Sync Button!
