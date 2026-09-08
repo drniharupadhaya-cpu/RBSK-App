@@ -4683,6 +4683,7 @@ elif menu == "14. TECHO Entry Queue":
             
     except Exception as e:
         st.error(f"❌ Connection Error: {e}")
+        
 elif menu == "15. Clinical & IFA Tracker":
     import gspread
     import textwrap
@@ -5259,6 +5260,7 @@ elif menu == "15. Clinical & IFA Tracker":
                         st.stop()
                     except Exception as e:
                         st.error(f"Error generating PDF. Details: {e}")
+
 # ==========================================
 # MODULE 16: 🏥 CMTC INPATIENT TRACKER (14-Day Ward)
 # ==========================================
