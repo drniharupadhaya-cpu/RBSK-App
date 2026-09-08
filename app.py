@@ -4667,6 +4667,619 @@ elif menu == "16. CMTC Inpatient Tracker":
                 st.download_button("⬇️ Download CMTC History", data=csv, file_name="CMTC_Discharge_History.csv", mime="text/csv")
             else:
                 st.info("No children have been discharged yet.")
+
+# ==========================================
+# MODULE 14: 💻 TECHO PORTAL ENTRY QUEUE (Multi-Tier + Phonetic + Full UI)
+# ==========================================
+elif menu == "14. TECHO Entry Queue":  
+    import difflib
+    import time
+    import gspread
+    
+    st.header("💻 TECHO Portal Pending Queue")
+    st.info("⚡ Auto-Sync Engine: Select your location first, then upload your TECHO export file to match and clear!")
+
+    # 🚀 THE FIX: MEMORY CACHE TO STOP READ ERRORS
+    @st.cache_data(ttl=600)
+    def get_techo_queue_data(sheet_name):
+        try:
+            return spreadsheet.worksheet(sheet_name).get_all_records()
+        except:
+            return []
+
+    queue_type = st.radio("Select which queue to work on:", ["👶 Anganwadi Queue", "🏫 School Queue"])
+    
+    if queue_type == "👶 Anganwadi Queue":
+        target_sheet_name = "daily_screenings_aw"
+        name_col = "Child Name"  
+        inst_col = "Institute"   
+    else:
+        target_sheet_name = "daily_screenings_schools"
+        name_col = "Student Name" 
+        inst_col = "Institution"     
+
+    st.write("---")
+    
+    try:
+        active_sheet = spreadsheet.worksheet(target_sheet_name) # Keep this open for writing
+        data = get_techo_queue_data(target_sheet_name) # 🚀 Pulls from memory, NOT Google!
+        
+        if data:
+            df = pd.DataFrame(data)
+            
+            if 'TECHO_Status' not in df.columns:
+                st.error(f"❌ Please add the 'TECHO_Status' column to the {target_sheet_name} sheet!")
+            elif name_col not in df.columns:
+                st.error(f"❌ Could not find the '{name_col}' column in your Google Sheet!")
+            else:
+                pending_df = df[df['TECHO_Status'] == 'Pending'].copy()
+                
+                if pending_df.empty:
+                    st.success(f"🎉 Awesome! The {queue_type} is completely empty!")
+                else:
+                    st.subheader("🎯 Step 1: Select Location / Team")
+                    available_locations = sorted(pending_df[inst_col].dropna().astype(str).unique().tolist()) if inst_col in df.columns else ["All"]
+                    selected_location = st.selectbox(f"Filter queue by {inst_col}:", ["-- Select Location --"] + available_locations)
+                    
+                    if selected_location != "-- Select Location --":
+                        loc_pending_df = pending_df[pending_df[inst_col].astype(str) == selected_location].copy()
+                        
+                        if loc_pending_df.empty:
+                            st.success(f"🎉 All entries for {selected_location} are completely done!")
+                        else:
+                            st.write("---")
+                            st.subheader("⚡ Step 2: Choose Data Entry Method")
+                            tab_auto, tab_manual = st.tabs(["🚀 Auto-Sync (TECHO File)", "✍️ Manual Multi-Select"])
+                            
+                            # ==========================================
+                            # 🚀 TAB 1: AUTO-SYNC
+                            # ==========================================
+                            with tab_auto:
+                                st.info(f"Upload the TECHO export file for **{selected_location}** to automatically match and clear children.")
+                                techo_file = st.file_uploader("📥 Upload TECHO Export (Excel/CSV)", type=["csv", "xlsx", "xls"], key="techo_upload")
+                                
+                                if techo_file is not None:
+                                    def gujarati_to_english(text):
+                                        if not text or pd.isna(text): return ""
+                                        char_map = {
+                                            'અ': 'A', 'આ': 'A', 'ઇ': 'I', 'ઈ': 'I', 'ઉ': 'U', 'ઊ': 'U', 'એ': 'E', 'ઐ': 'AI', 'ઓ': 'O', 'ઔ': 'AU',
+                                            'ક': 'K', 'ખ': 'KH', 'ગ': 'G', 'ઘ': 'GH', 'ચ': 'CH', 'છ': 'CH', 'જ': 'J', 'ઝ': 'Z', 'ટ': 'T', 'ઠ': 'TH',
+                                            'ડ': 'D', 'ઢ': 'DH', 'ણ': 'N', 'ત': 'T', 'થ': 'TH', 'દ': 'D', 'ધ': 'DH', 'ન': 'N', 'પ': 'P', 'ફ': 'F',
+                                            'બ': 'B', 'ભ': 'BH', 'મ': 'M', 'ય': 'Y', 'ર': 'R', 'લ': 'L', 'વ': 'V', 'શ': 'SH', 'ષ': 'SH', 'સ': 'S',
+                                            'હ': 'H', 'ળ': 'L', 'ક્ષ': 'KSH', 'જ્ઞ': 'GN', 'ા': 'A', 'િ': 'I', 'ી': 'I', 'ુ': 'U', 'ૂ': 'U', 'ે': 'E', 'ૈ': 'AI', 'ો': 'O', 'ૌ': 'AU', 'ં': 'N'
+                                        }
+                                        clean_guj = str(text).split('/')[0].strip()
+                                        return "".join([char_map.get(c, "") for c in clean_guj])
+
+                                    def normalize_date(val):
+                                        try: return pd.to_datetime(str(val).strip().replace('-', '/'), dayfirst=True).strftime('%Y-%m-%d')
+                                        except: return ""
+
+                                    if techo_file.name.endswith('.csv'): techo_df = pd.read_csv(techo_file)
+                                    else: techo_df = pd.read_excel(techo_file)
+
+                                    if 'Member Name' in techo_df.columns and 'Date Of Birth' in techo_df.columns:
+                                        techo_df['Clean_DOB'] = techo_df['Date Of Birth'].apply(normalize_date)
+                                        techo_df['Trans_Name'] = techo_df['Member Name'].apply(gujarati_to_english)
+                                        
+                                        emr_dob_col = next((c for c in df.columns if str(c).lower() in ['dob', 'date of birth']), None)
+                                        
+                                        matched_emr_indices = []
+                                        matched_techo_indices = []
+                                        match_display_data = []
+
+                                        for idx, emr_row in loc_pending_df.iterrows():
+                                            emr_name_full = str(emr_row[name_col])
+                                            emr_name_clean = emr_name_full.split('/')[0].strip().upper()
+                                            emr_dob = normalize_date(emr_row[emr_dob_col]) if emr_dob_col else ""
+                                            
+                                            potentials = techo_df[techo_df['Clean_DOB'] == emr_dob]
+                                            best_score, best_row, best_t_idx = 0, None, None
+
+                                            for t_idx, t_row in potentials.iterrows():
+                                                if t_idx in matched_techo_indices: continue
+                                                score = difflib.SequenceMatcher(None, emr_name_clean, t_row['Trans_Name']).ratio()
+                                                if score > best_score:
+                                                    best_score, best_row, best_t_idx = score, t_row, t_idx
+
+                                            if best_score > 0.6:
+                                                matched_emr_indices.append(idx)
+                                                matched_techo_indices.append(best_t_idx)
+                                                
+                                                row_data = {
+                                                    "Match Quality": f"{int(best_score*100)}%",
+                                                    "✅ TECHO Name (Gujarati)": best_row['Member Name'],
+                                                }
+                                                for col_name in loc_pending_df.columns:
+                                                    if col_name not in ['TECHO_Status', '_sort_val']:
+                                                        row_data[f"📋 EMR: {col_name}"] = emr_row[col_name]
+                                                match_display_data.append(row_data)
+
+                                        emr_only_df = loc_pending_df.drop(index=matched_emr_indices)
+                                        techo_only_df = techo_df.drop(index=matched_techo_indices)
+
+                                        st.markdown("#### ⚙️ Sync Results")
+                                        sync_t1, sync_t2, sync_t3 = st.tabs([
+                                            f"✅ Perfect Matches ({len(match_display_data)})", 
+                                            f"⚠️ Missing in TECHO ({len(emr_only_df)})", 
+                                            f"🛑 Extra in TECHO ({len(techo_only_df)})"
+                                        ])
+
+                                        with sync_t1:
+                                            if match_display_data:
+                                                st.success(f"Found {len(match_display_data)} matches triangulated by Phonetic Matching!")
+                                                match_df = pd.DataFrame(match_display_data)
+                                                
+                                                sort_key = f"📋 EMR: {name_col}"
+                                                if sort_key in match_df.columns: match_df = match_df.sort_values(by=sort_key)
+                                                
+                                                match_df.insert(0, "✅ Select", True)
+                                                edited_match_df = st.data_editor(
+                                                    match_df, hide_index=True, use_container_width=True,
+                                                    disabled=[col for col in match_df.columns if col != "✅ Select"]
+                                                )
+                                                
+                                                selected_matches = edited_match_df[edited_match_df["✅ Select"] == True][f"📋 EMR: {name_col}"].tolist()
+                                                
+                                                if st.button(f"🚀 Mark Selected ({len(selected_matches)}) Matches as 'Done'", type="primary"):
+                                                    with st.spinner("Batch updating Google Sheets (1 Write Call)..."):
+                                                        status_idx = df.columns.get_loc('TECHO_Status') + 1
+                                                        cells_to_update = []
+                                                        
+                                                        for c_name in selected_matches:
+                                                            matching_rows = df.index[df[name_col].astype(str) == str(c_name)].tolist()
+                                                            for row_idx in matching_rows:
+                                                                cells_to_update.append(gspread.Cell(row=row_idx + 2, col=status_idx, value="Done"))
+                                                        
+                                                        if cells_to_update:
+                                                            active_sheet.update_cells(cells_to_update)
+                                                            
+                                                        st.toast(f"✅ Successfully synced {len(selected_matches)} records!", icon="🎉")
+                                                        get_techo_queue_data.clear() # 🚀 CLEAR MEMORY SO IT REFRESHES
+                                                        time.sleep(1)
+                                                        st.rerun()
+                                            else:
+                                                st.info("No matches found. Ensure your TECHO export contains the same children and DOBs.")
+
+                                        with sync_t2:
+                                            st.warning("These children are pending in your EMR but weren't found in the TECHO file.")
+                                            if not emr_only_df.empty:
+                                                disp_emr = emr_only_df.drop(columns=['TECHO_Status', '_sort_val'], errors='ignore').sort_values(by=name_col)
+                                                st.dataframe(disp_emr, use_container_width=True)
+
+                                        with sync_t3:
+                                            st.error("These children are pending in TECHO, but are NOT in your EMR pending queue.")
+                                            if not techo_only_df.empty:
+                                                disp_techo = techo_only_df.drop(columns=['Trans_Name', 'Clean_DOB'], errors='ignore').sort_values(by='Member Name')
+                                                st.dataframe(disp_techo, use_container_width=True)
+                                    else:
+                                        st.error("❌ The uploaded file is missing 'Member Name' or 'Date Of Birth' columns.")
+
+                            # ==========================================
+                            # ✍️ TAB 2: MANUAL MULTI-SELECT
+                            # ==========================================
+                            with tab_manual:
+                                st.write(f"### 📋 Pending Entries for {selected_location} ({len(loc_pending_df)} Children)")
+                                
+                                display_manual_df = loc_pending_df.drop(columns=['TECHO_Status', '_sort_val'], errors='ignore').sort_values(by=name_col)
+                                st.dataframe(display_manual_df, use_container_width=True)
+                                
+                                st.write("---")
+                                children_to_update = st.multiselect(f"Select multiple children to mark as 'Done':", display_manual_df[name_col].tolist())
+                                
+                                if st.button(f"🚀 Mark Selected ({len(children_to_update)}) as 'Done'"):
+                                    if children_to_update:
+                                        with st.spinner("Batch updating Google Sheets (1 Write Call)..."):
+                                            status_idx = df.columns.get_loc('TECHO_Status') + 1
+                                            cells_to_update = []
+                                            
+                                            for c_name in children_to_update:
+                                                matching_rows = df.index[df[name_col].astype(str) == str(c_name)].tolist()
+                                                for row_idx in matching_rows:
+                                                    cells_to_update.append(gspread.Cell(row=row_idx + 2, col=status_idx, value="Done"))
+                                            
+                                            if cells_to_update:
+                                                active_sheet.update_cells(cells_to_update)
+                                                
+                                            st.toast(f"✅ {len(children_to_update)} Statuses updated!", icon="🎉")
+                                            get_techo_queue_data.clear() # 🚀 CLEAR MEMORY SO IT REFRESHES
+                                            time.sleep(1)
+                                            st.rerun()
+                                    else:
+                                        st.warning("Please select at least one child.")
+        else:
+            st.info(f"The {target_sheet_name} sheet is currently empty.")
+            
+    except Exception as e:
+        st.error(f"❌ Connection Error: {e}")
+
+# ==========================================
+# MODULE 15: 🏥 CLINICAL OPERATIONS, IFA & VISIT LOG
+# ==========================================
+elif menu == "15. Clinical & IFA Tracker":
+    import gspread
+    import textwrap
+    import os
+    import datetime
+    from io import BytesIO
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.pagesizes import A4
+    import pandas as pd
+    
+    render_header("Clinical Operations", "Referrals, Inventory & Monitoring", "🏥", "#0ea5e9")
+    
+    # --- CACHING FUNCTIONS ---
+    @st.cache_data(ttl=600)
+    def get_master_lists():
+        try:
+            aw_df = pd.DataFrame(spreadsheet.worksheet("aw new data").get_all_records())
+        except:
+            aw_df = pd.DataFrame()
+            
+        try:
+            sch_df = pd.DataFrame(spreadsheet.worksheet("1240315 ALL STUDENTS NAMES").get_all_records())
+        except:
+            sch_df = pd.DataFrame()
+            
+        return aw_df, sch_df
+
+    @st.cache_data(ttl=600)
+    def get_cmtc_data():
+        try: return spreadsheet.worksheet("cmtc_referral").get_all_records()
+        except: return []
+
+    @st.cache_data(ttl=600)
+    def get_ifa_data():
+        try: return pd.DataFrame(spreadsheet.worksheet("ifa_inventory").get_all_records())
+        except: return pd.DataFrame()
+
+    # --- FETCH INSTITUTE LISTS ROBUSTLY (Fixes the School Dropdown Bug) ---
+    master_aw_data, master_sch_data = get_master_lists()
+
+    def get_inst_list(df, keywords):
+        if df.empty: return []
+        col = next((c for c in df.columns if any(k in str(c).upper() for k in keywords)), None)
+        target_col = col if col else df.columns[0]
+        raw_list = df[target_col].astype(str).unique().tolist()
+        return sorted([x.strip() for x in raw_list if x.strip().lower() not in ['nan', 'none', '']])
+
+    aw_list = get_inst_list(master_aw_data, ["INSTITUTE", "AWC", "CENTER"])
+    school_list = get_inst_list(master_sch_data, ["INSTITUTION", "SCHOOL", "NAME"])
+
+    # --- PDF GENERATION ENGINE ---
+    def generate_visit_report(data):
+        buffer = BytesIO()
+        c = canvas.Canvas(buffer, pagesize=A4)
+        width, height = A4
+        
+        today = datetime.date.today()
+        date_str = today.strftime("%d-%m-%Y")
+        day_str = today.strftime("%A").upper()
+        
+        c.setFont("Helvetica-Bold", 16)
+        c.drawCentredString(width/2, height-50, "RBSK TEAM VISAVADAR SCREENING VISIT")
+        c.line(50, height-65, width-50, height-65)
+        
+        c.setFont("Helvetica", 12)
+        c.drawString(50, height-100, f"DATE: {date_str}")
+        c.drawString(50, height-120, f"DAY: {day_str}")
+        
+        def draw_wrapped_text(text, x, y, max_chars, line_height=20):
+            lines = textwrap.wrap(text, width=max_chars)
+            for line in lines:
+                c.drawString(x, y, line)
+                y -= line_height
+            return y
+
+        intro = f"TODAY, RBSK TEAM VISAVADAR VISITED AND SCREENED ALL CHILDREN OF - {data['name']} "
+        body = "THE HEALTH SCREENING WAS CARRIED OUT ACCORDING TO 4D AND ALL NEEDFUL CHILDREN WERE COUNSELLED AND REFERRED TO NEAREST REFERRAL POINT FOR TREATMENT. ALSO, IEC ABOUT VARIOUS GOVT. HEALTH PROGRAMS LIKE TOBACCO CONTROL, TB, LEPROSY, AMB (ANEMIA MUKT BHARAT), NUTRITION, VECTOR BORN DISEASES WERE ALSO GIVEN TO THE STUDENTS."
+        
+        # 🚀 FIX: Reduced max_chars to 75 so it stops cutting off!
+        y = draw_wrapped_text(intro, 50, height-160, 75)
+        y = draw_wrapped_text(body, 50, y-20, 75)
+        
+        y -= 50
+        c.drawString(400, y+30, "REGARDS,")
+        
+        
+        seal_path = "SEAL.jpeg"
+        
+        if os.path.exists(seal_path):
+            c.drawImage(seal_path, 330, y-10, width=60, height=60, preserveAspectRatio=True, mask='auto')
+            
+        c.line(400, y-15, 530, y-15)
+        c.drawString(400, y-30, "RBSK MEDICAL OFFICER")
+        
+        c.save()
+        buffer.seek(0)
+        return buffer.getvalue()
+
+    # --- INTEGRATED TABS ---
+    tab_cmtc, tab_ifa, tab_visits = st.tabs(["🔴 CMTC Follow-up", "💊 IFA Stock Tracker", "🏫 Institution Visit Report"])
+    
+    # 🏫 VISIT REPORT TAB
+    with tab_visits:
+        st.subheader("🏫 Institution Visit PDF Generator")
+        
+        # 1. Initialize session state to hold report data
+        if "report_ready" not in st.session_state:
+            st.session_state.report_ready = False
+        
+        with st.form("visit_report_form"):
+            v_level = st.radio("Level:", ["Anganwadi", "School"], horizontal=True)
+            # 🚀 FIX: Uses the correctly populated lists
+            inst_options = aw_list if v_level == "Anganwadi" else school_list
+            v_name = st.selectbox("Select Institution:", ["-- Select --"] + inst_options)
+            
+            submitted = st.form_submit_button("📄 Prepare Official PDF")
+            
+            if submitted:
+                if v_name != "-- Select --":
+                    st.session_state.report_data = {"name": v_name}
+                    st.session_state.report_ready = True
+                else:
+                    st.warning("Please select an institution.")
+                    st.session_state.report_ready = False
+
+        # 2. DOWNLOAD BUTTON IS OUTSIDE THE FORM (Your perfect UI logic!)
+        if st.session_state.report_ready:
+            pdf_bytes = generate_visit_report(st.session_state.report_data)
+            st.download_button(
+                label="⬇️ Download Official Report",
+                data=pdf_bytes,
+                file_name=f"Visit_Report_{st.session_state.report_data['name']}.pdf",
+                mime="application/pdf",
+                type="primary"
+            )
+
+    # ==========================================
+    # --- 1. CMTC FOLLOW-UP (SMART ENGINE) ---
+    # ==========================================
+    with tab_cmtc:
+        st.subheader("📝 SAM/MAM Treatment Progress")
+        
+        try:
+            raw_data = get_cmtc_data() 
+            
+            if raw_data:
+                # 1. LOAD & PURGE GHOST COLUMNS (Removes 'Unnamed: 9' etc.)
+                ref_data = pd.DataFrame(raw_data)
+                ref_data = ref_data.loc[:, ~ref_data.columns.str.contains('^Unnamed')]
+                
+                # 2. STRING CLEANUP (Excluding Admission Date)
+                for col in ref_data.columns:
+                    if col != 'Admission Date':
+                        ref_data[col] = ref_data[col].fillna("").astype(str).replace(['nan', 'NaN', 'NaT', 'None', '<NA>'], "")
+
+                # 3. ENSURE REQUIRED COLUMNS EXIST
+                if "Current Status" not in ref_data.columns: ref_data["Current Status"] = "Pending"
+                if "Follow-up Remarks" not in ref_data.columns: ref_data["Follow-up Remarks"] = ""
+                if "Admission Date" not in ref_data.columns: ref_data["Admission Date"] = None
+
+                # 4. 🚨 THE DATE COLUMN FIX 🚨
+                # Strictly parse to date objects, and replace NaT with None (Streamlit's required empty state for DateColumns)
+                ref_data['Admission Date'] = pd.to_datetime(
+                    ref_data['Admission Date'].astype(str).str.replace('/', '-'), 
+                    dayfirst=True, errors='coerce'
+                ).dt.date
+                ref_data['Admission Date'] = ref_data['Admission Date'].replace({pd.NaT: None})
+
+                # 5. 🚨 THE ACTION BOARD (METRICS)
+                st.markdown("##### 🚨 Live Action Board")
+                m1, m2, m3 = st.columns(3)
+                pending_count = len(ref_data[ref_data['Current Status'] == 'Pending'])
+                counselled_count = len(ref_data[ref_data['Current Status'] == 'Counselled'])
+                resolved_count = len(ref_data[ref_data['Current Status'].isin(['Recovered', 'Discharged'])])
+                
+                m1.error(f"🔴 Pending Action: **{pending_count}**")
+                m2.warning(f"🟡 Counselled/Waiting: **{counselled_count}**")
+                m3.success(f"🟢 Resolved/Recovered: **{resolved_count}**")
+                st.divider()
+
+                # 6. 🎯 THE DUAL-FILTER SYSTEM
+                f1, f2 = st.columns(2)
+                with f1:
+                    aw_col = next((c for c in ref_data.columns if any(k in str(c).upper() for k in ["INSTITUTE", "AW", "CENTER", "ANGANWADI"])), "Anganwadi")
+                    unique_aws = sorted([str(x).strip() for x in ref_data[aw_col].unique() if str(x).strip() != ""])
+                    selected_aw = st.selectbox("🏢 Filter by Anganwadi:", ["All Anganwadis"] + unique_aws)
+                
+                with f2:
+                    # 🚀 NEW: Filter by SAM/MAM Status
+                    if "Status" in ref_data.columns:
+                        unique_nut_statuses = sorted([str(x).strip() for x in ref_data['Status'].unique() if str(x).strip() != ""])
+                        default_nut = [s for s in unique_nut_statuses if s in ["SAM", "MAM"]]
+                        selected_status = st.multiselect("🚦 Filter by SAM/MAM Status:", unique_nut_statuses, default=default_nut)
+                    else:
+                        selected_status = []
+
+                # APPLY FILTERS
+                display_df = ref_data.copy()
+                if selected_aw != "All Anganwadis":
+                    display_df = display_df[display_df[aw_col].astype(str).str.strip() == selected_aw]
+                if selected_status and "Status" in display_df.columns:
+                    display_df = display_df[display_df['Status'].isin(selected_status)]
+
+                # 7. SMART SORT (Force 'Pending' & 'Counselled' to the top of the table)
+                sort_order = {"Pending": 1, "Counselled": 2, "Admitted": 3, "Discharged": 4, "Recovered": 5, "LAMA/Refused": 6}
+                display_df['_sort'] = display_df['Current Status'].map(sort_order).fillna(99)
+                display_df = display_df.sort_values(by='_sort').drop(columns=['_sort'])
+
+                # 8. RENDER THE FOCUSED EDITOR
+                status_list = ["Pending", "Counselled", "Admitted", "Discharged", "Recovered", "LAMA/Refused"]
+                read_only_cols = ["Child Name", "Institute", "Anganwadi", "DOB", "Gender", "Referral Date", "Date", "Height", "Weight", "MUAC", "Status", "Contact"]
+                
+                if display_df.empty:
+                    st.info("No children match your current filters. Great job! 🎉")
+                else:
+                    updated_display_df = st.data_editor(
+                        display_df,
+                        column_config={
+                            "Current Status": st.column_config.SelectboxColumn("Follow-Up Action", options=status_list, width="medium"),
+                            "Admission Date": st.column_config.DateColumn("Adm Date"),
+                            "Follow-up Remarks": st.column_config.TextColumn("Remarks", width="large"),
+                        },
+                        disabled=read_only_cols,
+                        hide_index=True,
+                        use_container_width=True
+                    )
+
+                    # 9. 💾 SAFE MERGE & SAVE LOGIC
+                    if st.button("💾 Save Follow-up Progress", type="primary"):
+                        with st.spinner("Merging your specific updates into the Master Database..."):
+                            
+                            # ✨ THE MAGIC: Merge edited filtered data back into the main DataFrame using exact indices!
+                            ref_data.update(updated_display_df)
+                            
+                            # Safe conversion of Dates back to strings for Google Sheets
+                            if "Admission Date" in ref_data.columns:
+                                ref_data['Admission Date'] = ref_data['Admission Date'].apply(
+                                    lambda x: x.strftime('%d-%m-%Y') if pd.notnull(x) and hasattr(x, 'strftime') else ""
+                                )
+
+                            # THE ULTIMATE NAN KILLER (Final scrub before pushing to cloud)
+                            raw_data_list = ref_data.values.tolist()
+                            cleaned_list = []
+                            for row in raw_data_list:
+                                clean_row = []
+                                for cell in row:
+                                    if pd.isna(cell): clean_row.append("")
+                                    else:
+                                        str_cell = str(cell).strip()
+                                        clean_row.append("" if str_cell.lower() in ['nan', 'nat', 'none', '<na>'] else str_cell)
+                                cleaned_list.append(clean_row)
+
+                            data_to_save = [ref_data.columns.values.tolist()] + cleaned_list
+                            
+                            spreadsheet.worksheet("cmtc_referral").update(data_to_save)
+                            get_cmtc_data.clear() 
+                            
+                            st.toast("Referral status safely merged and updated!", icon="✅")
+                            import time
+                            time.sleep(0.5)
+                            st.rerun()
+            else:
+                st.success("🎉 No SAM/MAM referrals currently pending!")
+        
+        except Exception as e:
+            st.error(f"CMTC Logic Error: {e}")
+
+    # ==========================================
+    # --- 2. IFA STOCK TRACKER ---
+    # ==========================================
+    with tab_ifa:
+        st.subheader("💊 IFA Inventory & Projection Engine")
+        ifa_level = st.radio("Select Level:", ["👶 Anganwadi (Syrups)", "🏫 School (Tablets)"], horizontal=True)
+        current_options = aw_list if "Anganwadi" in ifa_level else school_list
+
+        try:
+            # 🚀 SMART SHEET CONNECTION
+            try: 
+                inventory_sheet = spreadsheet.worksheet("ifa_inventory")
+            except gspread.exceptions.WorksheetNotFound: 
+                inventory_sheet = spreadsheet.add_worksheet(title="ifa_inventory", rows="1000", cols="10")
+                inventory_sheet.append_row(["Timestamp", "Level", "Institute Name", "Stock Quantity", "Expiry Date", "Status", "Weeks Left (Projection)"])
+            except Exception as conn_err:
+                st.warning(f"Temporary connection glitch: {conn_err}. Retrying usually fixes this.")
+                st.stop()
+                
+            selected_inst = st.selectbox("Select Institute Name:", ["-- Select --"] + current_options)
+
+            # --- 🚀 ADVANCED CALCULATION ENGINE ---
+            small_demand, large_demand = 0, 0
+            
+            if "School" in ifa_level and selected_inst != "-- Select --" and not master_sch_data.empty:
+                # Find the column containing the school name (Fallback to column 0)
+                sch_col = next((c for c in master_sch_data.columns if any(k in str(c).upper() for k in ["INSTITUTION", "SCHOOL", "NAME"])), master_sch_data.columns[0])
+                school_df = master_sch_data[master_sch_data[sch_col].astype(str).str.strip() == selected_inst]
+                
+                # Find the standard/class column
+                std_col = next((c for c in school_df.columns if any(k in str(c).upper() for k in ['STD', 'CLASS', 'STANDARD', 'ધોરણ'])), None)
+                
+                if std_col:
+                    import re
+                    for val in school_df[std_col].astype(str):
+                        nums = re.findall(r'\d+', val)
+                        if nums:
+                            std = int(nums[0])
+                            if 1 <= std <= 5:
+                                small_demand += 1
+                            elif 6 <= std <= 12:
+                                large_demand += 1
+                
+                st.info(f"📊 **Auto-Detected Enrollment for {selected_inst}:** {small_demand} students in Stds 1-5 | {large_demand} students in Stds 6-12")
+
+            with st.form("ifa_stock_form", clear_on_submit=False):
+                st.write("### 📝 Log Stock Audit & Projections")
+                
+                import datetime
+                
+                if "Anganwadi" in ifa_level:
+                    # ORIGINAL ANGANWADI LOGIC
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        stock_qty = st.number_input("Current Syrup Bottles", min_value=0)
+                    with c2:
+                        expiry_date = st.date_input("Batch Expiry Date")
+                        stock_status = st.selectbox("Stock Status:", ["Sufficient", "Low (<25%)", "Critical (<10%)", "Stock Out"])
+                        
+                else:
+                    # NEW DUAL-TABLET SCHOOL LOGIC
+                    st.write("#### 🌸 Small IFA (WIFS Junior - Stds 1-5)")
+                    s1, s2, s3 = st.columns(3)
+                    with s1: small_qty = st.number_input("Small IFA Stock (Tablets)", min_value=0)
+                    with s2: small_expiry = st.date_input("Small IFA Expiry", key="s_exp")
+                    with s3: 
+                        small_weeks = round(small_qty / small_demand) if small_demand > 0 else 0
+                        st.metric("Will last for (Weeks):", small_weeks)
+                        small_status = "Stock Out" if small_qty == 0 else "Critical (< 4 Weeks)" if small_weeks < 4 else "Low (< 8 Weeks)" if small_weeks < 8 else "Sufficient"
+                        st.caption(f"Status: **{small_status}**")
+
+                    st.divider()
+                    st.write("#### 🔵 Large IFA (WIFS Senior - Stds 6-12)")
+                    l1, l2, l3 = st.columns(3)
+                    with l1: large_qty = st.number_input("Large IFA Stock (Tablets)", min_value=0)
+                    with l2: large_expiry = st.date_input("Large IFA Expiry", key="l_exp")
+                    with l3:
+                        large_weeks = round(large_qty / large_demand) if large_demand > 0 else 0
+                        st.metric("Will last for (Weeks):", large_weeks)
+                        large_status = "Stock Out" if large_qty == 0 else "Critical (< 4 Weeks)" if large_weeks < 4 else "Low (< 8 Weeks)" if large_weeks < 8 else "Sufficient"
+                        st.caption(f"Status: **{large_status}**")
+
+                if st.form_submit_button("🚀 Submit Inventory Report", type="primary"):
+                    if selected_inst != "-- Select --":
+                        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                        
+                        if "Anganwadi" in ifa_level:
+                            inventory_sheet.append_row([timestamp, "Anganwadi (Syrup)", selected_inst, stock_qty, str(expiry_date), stock_status, "N/A"])
+                        else:
+                            # Save School data as two separate rows for easy analysis later!
+                            updates = []
+                            if small_demand > 0 or small_qty > 0:
+                                updates.append([timestamp, "School (Small IFA/Pink)", selected_inst, small_qty, str(small_expiry), small_status, f"{small_weeks} Weeks"])
+                            if large_demand > 0 or large_qty > 0:
+                                updates.append([timestamp, "School (Large IFA/Blue)", selected_inst, large_qty, str(large_expiry), large_status, f"{large_weeks} Weeks"])
+                            
+                            for row in updates:
+                                inventory_sheet.append_row(row)
+                                import time
+                                time.sleep(0.5) # Prevent Google API Rate Limit
+                                
+                        get_ifa_data.clear() 
+                        st.success(f"✅ Advanced Stock Projections for {selected_inst} saved securely!")
+                    else:
+                        st.warning("Please select a valid Institute Name first.")
+
+            st.divider()
+            st.write("### 📊 Recent Inventory Updates")
+            all_inv = get_ifa_data().fillna("") 
+            if not all_inv.empty:
+                # Show relevant rows based on radio selection
+                filter_word = "Anganwadi" if "Anganwadi" in ifa_level else "School"
+                filtered_inv = all_inv[all_inv['Level'].str.contains(filter_word, na=False)].tail(10)
+                st.dataframe(filtered_inv.iloc[::-1], use_container_width=True, hide_index=True)
+
+        except Exception as e:
+            st.error(f"Inventory Error: {e}")
 # ==========================================
 # MODULE 17: HIERARCHICAL DATA ANALYSIS
 # ==========================================
