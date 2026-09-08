@@ -5190,7 +5190,6 @@ elif menu == "15. Clinical & IFA Tracker":
             with c3: gen_phc = st.number_input("Children Referred to PHC/CHC", min_value=0)
             with c4: gen_deic = st.number_input("Children Referred to DEIC", min_value=0)
             with c5:
-                # Add check for IFA 
                 st.markdown("IFA Verification Status")
                 ifa_check = st.checkbox("IFA Checked? (ગોળી નિયમિત આપવામાં આવે છે)", value=True)
             
@@ -5482,6 +5481,9 @@ elif menu == "15. Clinical & IFA Tracker":
                         st.stop()
                     except Exception as e:
                         st.error(f"Error generating PDF. Details: {e}")
+            except Exception as e:
+                st.error(f"Error in data processing: {e}")
+
 # ==========================================
 # MODULE 17: HIERARCHICAL DATA ANALYSIS
 # ==========================================
@@ -5490,7 +5492,6 @@ elif menu == "17. Village-Wise Analysis":
 
     # 1. Fetch live daily logs
     aw_daily, sch_daily, _ = get_daily_logs()
-
     # 2. Robust Column Sniffers for Master Data (FIXED "SC" BUG)
     def get_geo_col(df, keywords):
         return next((c for c in df.columns if any(k in str(c).upper() for k in keywords)), None)
