@@ -3406,7 +3406,7 @@ elif menu == "9. Anganwadi Directory":
     render_header("Anganvadi Information", "All Anganvadi details at your fingertips", "⚙️", "#64748b")
     st.write("Instantly look up Anganwadi Workers, their contact numbers, and live enrollment data.")
 
-    # 🚀 NEW: Sleek Tabbed Interface!
+    # 🚀 Sleek Tabbed Interface
     tab_search, tab_summary = st.tabs(["🔍 Directory Search", "📊 Master Summary Table"])
 
     with tab_search:
@@ -3474,7 +3474,7 @@ elif menu == "9. Anganwadi Directory":
                         age_6m_3y_M = age_6m_3y_F = age_6m_3y_T = 0
                         age_3y_6y_M = age_3y_6y_F = age_3y_6y_T = 0
 
-                    # 🚀 2. NEW SPECIFIC 5-6 YEARS (From DoB)
+                    # 2. Specific 5-6 Years (From DoB)
                     dob_col = next((c for c in aw_data.columns if 'dob' in str(c).lower() or 'date of birth' in str(c).lower()), None)
                     if not dob_col and len(aw_data.columns) >= 11:
                         dob_col = aw_data.columns[10] # Column K
@@ -3496,7 +3496,6 @@ elif menu == "9. Anganwadi Directory":
                     c2.metric("👦 Boys", boys)
                     c3.metric("👧 Girls", girls)
 
-                    # 🚀 NEW: 2x2 Grid for Age Matrix to fit the 5-6 Years elegantly
                     st.markdown("#### 🎂 Age & Gender Matrix")
                     a1, a2 = st.columns(2)
                     with a1:
@@ -3519,45 +3518,55 @@ elif menu == "9. Anganwadi Directory":
             st.error("⚠️ Could not load data from the 'aw_master_directory' tab. Please ensure the tab is spelled exactly right in your Google Sheet.")
 
     with tab_summary:
-        st.subheader("📈 Master Enrollment Summary")
-        st.write("A complete numerical breakdown of all Anganwadi centers dynamically generated from your Master Database.")
+        st.subheader("📈 Master Enrollment Summary (PHC & Sub-Center Drill-Down)")
+        st.write("A cascading multi-tier analysis dynamically generated from your Master Database.")
         
-        if not df_aw.empty and 'PHC' in df_aw.columns:
+        if not df_aw.empty and 'AWC Name' in df_aw.columns:
             
-            sector_col = None
-            for col in df_aw.columns:
-                if 'sector' in str(col).lower():
-                    sector_col = col
-                    break
-            if not sector_col and len(df_aw.columns) >= 5:
-                sector_col = df_aw.columns[4]
+            # 1. Identify PHC and Sub-Center columns dynamically
+            phc_col = next((c for c in df_aw.columns if 'phc' in str(c).lower()), None)
+            if not phc_col and len(df_aw.columns) >= 4:
+                phc_col = df_aw.columns[3]
 
-            beneficiary_col = None
-            for col in df_aw.columns:
-                if 'beneficiary type' in str(col).lower():
-                    beneficiary_col = col
-                    break
+            subcenter_col = next((c for c in df_aw.columns if any(k in str(c).lower() for k in ['sub', 'subcenter', 'sub_center', 'sub-center'])), None)
+            if not subcenter_col and len(df_aw.columns) >= 5:
+                subcenter_col = df_aw.columns[4]
+
+            sector_col = next((c for c in df_aw.columns if 'sector' in str(c).lower()), None)
+
+            beneficiary_col = next((c for c in df_aw.columns if 'beneficiary type' in str(c).lower()), None)
             if not beneficiary_col and len(df_aw.columns) >= 9:
                 beneficiary_col = df_aw.columns[8]
                 
-            # Locate DoB column for entire dataframe
             dob_col = next((c for c in df_aw.columns if 'dob' in str(c).lower() or 'date of birth' in str(c).lower()), None)
             if not dob_col and len(df_aw.columns) >= 11:
                 dob_col = df_aw.columns[10]
 
-            selected_sector = "All Sectors"
-            if sector_col:
-                sector_list = sorted([str(x) for x in df_aw[sector_col].unique() if str(x).strip() not in ['', 'nan', 'None']])
-                selected_sector = st.selectbox("🎯 Filter by Sector:", ["All Sectors"] + sector_list)
+            # 🎯 LEVEL 1: PHC Dropdown
+            selected_phc = "All PHCs"
+            if phc_col and phc_col in df_aw.columns:
+                phc_list = sorted([str(x) for x in df_aw[phc_col].unique() if str(x).strip() not in ['', 'nan', 'None']])
+                selected_phc = st.selectbox("🎯 Select PHC:", ["All PHCs"] + phc_list, key="sum_phc_select")
                 
-                if selected_sector != "All Sectors":
-                    filtered_aw_df = df_aw[df_aw[sector_col].astype(str).str.strip() == selected_sector].copy()
+                if selected_phc != "All PHCs":
+                    filtered_aw_df = df_aw[df_aw[phc_col].astype(str).str.strip() == selected_phc].copy()
                 else:
                     filtered_aw_df = df_aw.copy()
             else:
                 filtered_aw_df = df_aw.copy()
-                st.warning("⚠️ Sector column (Column E) could not be identified.")
+                st.warning("⚠️ PHC column could not be identified.")
+
+            # 🏥 LEVEL 2: Sub-Center Dropdown (Appears/Activates when a PHC is selected)
+            selected_subcenter = "All Sub-Centers"
+            if selected_phc != "All PHCs" and subcenter_col and subcenter_col in filtered_aw_df.columns:
+                subcenter_list = sorted([str(x) for x in filtered_aw_df[subcenter_col].unique() if str(x).strip() not in ['', 'nan', 'None']])
+                selected_subcenter = st.selectbox("🏥 Select Sub-Center:", ["All Sub-Centers"] + subcenter_list, key="sum_subcenter_select")
                 
+                if selected_subcenter != "All Sub-Centers":
+                    filtered_aw_df = filtered_aw_df[filtered_aw_df[subcenter_col].astype(str).str.strip() == selected_subcenter].copy()
+            elif selected_phc == "All PHCs":
+                st.info("💡 Select a specific PHC above to unlock and filter by its respective Sub-Centers.")
+
             # Pre-calculate age in years for speed
             if dob_col:
                 dobs = pd.to_datetime(filtered_aw_df[dob_col], errors='coerce', dayfirst=True)
@@ -3602,9 +3611,13 @@ elif menu == "9. Anganwadi Directory":
                 age_5_6y_F = len(aw_data[is_5_to_6 & is_F])
                 age_5_6y_T = len(aw_data[is_5_to_6])
                 
-                awc_sector = aw_data[sector_col].iloc[0] if sector_col and not aw_data.empty else "N/A"
+                awc_phc = aw_data[phc_col].iloc[0] if phc_col and phc_col in aw_data.columns and not aw_data.empty else "N/A"
+                awc_sub = aw_data[subcenter_col].iloc[0] if subcenter_col and subcenter_col in aw_data.columns and not aw_data.empty else "N/A"
+                awc_sector = aw_data[sector_col].iloc[0] if sector_col and sector_col in aw_data.columns and not aw_data.empty else "N/A"
                 
                 summary_data.append({
+                    "PHC": str(awc_phc).strip(),
+                    "Sub-Center": str(awc_sub).strip(),
                     "Sector": str(awc_sector).strip(),
                     "Anganwadi Center": str(awc).strip(),
                     "Total Children": total,
@@ -3625,7 +3638,7 @@ elif menu == "9. Anganwadi Directory":
                 })
             
             if summary_data:
-                summary_df = pd.DataFrame(summary_data).sort_values(by=["Sector", "Anganwadi Center"])
+                summary_df = pd.DataFrame(summary_data).sort_values(by=["PHC", "Sub-Center", "Anganwadi Center"])
                 
                 total_all = summary_df['Total Children'].sum()
                 total_boys = summary_df['👦 Boys'].sum()
@@ -3638,7 +3651,7 @@ elif menu == "9. Anganwadi Directory":
                 t_5_6y_M, t_5_6y_F, t_5_6y_T = summary_df['🎓 5-6y (Boys)'].sum(), summary_df['🎓 5-6y (Girls)'].sum(), summary_df['🎓 5-6y (Total)'].sum()
                 
                 st.divider()
-                st.markdown(f"### 🏆 Master Metrics for: {selected_sector}")
+                st.markdown(f"### 🏆 Metrics for PHC: {selected_phc} | Sub-Center: {selected_subcenter}")
                 
                 m1, m2, m3, m4 = st.columns(4)
                 m1.metric("🏠 Anganwadis", total_awcs)
@@ -3660,9 +3673,9 @@ elif menu == "9. Anganwadi Directory":
                 import datetime
                 csv_summary = summary_df.to_csv(index=False).encode('utf-8-sig')
                 st.download_button(
-                    label="⬇️ Download Sector Summary Matrix (CSV)",
+                    label="⬇️ Download Cascaded Matrix Summary (CSV)",
                     data=csv_summary,
-                    file_name=f"Anganwadi_Matrix_Summary_{datetime.date.today()}.csv",
+                    file_name=f"Anganwadi_Matrix_Summary_{selected_phc}_{selected_subcenter}_{datetime.date.today()}.csv",
                     mime="text/csv"
                 )
                 
