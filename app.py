@@ -4905,10 +4905,13 @@ elif menu == "14. TECHO Entry Queue":
 # ==========================================
 elif menu == "15. Clinical & IFA Tracker":
     import gspread
+    import textwrap
     import os
     import datetime
+    import base64
     from io import BytesIO
     import pandas as pd
+    from fpdf import FPDF
     
     render_header("Clinical Operations", "Referrals, Inventory & Monitoring", "🏥", "#0ea5e9")
     
@@ -4939,6 +4942,7 @@ elif menu == "15. Clinical & IFA Tracker":
 
     # --- FETCH INSTITUTE LISTS ROBUSTLY ---
     master_aw_data, master_sch_data = get_master_lists()
+    df_aw_daily, df_sch_daily, _ = get_daily_logs()
 
     def get_inst_list(df, keywords):
         if df.empty: return []
@@ -4949,12 +4953,304 @@ elif menu == "15. Clinical & IFA Tracker":
 
     aw_list = get_inst_list(master_aw_data, ["INSTITUTE", "AWC", "CENTER"])
     school_list = get_inst_list(master_sch_data, ["INSTITUTION", "SCHOOL", "NAME"])
-    
-    aw_logs, sch_logs, df_combined = get_daily_logs()
 
     # --- INTEGRATED TABS ---
     tab_cmtc, tab_ifa, tab_visits = st.tabs(["🔴 CMTC Follow-up", "💊 IFA Stock Tracker", "🏫 Institution Visit Report"])
     
+    # ==========================================
+    # --- 3. VISIT REPORT (GUJARATI PDF) ---
+    # ==========================================
+    with tab_visits:
+        st.subheader("🏫 Institution Visit PDF Generator")
+        st.info("Generates the official 'શાળા / આંગણવાડી આરોગ્ય સ્ક્રિનિંગ કામગીરી અહેવાલ' with dynamic tracking.")
+        
+        if "report_ready" not in st.session_state:
+            st.session_state.report_ready = False
+            
+        with st.form("visit_report_form"):
+            v_level = st.radio("Institution Level:", ["Anganwadi", "School"], horizontal=True)
+            inst_options = aw_list if v_level == "Anganwadi" else school_list
+            
+            c1, c2 = st.columns(2)
+            with c1: v_name = st.selectbox("Select Institution:", ["-- Select --"] + inst_options)
+            with c2: v_date = st.date_input("Select Visit Date:")
+            
+            st.write("### ✍️ Additional Output Parameters")
+            remarks_text = st.text_area("Remarks (વિશેષ નોંધ)", placeholder="E.g. Staff cooperation was good. IFA consumption verified.")
+            
+            c3, c4, c5 = st.columns(3)
+            with c3: gen_phc = st.number_input("Children Referred to PHC/CHC", min_value=0)
+            with c4: gen_deic = st.number_input("Children Referred to DEIC", min_value=0)
+            with c5:
+                st.markdown("IFA Verification Status")
+                ifa_check = st.checkbox("IFA Checked? (ગોળી નિયમિત આપવામાં આવે છે)", value=True)
+            
+            submitted = st.form_submit_button("📄 Prepare Official PDF Report")
+            
+            if submitted:
+                if v_name != "-- Select --":
+                    st.session_state.report_data = {
+                        "level": v_level,
+                        "name": v_name, 
+                        "date": v_date,
+                        "phc_ref": gen_phc,
+                        "deic_ref": gen_deic,
+                        "ifa_check": ifa_check,
+                        "remarks": remarks_text
+                    }
+                    st.session_state.report_ready = True
+                else:
+                    st.warning("Please select an institution.")
+                    st.session_state.report_ready = False
+
+        if st.session_state.report_ready:
+            try:
+                # 1. Fetch Demographics based on Level
+                r_level = st.session_state.report_data['level']
+                r_name = st.session_state.report_data['name']
+                
+                master_df = master_aw_data if r_level == "Anganwadi" else master_sch_data
+                logs_df = df_aw_daily if r_level == "Anganwadi" else df_sch_daily
+                
+                inst_col_master = next((c for c in master_df.columns if any(k in str(c).upper() for k in ["INSTITUTE", "AWC", "CENTER", "SCHOOL", "INSTITUTION"])), master_df.columns[0])
+                target_inst_df = master_df[master_df[inst_col_master].astype(str).str.strip() == r_name]
+                
+                village_name = ""
+                min_std, max_std = "", ""
+                total_enrolled = len(target_inst_df)
+                
+                if not target_inst_df.empty:
+                    v_col = next((c for c in target_inst_df.columns if any(k in str(c).upper() for k in ["VILLAGE", "CITY", "SECTOR"])), None)
+                    if v_col: village_name = str(target_inst_df.iloc[0][v_col]).strip()
+                    
+                    if r_level == "School":
+                        std_col = next((c for c in target_inst_df.columns if any(k in str(c).upper() for k in ['STD', 'CLASS', 'STANDARD', 'ધોરણ'])), None)
+                        if std_col:
+                            import re
+                            classes_found = []
+                            for val in target_inst_df[std_col].astype(str):
+                                nums = re.findall(r'\d+', val)
+                                if nums: classes_found.append(int(nums[0]))
+                            if classes_found:
+                                min_std, max_std = str(min(classes_found)), str(max(classes_found))
+
+                # 2. Daily Log Aggregation
+                total_screened_today = 0
+                d_counts = {
+                    "birth_defects": 0, "deficiency": 0, "delays": 0,
+                    "vision": 0, "anemia": 0, "dental": 0,
+                    "skin": 0, "ear": 0, "other": 0, "total_ref": 0
+                }
+                
+                if not logs_df.empty:
+                    inst_col_logs = next((c for c in logs_df.columns if any(k in c.lower() for k in ['inst', 'school', 'awc', 'anganwadi', 'center'])), None)
+                    date_col = next((c for c in logs_df.columns if any(k in c.lower() for k in ['date'])), None)
+                    disease_col = next((c for c in logs_df.columns if c.lower() in ['disease', 'diseases', '4d']), None)
+                    status_col = next((c for c in logs_df.columns if c.lower() in ['status', 'sam', 'mam']), None)
+                    hb_col = next((c for c in logs_df.columns if c.lower() in ['hb', 'hemoglobin']), None)
+                    
+                    if inst_col_logs:
+                        target_logs = logs_df[logs_df[inst_col_logs].astype(str).str.strip() == r_name].copy()
+                        
+                        if date_col:
+                            target_logs['Parsed_Date'] = pd.to_datetime(target_logs[date_col], dayfirst=True, errors='coerce').dt.date
+                            target_logs = target_logs[target_logs['Parsed_Date'] == st.session_state.report_data['date']]
+                            
+                        if status_col:
+                            screened_logs = target_logs[target_logs[status_col].astype(str).str.strip().str.upper() != "ABSENT"]
+                        else:
+                            screened_logs = target_logs
+                            
+                        total_screened_today = len(screened_logs)
+
+                        for _, row in screened_logs.iterrows():
+                            hb_val = pd.to_numeric(row[hb_col], errors='coerce') if hb_col else 0
+                            if pd.notnull(hb_val) and hb_val > 0 and hb_val < 11.5:
+                                d_counts["anemia"] += 1
+                                d_counts["total_ref"] += 1
+                                
+                            status_val = str(row[status_col]).strip().upper() if status_col else ""
+                            if status_val in ["SAM", "MAM"]:
+                                d_counts["deficiency"] += 1
+                                d_counts["total_ref"] += 1
+                                
+                            disease_val = str(row[disease_col]).upper().strip() if disease_col else ""
+                            if disease_val not in ['', 'NAN', 'NONE', 'NO', 'NULL', 'NA', 'FALSE']:
+                                d_counts["total_ref"] += 1
+                                if any(x in disease_val for x in ['CLEFT', 'CLUB', 'CHD', 'NEURAL', 'DOWN']):
+                                    d_counts["birth_defects"] += 1
+                                elif any(x in disease_val for x in ['VISION', 'REFRACTIVE']):
+                                    d_counts["vision"] += 1
+                                elif any(x in disease_val for x in ['CARIES', 'TOOTH', 'DENTAL']):
+                                    d_counts["dental"] += 1
+                                elif any(x in disease_val for x in ['SCABIES', 'SKIN']):
+                                    d_counts["skin"] += 1
+                                elif any(x in disease_val for x in ['EAR', 'OTITIS']):
+                                    d_counts["ear"] += 1
+                                elif any(x in disease_val for x in ['DELAY', 'AUTISM', 'SPEECH', 'MOTOR', 'HEARING']):
+                                    d_counts["delays"] += 1
+                                elif "ANEMIA" in disease_val and hb_val >= 11.5: 
+                                    d_counts["anemia"] += 1 
+                                else:
+                                    d_counts["other"] += 1
+
+                # 3. Quick UI Preview before PDF Generation
+                st.markdown("### 📊 Verification Preview")
+                c_prev1, c_prev2, c_prev3 = st.columns(3)
+                c_prev1.metric("Total Enrolled", total_enrolled)
+                c_prev2.metric("Screened Today", total_screened_today)
+                if r_level == "School":
+                    c_prev3.metric("Standards", f"{min_std} to {max_std}" if min_std else "Unknown")
+                else:
+                    c_prev3.metric("Category", "Anganwadi Center")
+
+                # 4. Generate the PDF
+                if not os.path.exists("NotoSansGujarati-Regular.ttf"):
+                    st.error("🚨 CRITICAL: 'NotoSansGujarati-Regular.ttf' Font Missing from your directory!")
+                else:
+                    try:
+                        def generate_gujarati_report(data, stats, enr, scr, std_min, std_max, vil):
+                            pdf = FPDF(unit='pt', format='A4')
+                            pdf.add_page()
+                            pdf.add_font('Gujarati', '', 'NotoSansGujarati-Regular.ttf')
+                            
+                            pdf.set_line_width(1)
+                            pdf.rect(15, 15, 595.27 - 30, 841.89 - 30)
+                            
+                            pdf.set_font('Gujarati', '', 14)
+                            pdf.set_xy(0, 40)
+                            pdf.cell(595.27, 10, "રાષ્ટ્રીય બાળ સ્વાસ્થ્ય કાર્યક્રમ (RBSK) - આરોગ્ય વિભાગ", align='C')
+                            
+                            pdf.set_font('Gujarati', '', 12)
+                            pdf.set_xy(0, 65)
+                            report_title = "શાળા આરોગ્ય સ્ક્રિનિંગ કામગીરી અહેવાલ" if data['level'] == "School" else "આંગણવાડી સ્ક્રિનિંગ કામગીરી અહેવાલ"
+                            pdf.cell(595.27, 10, report_title, align='C')
+                            
+                            pdf.line(180, 80, 415, 80)
+                            
+                            y = 100
+                            pdf.set_font('Gujarati', '', 11)
+                            pdf.text(30, y, "તાલુકો : VISAVADAR")
+                            pdf.text(400, y, f"મુલાકાત તારીખ : {data['date'].strftime('%d-%m-%Y')}")
+                            
+                            y += 30
+                            inst_word = "શાળાની" if data['level'] == "School" else "આંગણવાડીની"
+                            std_text = f"જેમાં ધોરણ {std_min} થી ધોરણ {std_max} સુધીના" if data['level'] == "School" else "જેમાં ૦ થી ૬ વર્ષના"
+                            
+                            intro_text = f"             આજ રોજ VISAVADAR તાલુકાની RBSK ટીમ નં. MHT-1 દ્વારા {vil} ગામની {data['name']} {inst_word} મુલાકાત લેવામાં આવી હતી. {std_text} બાળકોની ૪D (Defects at Birth, Deficiency, Diseases, Development Delays) મુજબ આરોગ્ય તપાસ કરવામાં આવી હતી. જેમાં કુલ {enr} બાળકોમાંથી હાજર {scr} બાળકોની પ્રાથમિક આરોગ્ય તપાસ (જેવીકે વજન,ઊંચાઈ,આંખના નંબર અને HB) કરવામાં આવી હતી. જેમાંથી ૪D તપાસ મુજબ મળેલ બાળકોની સંખ્યા નીચે મુજબ છે:"
+                            
+                            wrapped_intro = textwrap.wrap(intro_text, width=80)
+                            for line in wrapped_intro:
+                                pdf.text(30, y, line)
+                                y += 18
+                                
+                            y += 10
+                            pdf.set_font('Gujarati', '', 10)
+                            
+                            def draw_table_header(start_y):
+                                pdf.set_fill_color(220, 220, 220)
+                                pdf.rect(30, start_y, 40, 30, 'DF')
+                                pdf.rect(70, start_y, 160, 30, 'DF')
+                                pdf.rect(230, start_y, 50, 30, 'DF')
+                                pdf.text(35, start_y + 12, "ક્રમ")
+                                pdf.text(35, start_y + 22, "(No.)")
+                                pdf.text(90, start_y + 12, "આરોગ્ય સ્થિત")
+                                pdf.text(90, start_y + 22, "(IDENTIFY CHILD)")
+                                pdf.text(235, start_y + 12, "બાળકોની")
+                                pdf.text(235, start_y + 22, "સંખ્યા")
+                                
+                                pdf.rect(280, start_y, 40, 30, 'DF')
+                                pdf.rect(320, start_y, 160, 30, 'DF')
+                                pdf.rect(480, start_y, 50, 30, 'DF')
+                                pdf.text(285, start_y + 12, "ક્રમ")
+                                pdf.text(285, start_y + 22, "(No.)")
+                                pdf.text(340, start_y + 12, "આરોગ્ય સ્થિત")
+                                pdf.text(340, start_y + 22, "(IDENTIFY CHILD)")
+                                pdf.text(485, start_y + 12, "બાળકોની")
+                                pdf.text(485, start_y + 22, "સંખ્યા")
+                                
+                            def draw_table_row(start_y, num1, title1, sub1, val1, num2, title2, sub2, val2):
+                                pdf.rect(30, start_y, 40, 25)
+                                pdf.rect(70, start_y, 160, 25)
+                                pdf.rect(230, start_y, 50, 25)
+                                pdf.text(45, start_y + 15, str(num1))
+                                pdf.text(75, start_y + 12, title1)
+                                pdf.text(75, start_y + 22, sub1)
+                                pdf.text(250, start_y + 15, str(val1))
+                                
+                                pdf.rect(280, start_y, 40, 25)
+                                pdf.rect(320, start_y, 160, 25)
+                                pdf.rect(480, start_y, 50, 25)
+                                pdf.text(295, start_y + 15, str(num2))
+                                pdf.text(325, start_y + 12, title2)
+                                pdf.text(325, start_y + 22, sub2)
+                                pdf.text(500, start_y + 15, str(val2))
+                            
+                            draw_table_header(y)
+                            y += 30
+                            draw_table_row(y, 1, "જન્મજાત ખામી", "(Birth Defects)", stats["birth_defects"], 6, "દાંતનો સડો", "(Dental Caries)", stats["dental"])
+                            y += 25
+                            draw_table_row(y, 2, "પોષણની ખામી", "(Deficiency)", stats["deficiency"], 7, "ચામડીના રોગો", "(Skin Diseases)", stats["skin"])
+                            y += 25
+                            draw_table_row(y, 3, "વિકાસમાં વિલંબ", "(Developmental Delays)", stats["delays"], 8, "કાનની તકલીફ", "(Otitis Media)", stats["ear"])
+                            y += 25
+                            draw_table_row(y, 4, "દ્રષ્ટિની ખામી", "(Refractive Error)", stats["vision"], 9, "અન્ય ગંભીર બીમારી", "(Other Illness)", stats["other"])
+                            y += 25
+                            draw_table_row(y, 5, "પાંડુરોગ / એનીમિયા", "(Anemia)", stats["anemia"], 10, "કુલ રીફર કરેલ બાળકો", "(Total Referred)", stats["total_ref"])
+                            
+                            y += 45
+                            pdf.set_font('Gujarati', '', 11)
+                            pdf.text(30, y, f"આ સાથે સમાન્ય બીમારી ધરાવતા {data['phc_ref']} બાળકને PHC/CHC ખાતે તેમજ ગંભીર બીમારી ધરાવતા {data['deic_ref']} બાળકને")
+                            y += 18
+                            pdf.text(30, y, "અને જૂનાગઢ DEIC (District Early Intervention Centre) ખાતે સંદર્ભ કાર્ડ ભરી વધુ સારવાર માટે મોકલવામાં આવેલ હતું.")
+                            
+                            y += 25
+                            pdf.text(30, y, "તેમજ અઠવાડિયે આપતી IRON-FOLIC ACID (IFA) ગોળી/સીરપ નિયમિત આપવામાં આવે છે જેની ચકાસણી કરેલ હતી.")
+                            if not data['ifa_check']:
+                                pdf.line(30, y+2, 530, y+2)
+                                
+                            y += 30
+                            pdf.text(30, y, "REMARKS (વિશેષ નોંધ): ")
+                            pdf.text(140, y, f"{data['remarks']}")
+                            
+                            y += 10
+                            pdf.line(30, y, 550, y)
+                            pdf.line(30, y+20, 550, y+20)
+                            
+                            y += 80
+                            pdf.text(30, y, "RBSK TEAM SIGN & STAMP")
+                            pdf.text(380, y, "INSTITUTION HEAD SIGN & STAMP")
+                            
+                            sign_path = "sign.jpg"
+                            if os.path.exists(sign_path):
+                                pdf.image(sign_path, 40, y - 60, width=80, height=50)
+                            
+                            seal_path = "SEAL.jpeg"
+                            if os.path.exists(seal_path):
+                                pdf.image(seal_path, 120, y - 65, width=45, height=45)
+                            
+                            return bytes(pdf.output())
+                            
+                        pdf_bytes = generate_gujarati_report(
+                            st.session_state.report_data, 
+                            d_counts, 
+                            total_enrolled, 
+                            total_screened_today, 
+                            min_std, 
+                            max_std, 
+                            village_name
+                        )
+                        
+                        b64 = base64.b64encode(pdf_bytes).decode()
+                        st.markdown(f'<a href="data:application/pdf;base64,{b64}" download="RBSK_Report_{st.session_state.report_data["name"]}.pdf" style="display:block;padding:12px;background:#2563eb;color:white;text-align:center;font-weight:bold;border-radius:6px;text-decoration:none;">📄 Download Official PDF Report</a>', unsafe_allow_html=True)
+
+                    except ImportError:
+                        st.error("🚨 Missing System Packages! Please add 'fpdf' or 'fpdf2' to your requirements.txt file and let Streamlit reboot.")
+                    except Exception as e:
+                        st.error(f"Error generating PDF. Details: {e}")
+            except Exception as e:
+                st.error(f"Error in data processing: {e}")
+
     # ==========================================
     # --- 1. CMTC FOLLOW-UP (SMART ENGINE) ---
     # ==========================================
@@ -4965,23 +5261,28 @@ elif menu == "15. Clinical & IFA Tracker":
             raw_data = get_cmtc_data() 
             
             if raw_data:
+                # 1. LOAD & PURGE GHOST COLUMNS (Removes 'Unnamed: 9' etc.)
                 ref_data = pd.DataFrame(raw_data)
                 ref_data = ref_data.loc[:, ~ref_data.columns.str.contains('^Unnamed')]
                 
+                # 2. STRING CLEANUP (Excluding Admission Date)
                 for col in ref_data.columns:
                     if col != 'Admission Date':
                         ref_data[col] = ref_data[col].fillna("").astype(str).replace(['nan', 'NaN', 'NaT', 'None', '<NA>'], "")
 
+                # 3. ENSURE REQUIRED COLUMNS EXIST
                 if "Current Status" not in ref_data.columns: ref_data["Current Status"] = "Pending"
                 if "Follow-up Remarks" not in ref_data.columns: ref_data["Follow-up Remarks"] = ""
                 if "Admission Date" not in ref_data.columns: ref_data["Admission Date"] = None
 
+                # 4. 🚨 THE DATE COLUMN FIX 🚨
                 ref_data['Admission Date'] = pd.to_datetime(
                     ref_data['Admission Date'].astype(str).str.replace('/', '-'), 
                     dayfirst=True, errors='coerce'
                 ).dt.date
                 ref_data['Admission Date'] = ref_data['Admission Date'].replace({pd.NaT: None})
 
+                # 5. 🚨 THE ACTION BOARD (METRICS)
                 st.markdown("##### 🚨 Live Action Board")
                 m1, m2, m3 = st.columns(3)
                 pending_count = len(ref_data[ref_data['Current Status'] == 'Pending'])
@@ -4993,6 +5294,7 @@ elif menu == "15. Clinical & IFA Tracker":
                 m3.success(f"🟢 Resolved/Recovered: **{resolved_count}**")
                 st.divider()
 
+                # 6. 🎯 THE DUAL-FILTER SYSTEM
                 f1, f2 = st.columns(2)
                 with f1:
                     aw_col = next((c for c in ref_data.columns if any(k in str(c).upper() for k in ["INSTITUTE", "AW", "CENTER", "ANGANWADI"])), "Anganwadi")
@@ -5007,16 +5309,19 @@ elif menu == "15. Clinical & IFA Tracker":
                     else:
                         selected_status = []
 
+                # APPLY FILTERS
                 display_df = ref_data.copy()
                 if selected_aw != "All Anganwadis":
                     display_df = display_df[display_df[aw_col].astype(str).str.strip() == selected_aw]
                 if selected_status and "Status" in display_df.columns:
                     display_df = display_df[display_df['Status'].isin(selected_status)]
 
+                # 7. SMART SORT
                 sort_order = {"Pending": 1, "Counselled": 2, "Admitted": 3, "Discharged": 4, "Recovered": 5, "LAMA/Refused": 6}
                 display_df['_sort'] = display_df['Current Status'].map(sort_order).fillna(99)
                 display_df = display_df.sort_values(by='_sort').drop(columns=['_sort'])
 
+                # 8. RENDER THE FOCUSED EDITOR
                 status_list = ["Pending", "Counselled", "Admitted", "Discharged", "Recovered", "LAMA/Refused"]
                 read_only_cols = ["Child Name", "Institute", "Anganwadi", "DOB", "Gender", "Referral Date", "Date", "Height", "Weight", "MUAC", "Status", "Contact"]
                 
@@ -5035,9 +5340,11 @@ elif menu == "15. Clinical & IFA Tracker":
                         use_container_width=True
                     )
 
+                    # 9. 💾 SAFE MERGE & SAVE LOGIC
                     if st.button("💾 Save Follow-up Progress", type="primary"):
                         with st.spinner("Merging your specific updates into the Master Database..."):
                             ref_data.update(updated_display_df)
+                            
                             if "Admission Date" in ref_data.columns:
                                 ref_data['Admission Date'] = ref_data['Admission Date'].apply(
                                     lambda x: x.strftime('%d-%m-%Y') if pd.notnull(x) and hasattr(x, 'strftime') else ""
@@ -5057,12 +5364,14 @@ elif menu == "15. Clinical & IFA Tracker":
                             data_to_save = [ref_data.columns.values.tolist()] + cleaned_list
                             spreadsheet.worksheet("cmtc_referral").update(data_to_save)
                             get_cmtc_data.clear() 
+                            
                             st.toast("Referral status safely merged and updated!", icon="✅")
                             import time
                             time.sleep(0.5)
                             st.rerun()
             else:
                 st.success("🎉 No SAM/MAM referrals currently pending!")
+        
         except Exception as e:
             st.error(f"CMTC Logic Error: {e}")
 
@@ -5086,12 +5395,12 @@ elif menu == "15. Clinical & IFA Tracker":
                 
             selected_inst = st.selectbox("Select Institute Name:", ["-- Select --"] + current_options)
 
+            # --- 🚀 ADVANCED CALCULATION ENGINE ---
             small_demand, large_demand = 0, 0
             
             if "School" in ifa_level and selected_inst != "-- Select --" and not master_sch_data.empty:
                 sch_col = next((c for c in master_sch_data.columns if any(k in str(c).upper() for k in ["INSTITUTION", "SCHOOL", "NAME"])), master_sch_data.columns[0])
                 school_df = master_sch_data[master_sch_data[sch_col].astype(str).str.strip() == selected_inst]
-                
                 std_col = next((c for c in school_df.columns if any(k in str(c).upper() for k in ['STD', 'CLASS', 'STANDARD', 'ધોરણ'])), None)
                 
                 if std_col:
@@ -5140,12 +5449,15 @@ elif menu == "15. Clinical & IFA Tracker":
                 if st.form_submit_button("🚀 Submit Inventory Report", type="primary"):
                     if selected_inst != "-- Select --":
                         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+                        
                         if "Anganwadi" in ifa_level:
                             inventory_sheet.append_row([timestamp, "Anganwadi (Syrup)", selected_inst, stock_qty, str(expiry_date), stock_status, "N/A"])
                         else:
                             updates = []
-                            if small_demand > 0 or small_qty > 0: updates.append([timestamp, "School (Small IFA/Pink)", selected_inst, small_qty, str(small_expiry), small_status, f"{small_weeks} Weeks"])
-                            if large_demand > 0 or large_qty > 0: updates.append([timestamp, "School (Large IFA/Blue)", selected_inst, large_qty, str(large_expiry), large_status, f"{large_weeks} Weeks"])
+                            if small_demand > 0 or small_qty > 0:
+                                updates.append([timestamp, "School (Small IFA/Pink)", selected_inst, small_qty, str(small_expiry), small_status, f"{small_weeks} Weeks"])
+                            if large_demand > 0 or large_qty > 0:
+                                updates.append([timestamp, "School (Large IFA/Blue)", selected_inst, large_qty, str(large_expiry), large_status, f"{large_weeks} Weeks"])
                             
                             for row in updates:
                                 inventory_sheet.append_row(row)
@@ -5167,322 +5479,6 @@ elif menu == "15. Clinical & IFA Tracker":
 
         except Exception as e:
             st.error(f"Inventory Error: {e}")
-
-    # ==========================================
-    # --- 3. VISIT REPORT (GUJARATI PDF) ---
-    # ==========================================
-    with tab_visits:
-        st.subheader("🏫 Institution Visit PDF Generator")
-        st.info("Generates the official 'શાળા આરોગ્ય સ્ક્રિનિંગ કામગીરી અહેવાલ' with dynamic tracking.")
-        
-        if "report_ready" not in st.session_state:
-            st.session_state.report_ready = False
-            
-        with st.form("visit_report_form"):
-            c1, c2 = st.columns(2)
-            with c1: v_name = st.selectbox("Select School:", ["-- Select --"] + school_list)
-            with c2: v_date = st.date_input("Select Visit Date:")
-            
-            st.write("### ✍️ Additional Output Parameters")
-            remarks_text = st.text_area("Remarks (વિશેષ નોંધ)", placeholder="E.g. School staff cooperation was good. IFA consumption verified.")
-            
-            c3, c4, c5 = st.columns(3)
-            with c3: gen_phc = st.number_input("Children Referred to PHC/CHC", min_value=0)
-            with c4: gen_deic = st.number_input("Children Referred to DEIC", min_value=0)
-            with c5:
-                st.markdown("IFA Verification Status")
-                ifa_check = st.checkbox("IFA Checked? (ગોળી નિયમિત આપવામાં આવે છે)", value=True)
-            
-            submitted = st.form_submit_button("📄 Prepare Official PDF Report")
-            
-            if submitted:
-                if v_name != "-- Select --":
-                    st.session_state.report_data = {
-                        "name": v_name, 
-                        "date": v_date,
-                        "phc_ref": gen_phc,
-                        "deic_ref": gen_deic,
-                        "ifa_check": ifa_check,
-                        "remarks": remarks_text
-                    }
-                    st.session_state.report_ready = True
-                else:
-                    st.warning("Please select an institution.")
-                    st.session_state.report_ready = False
-
-        if st.session_state.report_ready:
-            try:
-                # 1. Fetch Demographics
-                sch_df = master_sch_data[master_sch_data.iloc[:, 0].astype(str).str.strip() == st.session_state.report_data['name']]
-                
-                school_village = ""
-                min_std, max_std = "", ""
-                total_enrolled = 0
-                
-                if not sch_df.empty:
-                    # Identify Village
-                    v_col = next((c for c in sch_df.columns if any(k in str(c).upper() for k in ["VILLAGE", "CITY"])), None)
-                    if v_col: school_village = str(sch_df.iloc[0][v_col]).strip()
-                    
-                    # Identify Total Enrolled
-                    total_enrolled = len(sch_df)
-                    
-                    # Identify Standards
-                    std_col = next((c for c in sch_df.columns if any(k in str(c).upper() for k in ['STD', 'CLASS', 'STANDARD', 'ધોરણ'])), None)
-                    if std_col:
-                        import re
-                        classes_found = []
-                        for val in sch_df[std_col].astype(str):
-                            nums = re.findall(r'\d+', val)
-                            if nums: classes_found.append(int(nums[0]))
-                        if classes_found:
-                            min_std = str(min(classes_found))
-                            max_std = str(max(classes_found))
-
-                # 2. Daily Log Aggregation & Matrix Sorting
-                total_screened_today = 0
-                d_counts = {
-                    "birth_defects": 0, "deficiency": 0, "delays": 0,
-                    "vision": 0, "anemia": 0, "dental": 0,
-                    "skin": 0, "ear": 0, "other": 0, "total_ref": 0
-                }
-                
-                if not sch_logs.empty:
-                    # Filter logs for selected school
-                    inst_col = next((c for c in sch_logs.columns if any(k in c.lower() for k in ['inst', 'school', 'awc', 'anganwadi', 'center'])), None)
-                    date_col = next((c for c in sch_logs.columns if any(k in c.lower() for k in ['date'])), None)
-                    disease_col = next((c for c in sch_logs.columns if c.lower() in ['disease', 'diseases', '4d']), None)
-                    status_col = next((c for c in sch_logs.columns if c.lower() in ['status', 'sam', 'mam']), None)
-                    hb_col = next((c for c in sch_logs.columns if c.lower() in ['hb', 'hemoglobin']), None)
-                    
-                    if inst_col:
-                        target_logs = sch_logs[sch_logs[inst_col].astype(str).str.strip() == st.session_state.report_data['name']]
-                        
-                        # Filter by Date (Optional, can be modified if they want all-time)
-                        if date_col:
-                            target_logs['Parsed_Date'] = pd.to_datetime(target_logs[date_col], dayfirst=True, errors='coerce').dt.date
-                            target_logs = target_logs[target_logs['Parsed_Date'] == st.session_state.report_data['date']]
-                            
-                        # Remove absent children from screened count
-                        if status_col:
-                            screened_logs = target_logs[target_logs[status_col].astype(str).str.strip().str.upper() != "ABSENT"]
-                        else:
-                            screened_logs = target_logs
-                            
-                        total_screened_today = len(screened_logs)
-
-                        # Tally Diseases
-                        for _, row in screened_logs.iterrows():
-                            # 1. Anemia (from Hb)
-                            hb_val = pd.to_numeric(row[hb_col], errors='coerce') if hb_col else 0
-                            if pd.notnull(hb_val) and hb_val > 0 and hb_val < 11.5:
-                                d_counts["anemia"] += 1
-                                d_counts["total_ref"] += 1
-                                
-                            # 2. Deficiencies (SAM/MAM Status)
-                            status_val = str(row[status_col]).strip().upper() if status_col else ""
-                            if status_val in ["SAM", "MAM"]:
-                                d_counts["deficiency"] += 1
-                                d_counts["total_ref"] += 1
-                                
-                            # 3. 4D String Parsing
-                            disease_val = str(row[disease_col]).upper().strip() if disease_col else ""
-                            if disease_val not in ['', 'NAN', 'NONE', 'NO', 'NULL', 'NA', 'FALSE']:
-                                d_counts["total_ref"] += 1
-                                
-                                if any(x in disease_val for x in ['CLEFT', 'CLUB', 'CHD', 'NEURAL', 'DOWN']):
-                                    d_counts["birth_defects"] += 1
-                                elif any(x in disease_val for x in ['VISION', 'REFRACTIVE']):
-                                    d_counts["vision"] += 1
-                                elif any(x in disease_val for x in ['CARIES', 'TOOTH', 'DENTAL']):
-                                    d_counts["dental"] += 1
-                                elif any(x in disease_val for x in ['SCABIES', 'SKIN']):
-                                    d_counts["skin"] += 1
-                                elif any(x in disease_val for x in ['EAR', 'OTITIS']):
-                                    d_counts["ear"] += 1
-                                elif any(x in disease_val for x in ['DELAY', 'AUTISM', 'SPEECH', 'MOTOR', 'HEARING']):
-                                    d_counts["delays"] += 1
-                                elif "ANEMIA" in disease_val and hb_val >= 11.5: 
-                                    d_counts["anemia"] += 1 # Catch manually typed anemia
-                                else:
-                                    d_counts["other"] += 1
-
-                # 3. Quick UI Preview before PDF Generation
-                st.markdown("### 📊 Verification Preview")
-                c_prev1, c_prev2, c_prev3 = st.columns(3)
-                c_prev1.metric("Total Enrolled", total_enrolled)
-                c_prev2.metric("Screened Today", total_screened_today)
-                c_prev3.metric("Standards", f"{min_std} to {max_std}" if min_std else "Unknown")
-                
-                # 4. Generate the PDF
-                import os
-                if not os.path.exists("NotoSansGujarati-Regular.ttf"):
-                    st.error("🚨 CRITICAL: 'NotoSansGujarati-Regular.ttf' Font Missing from GitHub!")
-                else:
-                    try:
-                        def generate_gujarati_school_report(data, stats, enr, scr, std_min, std_max, vil):
-                            from fpdf import FPDF
-                            
-                            pdf = FPDF(unit='pt', format='A4')
-                            pdf.add_page()
-                            pdf.add_font('Gujarati', '', 'NotoSansGujarati-Regular.ttf')
-                            
-                            # Outer Border
-                            pdf.set_line_width(1)
-                            pdf.rect(15, 15, 595.27 - 30, 841.89 - 30)
-                            
-                            # Headers
-                            pdf.set_font('Gujarati', '', 14)
-                            pdf.set_xy(0, 40)
-                            pdf.cell(595.27, 10, "રાષ્ટ્રીય બાળ સ્વાસ્થ્ય કાર્યક્રમ (RBSK) - આરોગ્ય વિભાગ", align='C')
-                            
-                            pdf.set_font('Gujarati', '', 12)
-                            pdf.set_xy(0, 65)
-                            pdf.cell(595.27, 10, "શાળા આરોગ્ય સ્ક્રિનિંગ કામગીરી અહેવાલ", align='C')
-                            
-                            pdf.line(200, 80, 395, 80)
-                            
-                            # Info Line 1
-                            y = 100
-                            pdf.set_font('Gujarati', '', 11)
-                            pdf.text(30, y, "તાલુકો : VISAVADAR")
-                            pdf.text(400, y, f"મુલાકાત તારીખ : {data['date'].strftime('%d-%m-%Y')}")
-                            
-                            # Paragraph Intro
-                            y += 30
-                            intro_text = f"             આજ રોજ VISAVADAR તાલુકાની RBSK ટીમ નં. MHT-1 દ્વારા {vil} ગામની {data['name']} શાળાની મુલાકાત લેવામાં આવી હતી. જેમાં ધોરણ {std_min} થી ધોરણ {std_max} સુધીના બાળકોની ૪D (Defects at Birth, Deficiency, Diseases, Development Delays) મુજબ આરોગ્ય તપાસ કરવામાં આવી હતી. જેમાં શાળાના કુલ {enr} વિદ્યાર્થીઓમાંથી હાજર {scr} બાળકોની પ્રાથમિક આરોગ્ય તપાસ (જેવીકે વજન,ઊંચાઈ,આંખના નંબર અને HB) કરવામાં આવી હતી. જેમાં બાળકોના જેમાંથી ૪D તપાસ મુજબ મળેલ વિદ્યાર્થીઓની સંખ્યા નીચે મુજબ છે:"
-                            
-                            # Manual text wrapping for Gujarati
-                            import textwrap
-                            wrapped_intro = textwrap.wrap(intro_text, width=80)
-                            for line in wrapped_intro:
-                                pdf.text(30, y, line)
-                                y += 18
-                                
-                            y += 10
-                            
-                            # Table Matrix Engine
-                            pdf.set_font('Gujarati', '', 10)
-                            
-                            def draw_table_header(start_y):
-                                pdf.set_fill_color(220, 220, 220)
-                                # Left Half
-                                pdf.rect(30, start_y, 40, 30, 'DF')
-                                pdf.rect(70, start_y, 160, 30, 'DF')
-                                pdf.rect(230, start_y, 50, 30, 'DF')
-                                pdf.text(35, start_y + 12, "ક્રમ")
-                                pdf.text(35, start_y + 22, "(No.)")
-                                pdf.text(90, start_y + 12, "આરોગ્ય સ્થિત")
-                                pdf.text(90, start_y + 22, "(IDENTIFY CHILD)")
-                                pdf.text(235, start_y + 12, "બાળકોની")
-                                pdf.text(235, start_y + 22, "સંખ્યા")
-                                
-                                # Right Half
-                                pdf.rect(280, start_y, 40, 30, 'DF')
-                                pdf.rect(320, start_y, 160, 30, 'DF')
-                                pdf.rect(480, start_y, 50, 30, 'DF')
-                                pdf.text(285, start_y + 12, "ક્રમ")
-                                pdf.text(285, start_y + 22, "(No.)")
-                                pdf.text(340, start_y + 12, "આરોગ્ય સ્થિત")
-                                pdf.text(340, start_y + 22, "(IDENTIFY CHILD)")
-                                pdf.text(485, start_y + 12, "બાળકોની")
-                                pdf.text(485, start_y + 22, "સંખ્યા")
-                                
-                            def draw_table_row(start_y, num1, title1, sub1, val1, num2, title2, sub2, val2):
-                                # Left Half
-                                pdf.rect(30, start_y, 40, 25)
-                                pdf.rect(70, start_y, 160, 25)
-                                pdf.rect(230, start_y, 50, 25)
-                                pdf.text(45, start_y + 15, str(num1))
-                                pdf.text(75, start_y + 12, title1)
-                                pdf.text(75, start_y + 22, sub1)
-                                pdf.text(250, start_y + 15, str(val1))
-                                
-                                # Right Half
-                                pdf.rect(280, start_y, 40, 25)
-                                pdf.rect(320, start_y, 160, 25)
-                                pdf.rect(480, start_y, 50, 25)
-                                pdf.text(295, start_y + 15, str(num2))
-                                pdf.text(325, start_y + 12, title2)
-                                pdf.text(325, start_y + 22, sub2)
-                                pdf.text(500, start_y + 15, str(val2))
-                            
-                            draw_table_header(y)
-                            y += 30
-                            
-                            # Row 1
-                            draw_table_row(y, 1, "જન્મજાત ખામી", "(Birth Defects)", stats["birth_defects"], 6, "દાંતનો સડો", "(Dental Caries)", stats["dental"])
-                            y += 25
-                            # Row 2
-                            draw_table_row(y, 2, "પોષણની ખામી", "(Deficiency)", stats["deficiency"], 7, "ચામડીના રોગો", "(Skin Diseases)", stats["skin"])
-                            y += 25
-                            # Row 3
-                            draw_table_row(y, 3, "વિકાસમાં વિલંબ", "(Developmental Delays)", stats["delays"], 8, "કાનની તકલીફ", "(Otitis Media)", stats["ear"])
-                            y += 25
-                            # Row 4
-                            draw_table_row(y, 4, "દ્રષ્ટિની ખામી", "(Refractive Error)", stats["vision"], 9, "અન્ય ગંભીર બીમારી", "(Other Illness)", stats["other"])
-                            y += 25
-                            # Row 5
-                            draw_table_row(y, 5, "પાંડુરોગ / એનીમિયા", "(Anemia)", stats["anemia"], 10, "કુલ રીફર કરેલ બાળકો", "(Total Referred)", stats["total_ref"])
-                            
-                            y += 45
-                            
-                            # Post-Table Paragraphs
-                            pdf.set_font('Gujarati', '', 11)
-                            pdf.text(30, y, f"આ સાથે સમાન્ય બીમારી ધરાવતા {data['phc_ref']} બાળકને PHC/CHC ખાતે તેમજ ગંભીર બીમારી ધરાવતા {data['deic_ref']} બાળકને")
-                            y += 18
-                            pdf.text(30, y, "અને જૂનાગઢ DEIC (District Early Intervention Centre) ખાતે સંદર્ભ કાર્ડ ભરી વધુ સારવાર માટે મોકલવામાં આવેલ હતું.")
-                            
-                            y += 25
-                            pdf.text(30, y, "તેમજ અઠવાડિયે આપતી IRON-FOLIC ACID (IFA) ગોળી નિયમિત આપવામાં આવે છે જેની ચકાસણી કરેલ હતી.")
-                            if not data['ifa_check']:
-                                pdf.line(30, y+2, 530, y+2) # Strikethrough if False
-                                
-                            y += 30
-                            pdf.text(30, y, "REMARKS (વિશેષ નોંધ): ")
-                            pdf.text(140, y, f"{data['remarks']}")
-                            
-                            y += 10
-                            pdf.line(30, y, 550, y)
-                            pdf.line(30, y+20, 550, y+20)
-                            
-                            # Signatures
-                            y += 80
-                            pdf.text(30, y, "RBSK TEAM SIGN & STAMP")
-                            pdf.text(380, y, "SCHOOL PRINCIPAL SIGN & STAMP")
-                            
-                            # Official Signature Image
-                            sign_path = "sign.jpg"
-                            if os.path.exists(sign_path):
-                                pdf.image(sign_path, 40, y - 60, width=80, height=50)
-                            
-                            seal_path = "SEAL.jpeg"
-                            if os.path.exists(seal_path):
-                                pdf.image(seal_path, 120, y - 65, width=45, height=45)
-                            
-                            return bytes(pdf.output())
-                            
-                        pdf_bytes = generate_gujarati_school_report(
-                            st.session_state.report_data, 
-                            d_counts, 
-                            total_enrolled, 
-                            total_screened_today, 
-                            min_std, 
-                            max_std, 
-                            school_village
-                        )
-                        
-                        import base64
-                        b64 = base64.b64encode(pdf_bytes).decode()
-                        st.markdown(f'<a href="data:application/pdf;base64,{b64}" download="RBSK_Report_{st.session_state.report_data["name"]}.pdf" style="display:block;padding:12px;background:#2563eb;color:white;text-align:center;font-weight:bold;border-radius:6px;text-decoration:none;">📄 Download Official PDF Report</a>', unsafe_allow_html=True)
-
-                    except ImportError:
-                        st.error("🚨 Missing System Packages! Please add 'fpdf2' and 'uharfbuzz' to your requirements.txt file and let Streamlit reboot.")
-                        st.stop()
-                    except Exception as e:
-                        st.error(f"Error generating PDF. Details: {e}")
-            except Exception as e:
-                st.error(f"Error in data processing: {e}")
 
 # ==========================================
 # MODULE 17: HIERARCHICAL DATA ANALYSIS
