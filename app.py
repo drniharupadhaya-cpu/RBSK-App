@@ -4951,7 +4951,7 @@ elif menu == "15. Clinical & IFA Tracker":
         raw_list = df[target_col].astype(str).unique().tolist()
         return sorted([x.strip() for x in raw_list if x.strip().lower() not in ['nan', 'none', '']])
 
-    aw_list = get_inst_list(master_aw_data, ["INSTITUTE", "AWC", "CENTER"])
+    aw_list = get_inst_list(master_aw_data, ["INSTITUTE", "AWC", "AWC Name"])
     school_list = get_inst_list(master_sch_data, ["INSTITUTION", "SCHOOL", "NAME"])
 
     # --- INTEGRATED TABS ---
