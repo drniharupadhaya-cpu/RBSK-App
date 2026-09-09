@@ -5221,13 +5221,14 @@ elif menu == "15. Clinical & IFA Tracker":
                             pdf.text(30, y, "RBSK TEAM SIGN & STAMP")
                             pdf.text(380, y, "INSTITUTION HEAD SIGN & STAMP")
                             
+                            # 🚀 FIX APPLIED: Using w= and h= for FPDF
                             sign_path = "sign.jpg"
                             if os.path.exists(sign_path):
-                                pdf.image(sign_path, 40, y - 60, width=80, height=50)
+                                pdf.image(sign_path, x=40, y=y - 60, w=80, h=50)
                             
                             seal_path = "SEAL.jpeg"
                             if os.path.exists(seal_path):
-                                pdf.image(seal_path, 120, y - 65, width=45, height=45)
+                                pdf.image(seal_path, x=120, y=y - 65, w=45, h=45)
                             
                             return bytes(pdf.output())
                             
