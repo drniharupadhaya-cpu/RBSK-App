@@ -1537,7 +1537,7 @@ elif menu == "2. Child Screening":
             # 1. Configuration Check
             if v_category == "👶 Anganwadis":
                 master_sheet_name = "aw new data"
-                inst_cols = ["INSTITUTE", "AWC", "CENTER", "AWC NAME"]
+                inst_cols = ["INSTITUTE", "AWC", "AWC NAME"]
                 daily_sheet = "daily_screenings_aw"
                 status_idx = 12
             else:
