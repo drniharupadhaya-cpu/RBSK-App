@@ -3522,7 +3522,7 @@ elif menu == "9. Anganwadi Directory":
         st.subheader("📈 Master Enrollment Summary")
         st.write("A complete numerical breakdown of all Anganwadi centers dynamically generated from your Master Database.")
         
-        if not df_aw.empty and 'AWC Name' in df_aw.columns:
+        if not df_aw.empty and 'PHC' in df_aw.columns:
             
             sector_col = None
             for col in df_aw.columns:
