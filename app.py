@@ -991,6 +991,7 @@ elif menu == "2. Child Screening":
         "[Delay] Learning Disorder",
         "[Delay] Attention Deficit Hyperactivity Disorder (ADHD)",
         "[Other] Specify Below",
+        "[Other] Substance Abuse",
         "[Delay] Refractive error",
         "[Delay] Worms",
         "[Deficiency] G6PD ",
