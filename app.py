@@ -5617,10 +5617,17 @@ elif menu == "17. Village-Wise Analysis":
                             stat = next((row[c] for c in valid_screenings.columns if 'status' in str(c).lower() or 'sam' in str(c).lower()), 'Normal')
                             if is_sick(dis, stat):
                                 sick_children_data.append({
-                                    "Institution": awc, "Type": "Anganwadi 👶", "Child Name": row.get(child_col, 'Unknown'),
-                                    "Condition": str(dis).strip(), "Malnutrition Status": str(stat).strip(),
-                                    "Contact Number": str(next((row[c] for c in valid_screenings.columns if 'contact' in str(c).lower()), 'N/A')),
-                                    "Date": str(next((row[c] for c in valid_screenings.columns if 'date' in str(c).lower()), 'Unknown'))
+                                    "Screening Date": str(next((row[c] for c in valid_screenings.columns if 'date' in str(c).lower()), 'Unknown')),
+                                    "Institution Name": awc, 
+                                    "Institution Type": "Anganwadi 👶", 
+                                    "Child Name": row.get(child_col, 'Unknown'),
+                                    "Height (cm)": str(next((row[c] for c in valid_screenings.columns if 'height' in str(c).lower() or 'ht' in str(c).lower() or 'ઊંચાઈ' in str(c).lower()), 'N/A')),
+                                    "Weight (kg)": str(next((row[c] for c in valid_screenings.columns if 'weight' in str(c).lower() or 'wt' in str(c).lower() or 'વજન' in str(c).lower()), 'N/A')),
+                                    "MUAC (cm)": str(next((row[c] for c in valid_screenings.columns if 'muac' in str(c).lower()), 'N/A')),
+                                    "Hb %": str(next((row[c] for c in valid_screenings.columns if 'hb' in str(c).lower() or 'hemoglobin' in str(c).lower()), 'N/A')),
+                                    "Condition (4D)": str(dis).strip(), 
+                                    "Malnutrition Status": str(stat).strip(),
+                                    "Contact Number": str(next((row[c] for c in valid_screenings.columns if 'contact' in str(c).lower()), 'N/A'))
                                 })
                                 total_sick += 1
                                 
@@ -5646,10 +5653,17 @@ elif menu == "17. Village-Wise Analysis":
                             dis = next((row[c] for c in valid_screenings.columns if 'disease' in str(c).lower() or '4d' in str(c).lower()), 'None')
                             if is_sick(dis, "Normal"):
                                 sick_children_data.append({
-                                    "Institution": sch, "Type": "School 🏫", "Child Name": row.get(student_col, 'Unknown'),
-                                    "Condition": str(dis).strip(), "Malnutrition Status": "N/A",
-                                    "Contact Number": str(next((row[c] for c in valid_screenings.columns if 'contact' in str(c).lower()), 'N/A')),
-                                    "Date": str(next((row[c] for c in valid_screenings.columns if 'date' in str(c).lower()), 'Unknown'))
+                                    "Screening Date": str(next((row[c] for c in valid_screenings.columns if 'date' in str(c).lower()), 'Unknown')),
+                                    "Institution Name": sch, 
+                                    "Institution Type": "School 🏫", 
+                                    "Child Name": row.get(student_col, 'Unknown'),
+                                    "Height (cm)": str(next((row[c] for c in valid_screenings.columns if 'height' in str(c).lower() or 'ht' in str(c).lower() or 'ઊંચાઈ' in str(c).lower()), 'N/A')),
+                                    "Weight (kg)": str(next((row[c] for c in valid_screenings.columns if 'weight' in str(c).lower() or 'wt' in str(c).lower() or 'વજન' in str(c).lower()), 'N/A')),
+                                    "MUAC (cm)": "N/A", # MUAC is generally for Anganwadi
+                                    "Hb %": str(next((row[c] for c in valid_screenings.columns if 'hb' in str(c).lower() or 'hemoglobin' in str(c).lower()), 'N/A')),
+                                    "Condition (4D)": str(dis).strip(), 
+                                    "Malnutrition Status": "N/A",
+                                    "Contact Number": str(next((row[c] for c in valid_screenings.columns if 'contact' in str(c).lower()), 'N/A'))
                                 })
                                 total_sick += 1
                                 
@@ -5684,8 +5698,8 @@ elif menu == "17. Village-Wise Analysis":
                 
                 csv_sick = df_sick.to_csv(index=False).encode('utf-8-sig')
                 st.download_button(
-                    label=f"⬇️ Download Disease Roster for {scope_label} (CSV)",
-                    data=csv_sick, file_name=f"Disease_Roster_{scope_label}_{datetime.date.today()}.csv",
+                    label=f"⬇️ Download Detailed Disease Roster for {scope_label} (CSV)",
+                    data=csv_sick, file_name=f"afflicted children roster.csv",
                     mime="text/csv", type="primary"
                 )
             else:
