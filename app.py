@@ -588,7 +588,7 @@ elif menu == "1. Daily Tour Plan":
         aw_logs, sch_logs, df = get_daily_logs()
 
         if df.empty:
-            st.info("📊 The database is currently empty. Once your team enters screenings in Module 2, the charts will automatically appear here!")
+            st.info("📊 The database is currently empty. Once your team enters screenings in , the charts will automatically appear here!")
         else:
             st.markdown("#### 📈 District Command Center")
             
@@ -991,6 +991,8 @@ elif menu == "2. Child Screening":
         "[Delay] Learning Disorder",
         "[Delay] Attention Deficit Hyperactivity Disorder (ADHD)",
         "[Other] Specify Below",
+        "[Other] Delay in menstruation",
+        "[Other] Pain during menstruation",
         "[Other] Substance Abuse",
         "[Delay] Refractive error",
         "[Delay] Worms",
