@@ -973,6 +973,8 @@ elif menu == "2. Child Screening":
         "[Defect] Retinopathy of Prematurity",
         "[Deficiency] Severe Acute Malnutrition (SAM)",
         "[Deficiency] Goiter",
+        "[Deficiency] Thalessemia",
+        "[Deficiency] Stunting",
         "[Deficiency] Vitamin A Deficiency (Bitot Spots)",
         "[Deficiency] Vitamin D Deficiency (Rickets)",
         "[Disease] Dental Conditions / Dental Caries",
