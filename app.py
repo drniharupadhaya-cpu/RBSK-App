@@ -976,6 +976,7 @@ elif menu == "2. Child Screening":
         "[Deficiency] Thalessemia",
         "[Deficiency] Sickle Cell Anemia",
         "[Deficiency] Stunting",
+        "[Deficiency] Hypothyroidism",
         "[Deficiency] Vitamin A Deficiency (Bitot Spots)",
         "[Deficiency] Vitamin D Deficiency (Rickets)",
         "[Disease] Dental Conditions / Dental Caries",
