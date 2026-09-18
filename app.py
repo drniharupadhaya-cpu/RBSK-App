@@ -966,6 +966,7 @@ elif menu == "2. Child Screening":
         "[Defect] Down's Syndrome",
         "[Defect] Cleft Lip & Palate / Cleft Palate alone",
         "[Defect] Club Foot",
+        "[Defect] Juvenile Diabetes",
         "[Defect] Developmental Dysplasia of the Hip",
         "[Defect] Congenital Cataract",
         "[Defect] Congenital Deafness",
