@@ -970,6 +970,7 @@ elif menu == "2. Child Screening":
         "[Defect] Developmental Dysplasia of the Hip",
         "[Defect] Congenital Cataract",
         "[Defect] Congenital Deafness",
+        "[Defect] Congenital Blindness",
         "[Defect] Congenital Heart Disease",
         "[Defect] Retinopathy of Prematurity",
         "[Deficiency] Severe Acute Malnutrition (SAM)",
