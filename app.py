@@ -3898,22 +3898,26 @@ elif menu == "12. Automated State Report":
             master_sch = pd.DataFrame()
 
         def find_m_col(df, keys):
-            return next((c for c in df.columns if any(k in str(c).upper() for k in keys)), None)
+            for k in keys:
+                for c in df.columns:
+                    if k in str(c).upper():
+                        return c
+            return None
 
         # 🧹 THE FIX: GHOST ROW PURGER 🧹
         # This explicitly deletes empty rows from Google Sheets so they aren't counted in your target!
         if not master_aw.empty:
-            aw_name_col = find_m_col(master_aw, ["NAME", "CHILD", "STUDENT"])
+            aw_name_col = find_m_col(master_aw, ["BENEFICIARY NAME", "CHILD NAME", "NAME", "CHILD", "STUDENT"])
             if aw_name_col:
                 master_aw = master_aw[master_aw[aw_name_col].astype(str).str.strip() != '']
                 
         if not master_sch.empty:
-            sch_name_col = find_m_col(master_sch, ["NAME", "CHILD", "STUDENT"])
+            sch_name_col = find_m_col(master_sch, ["STUDENT NAME", "CHILD NAME", "NAME", "CHILD", "STUDENT"])
             if sch_name_col:
                 master_sch = master_sch[master_sch[sch_name_col].astype(str).str.strip() != '']
 
         # Now map the clean data
-        aw_loc_key = find_m_col(master_aw, ["INSTITUTE", "AWC", "CENTER", "AWC NAME"])
+        aw_loc_key = find_m_col(master_aw, ["AWC NAME", "AWC", "INSTITUTE", "CENTER"])
         aw_team_key = find_m_col(master_aw, ["TEAM"])
         aw_gender_key = find_m_col(master_aw, ["GENDER", "SEX"])
         aw_beneficiary_key = find_m_col(master_aw, ["BENEFICIARY TYPE"])
@@ -3937,8 +3941,10 @@ elif menu == "12. Automated State Report":
         df_combined = pd.concat([df_aw_daily, df_sch_daily], ignore_index=True)
         
         def find_col(df, keywords):
-            for col in df.columns:
-                if any(k.lower() in str(col).lower() for k in keywords): return col
+            for k in keywords:
+                for col in df.columns:
+                    if k.lower() in str(col).lower():
+                        return col
             return None
 
         date_col = find_col(df_combined, ['date of screening', 'screening date', 'date'])
@@ -3947,11 +3953,9 @@ elif menu == "12. Automated State Report":
         disease_col = find_col(df_combined, ['disease', '4d', 'defect'])
         status_col = find_col(df_combined, ['status', 'sam', 'mam'])
         
-        inst_name_cols = [c for c in df_combined.columns if any(k in str(c).lower() for k in ['inst', 'school', 'awc', 'center', 'aw name', 'anganwadi'])]
-        if inst_name_cols:
-            df_combined['Official_Institution'] = df_combined[inst_name_cols[0]]
-            for col in inst_name_cols[1:]:
-                df_combined['Official_Institution'] = df_combined['Official_Institution'].combine_first(df_combined[col])
+        inst_col = find_col(df_combined, ['awc name', 'aw name', 'school name', 'inst', 'school', 'awc', 'anganwadi', 'center'])
+        if inst_col:
+            df_combined['Official_Institution'] = df_combined[inst_col]
         else:
             df_combined['Official_Institution'] = "Unknown"
 
