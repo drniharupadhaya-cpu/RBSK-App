@@ -3898,15 +3898,21 @@ elif menu == "12. Automated State Report":
             master_aw = pd.DataFrame()
             master_sch = pd.DataFrame()
 
+        # 🚀 THE FIX: Strict Matching Priority
         def find_m_col(df, keys):
+            # 1. Exact match (case insensitive)
             for k in keys:
                 for c in df.columns:
-                    if k in str(c).upper():
+                    if k.strip().upper() == str(c).strip().upper():
+                        return c
+            # 2. Contains match
+            for k in keys:
+                for c in df.columns:
+                    if k.strip().upper() in str(c).upper():
                         return c
             return None
 
         # 🧹 THE FIX: GHOST ROW PURGER 🧹
-        # This explicitly deletes empty rows from Google Sheets so they aren't counted in your target!
         if not master_aw.empty:
             aw_name_col = find_m_col(master_aw, ["BENEFICIARY NAME", "CHILD NAME", "NAME", "CHILD", "STUDENT"])
             if aw_name_col:
@@ -3923,7 +3929,7 @@ elif menu == "12. Automated State Report":
         aw_gender_key = find_m_col(master_aw, ["GENDER", "SEX"])
         aw_beneficiary_key = find_m_col(master_aw, ["BENEFICIARY TYPE"])
 
-        sch_loc_key = find_m_col(master_sch, ["INSTITUTION", "SCHOOL"])
+        sch_loc_key = find_m_col(master_sch, ["SCHOOL NAME", "SCHOOL", "INSTITUTION"])
         sch_team_key = find_m_col(master_sch, ["TEAM"])
         sch_gender_key = find_m_col(master_sch, ["GENDER", "SEX"])
 
@@ -3933,64 +3939,84 @@ elif menu == "12. Automated State Report":
         if sch_loc_key and sch_team_key:
             team_lookup.update(dict(zip(master_sch[sch_loc_key].astype(str).str.strip(), master_sch[sch_team_key].astype(str).str.strip())))
 
-    df_aw_daily, df_sch_daily, df_combined = get_daily_logs()
+    df_aw_daily, df_sch_daily, _ = get_daily_logs()
 
-    if not df_aw_daily.empty or not df_sch_daily.empty:
-        if not df_aw_daily.empty: df_aw_daily['Source'] = 'Anganwadi'
-        if not df_sch_daily.empty: df_sch_daily['Source'] = 'School'
+    # 🚀 THE ULTIMATE COLUMN STANDARDIZATION ENGINE 🚀
+    # This prevents Pandas from dropping School Data when joining with Anganwadi data!
+    def standardize_daily_logs(df, source_type):
+        if df.empty: return df
+        df = df.copy()
+        df['Source'] = source_type
         
-        df_combined = pd.concat([df_aw_daily, df_sch_daily], ignore_index=True)
-        
-        def find_col(df, keywords):
+        def get_c(keywords):
             for k in keywords:
-                for col in df.columns:
-                    if k.lower() in str(col).lower():
-                        return col
+                for c in df.columns:
+                    if k.lower() == str(c).strip().lower(): return c
+            for k in keywords:
+                for c in df.columns:
+                    if k.lower() in str(c).lower(): return c
             return None
 
-        date_col = find_col(df_combined, ['date of screening', 'screening date', 'date'])
-        dob_col = find_col(df_combined, ['dob', 'date of birth'])
-        gender_col = find_col(df_combined, ['gender', 'sex'])
-        disease_col = find_col(df_combined, ['disease', '4d', 'defect'])
-        status_col = find_col(df_combined, ['status', 'sam', 'mam'])
-        
-        inst_col = find_col(df_combined, ['awc name', 'aw name', 'school name', 'inst', 'school', 'awc', 'anganwadi', 'center'])
-        if inst_col:
-            df_combined['Official_Institution'] = df_combined[inst_col]
+        if source_type == 'Anganwadi':
+            loc_c = get_c(['institute', 'awc name', 'aw name', 'awc', 'center', 'anganwadi'])
         else:
-            df_combined['Official_Institution'] = "Unknown"
+            loc_c = get_c(['school name', 'school', 'institution', 'inst'])
+        df['Official_Institution'] = df[loc_c] if loc_c else "Unknown"
 
-        # 🚀 Map Teams Globally
+        name_c = get_c(['child name', 'student name', 'beneficiary name', 'name', 'child', 'student'])
+        df['Official_Child_Name'] = df[name_c] if name_c else "Unknown"
+
+        dt_c = get_c(['date of screening', 'screening date', 'date'])
+        df['Official_Date'] = df[dt_c] if dt_c else pd.NaT
+
+        dob_c = get_c(['dob', 'date of birth'])
+        df['Official_DOB'] = df[dob_c] if dob_c else pd.NaT
+
+        g_c = get_c(['gender', 'sex'])
+        df['Official_Gender'] = df[g_c] if g_c else "U"
+
+        dis_c = get_c(['disease', '4d', 'defect'])
+        df['Official_Disease'] = df[dis_c] if dis_c else "None"
+
+        stat_c = get_c(['status', 'sam', 'mam'])
+        df['Official_Status'] = df[stat_c] if stat_c else "Normal"
+        
+        return df
+
+    if not df_aw_daily.empty or not df_sch_daily.empty:
+        clean_aw_daily = standardize_daily_logs(df_aw_daily, 'Anganwadi')
+        clean_sch_daily = standardize_daily_logs(df_sch_daily, 'School')
+        
+        df_combined = pd.concat([clean_aw_daily, clean_sch_daily], ignore_index=True)
+        
+        # Map Teams Globally
         df_combined['Mapped_Team'] = df_combined['Official_Institution'].astype(str).str.strip().map(team_lookup).fillna("Unassigned")
 
-        if date_col and dob_col:
-            df_combined[date_col] = df_combined[date_col].astype(str).str.strip()
-            df_combined[dob_col] = df_combined[dob_col].astype(str).str.strip()
-            
-            # 🚀 THE BULLETPROOF DATE PARSER
-            # 1. Parse strict YYYY-MM-DD first (Module 2's native format)
-            parsed_date_strict = pd.to_datetime(df_combined[date_col], format='%Y-%m-%d', errors='coerce')
-            parsed_dob_strict = pd.to_datetime(df_combined[dob_col], format='%Y-%m-%d', errors='coerce')
+        # Parse Dates
+        df_combined['Official_Date'] = df_combined['Official_Date'].astype(str).str.strip()
+        df_combined['Official_DOB'] = df_combined['Official_DOB'].astype(str).str.strip()
+        
+        parsed_date_strict = pd.to_datetime(df_combined['Official_Date'], format='%Y-%m-%d', errors='coerce')
+        parsed_dob_strict = pd.to_datetime(df_combined['Official_DOB'], format='%Y-%m-%d', errors='coerce')
 
-            # 2. Clean strings for fallback parsing
-            cleaned_date_str = df_combined[date_col].astype(str).str.replace('/', '-').str.replace('.', '-', regex=False)
-            cleaned_dob_str = df_combined[dob_col].astype(str).str.replace('/', '-').str.replace('.', '-', regex=False)
+        cleaned_date_str = df_combined['Official_Date'].astype(str).str.replace('/', '-').str.replace('.', '-', regex=False)
+        cleaned_dob_str = df_combined['Official_DOB'].astype(str).str.replace('/', '-').str.replace('.', '-', regex=False)
 
-            # 3. Parse fallback mixed/dayfirst for old/manual data
-            parsed_date_fallback = pd.to_datetime(cleaned_date_str, dayfirst=True, format='mixed', errors='coerce')
-            parsed_dob_fallback = pd.to_datetime(cleaned_dob_str, dayfirst=True, format='mixed', errors='coerce')
+        parsed_date_fallback = pd.to_datetime(cleaned_date_str, dayfirst=True, format='mixed', errors='coerce')
+        parsed_dob_fallback = pd.to_datetime(cleaned_dob_str, dayfirst=True, format='mixed', errors='coerce')
 
-            # 4. Combine: Use strict first, fill NaNs with fallback
-            df_combined[date_col] = parsed_date_strict.fillna(parsed_date_fallback)
-            df_combined[dob_col] = parsed_dob_strict.fillna(parsed_dob_fallback)
-            
-            df_combined = df_combined.dropna(subset=[date_col])
+        df_combined['Official_Date'] = parsed_date_strict.fillna(parsed_date_fallback)
+        df_combined['Official_DOB'] = parsed_dob_strict.fillna(parsed_dob_fallback)
+        
+        df_combined = df_combined.dropna(subset=['Official_Date'])
+    else:
+        df_combined = pd.DataFrame()
 
     # ==========================================
     # 📄 TAB 1: FORM III (TEAM-WISE)
     # ==========================================
     with tab_form3:
-        if not df_combined.empty and date_col and dob_col:
+        if not df_combined.empty:
             st.write("### 🗓️ Report Timeframe")
             
             col_y, col_m = st.columns(2)
@@ -4006,22 +4032,14 @@ elif menu == "12. Automated State Report":
 
             month_num = months.index(selected_month) + 1
             report_df = df_combined[
-                (df_combined[date_col].dt.year == int(selected_year)) & 
-                (df_combined[date_col].dt.month == month_num)
+                (df_combined['Official_Date'].dt.year == int(selected_year)) & 
+                (df_combined['Official_Date'].dt.month == month_num)
             ].copy()
 
             if report_df.empty:
                 st.info(f"No screenings found for {selected_month} {selected_year}.")
             else:
-                child_name_cols = [c for c in report_df.columns if any(k in str(c).lower() for k in ['name', 'child', 'student', 'beneficiary'])]
-                if child_name_cols:
-                    report_df['Official_Child_Name'] = report_df[child_name_cols[0]]
-                    for col in child_name_cols[1:]:
-                        report_df['Official_Child_Name'] = report_df['Official_Child_Name'].combine_first(report_df[col])
-                else:
-                    report_df['Official_Child_Name'] = "Unknown"
-
-                report_df['Age_Years'] = (report_df[date_col] - report_df[dob_col]).dt.days / 365.25
+                report_df['Age_Years'] = (report_df['Official_Date'] - report_df['Official_DOB']).dt.days / 365.25
                 
                 def bucket_age(age):
                     if pd.isna(age): return "Unknown"
@@ -4030,11 +4048,7 @@ elif menu == "12. Automated State Report":
                     else: return "6-18 Years"
                 
                 report_df['Govt_Age_Bucket'] = report_df['Age_Years'].apply(bucket_age)
-                
-                if gender_col:
-                    report_df['Clean_Gender'] = report_df[gender_col].astype(str).str.upper().str[0]
-                else:
-                    report_df['Clean_Gender'] = "U"
+                report_df['Clean_Gender'] = report_df['Official_Gender'].astype(str).str.upper().str[0]
 
                 st.markdown(f"## 📊 Official Form III Output: **{selected_month} {selected_year}**")
                 st.write(f"Total Children Screened (Entire Block): **{len(report_df)}**")
@@ -4074,41 +4088,37 @@ elif menu == "12. Automated State Report":
                     m1, m2 = st.columns(2)
                     with m1:
                         st.write("**Nutritional Triage**")
-                        if status_col:
-                            sam_count = len(team_df[team_df[status_col].astype(str).str.upper() == 'SAM'])
-                            mam_count = len(team_df[team_df[status_col].astype(str).str.upper() == 'MAM'])
-                            st.error(f"🔴 SAM Cases: **{sam_count}**")
-                            st.warning(f"🟡 MAM Cases: **{mam_count}**")
-                        else:
-                            st.write("No nutrition status column found.")
+                        sam_count = len(team_df[team_df['Official_Status'].astype(str).str.upper() == 'SAM'])
+                        mam_count = len(team_df[team_df['Official_Status'].astype(str).str.upper() == 'MAM'])
+                        st.error(f"🔴 SAM Cases: **{sam_count}**")
+                        st.warning(f"🟡 MAM Cases: **{mam_count}**")
                             
                     with m2:
                         st.write("**4D Conditions Found**")
-                        if disease_col:
-                            def is_real_disease(val):
-                                clean = str(val).strip().lower()
-                                return clean not in ['', 'nan', 'none', 'no', 'null', 'na', 'false']
-                                
-                            t_diseases = team_df[team_df[disease_col].apply(is_real_disease)]
-                            if not t_diseases.empty:
-                                d_counts = t_diseases.groupby([disease_col, 'Govt_Age_Bucket', 'Clean_Gender']).size().reset_index(name='Count')
-                                d_counts.columns = ['Condition', 'Age Group', 'Gender', 'Count']
-                                d_counts['Gender'] = d_counts['Gender'].map({'M': 'Boys', 'F': 'Girls', 'U': 'Unknown'}).fillna('Unknown')
-                                st.dataframe(d_counts, use_container_width=True, hide_index=True)
-                            else:
-                                st.success("No 4D diseases logged by this team!")
+                        def is_real_disease(val):
+                            clean = str(val).strip().lower()
+                            return clean not in ['', 'nan', 'none', 'no', 'null', 'na', 'false']
+                            
+                        t_diseases = team_df[team_df['Official_Disease'].apply(is_real_disease)]
+                        if not t_diseases.empty:
+                            d_counts = t_diseases.groupby(['Official_Disease', 'Govt_Age_Bucket', 'Clean_Gender']).size().reset_index(name='Count')
+                            d_counts.columns = ['Condition', 'Age Group', 'Gender', 'Count']
+                            d_counts['Gender'] = d_counts['Gender'].map({'M': 'Boys', 'F': 'Girls', 'U': 'Unknown'}).fillna('Unknown')
+                            st.dataframe(d_counts, use_container_width=True, hide_index=True)
+                        else:
+                            st.success("No 4D diseases logged by this team!")
                                 
                     st.divider()
 
                 st.markdown("### 📥 Download Cleaned Report")
                 
                 export_df = pd.DataFrame()
-                export_df['Screening Date'] = report_df[date_col].dt.strftime('%d-%m-%Y')
+                export_df['Screening Date'] = report_df['Official_Date'].dt.strftime('%d-%m-%Y')
                 export_df['Assigned Team'] = report_df['Mapped_Team'] 
                 export_df['Source'] = report_df['Source']
                 export_df['Institution'] = report_df['Official_Institution'] 
                 export_df['Child Name'] = report_df['Official_Child_Name']   
-                export_df['DOB'] = report_df[dob_col].dt.strftime('%d-%m-%Y')
+                export_df['DOB'] = report_df['Official_DOB'].dt.strftime('%d-%m-%Y')
                 export_df['Calculated Age (Yrs)'] = report_df['Age_Years'].round(2)
                 export_df['Govt Age Bucket'] = report_df['Govt_Age_Bucket']
                 export_df['Gender'] = report_df['Clean_Gender']
@@ -4131,8 +4141,8 @@ elif menu == "12. Automated State Report":
                 if hb_data is not None: export_df['Hb (School)'] = hb_data
                 if muac_data is not None: export_df['MUAC (AW)'] = muac_data
                 
-                if status_col: export_df['Nutrition (SAM/MAM)'] = report_df[status_col]
-                if disease_col: export_df['4D Condition Found'] = report_df[disease_col]
+                export_df['Nutrition (SAM/MAM)'] = report_df['Official_Status']
+                export_df['4D Condition Found'] = report_df['Official_Disease']
 
                 with st.expander("👁️ Preview Streamlined CSV Data"):
                     unique_institutions = sorted(list(set([str(i).strip() for i in export_df['Institution'].dropna() if str(i).strip() != ""])))
@@ -4164,19 +4174,11 @@ elif menu == "12. Automated State Report":
         try:
             with st.spinner("Calculating Taluka Matrix, Cycles, and Achievements..."):
                 
-                if not df_combined.empty and date_col:
-                    df_combined['Screening_Month'] = df_combined[date_col].dt.month
+                if not df_combined.empty:
+                    df_combined['Screening_Month'] = df_combined['Official_Date'].dt.month
                     df_combined['Cycle'] = df_combined['Screening_Month'].apply(lambda m: 'Cycle 1' if 4 <= m <= 9 else 'Cycle 2')
-                    
-                    if dob_col:
-                        df_combined['_age'] = (df_combined[date_col] - df_combined[dob_col]).dt.days / 365.25
-                    else:
-                        df_combined['_age'] = 10.0 
-                        
-                    if gender_col:
-                        df_combined['_g'] = df_combined[gender_col].astype(str).str.upper().str[0]
-                    else:
-                        df_combined['_g'] = 'U'
+                    df_combined['_age'] = (df_combined['Official_Date'] - df_combined['Official_DOB']).dt.days / 365.25
+                    df_combined['_g'] = df_combined['Official_Gender'].astype(str).str.upper().str[0]
 
                 stats = {}
                 team_ids = ["TEAM-1240315", "TEAM-1240309"]
@@ -4220,7 +4222,7 @@ elif menu == "12. Automated State Report":
                             stats[t_id]["tgt_sch_M"] = len(t_sch_df[t_sch_df[sch_gender_key].astype(str).str.upper().str.startswith('M')])
                             stats[t_id]["tgt_sch_F"] = len(t_sch_df[t_sch_df[sch_gender_key].astype(str).str.upper().str.startswith('F')])
 
-                    if not df_combined.empty and date_col:
+                    if not df_combined.empty:
                         t_daily = df_combined[df_combined['Mapped_Team'] == t_id].copy()
                         
                         t_aw_daily = t_daily[t_daily['Source'] == 'Anganwadi']
@@ -4234,7 +4236,7 @@ elif menu == "12. Automated State Report":
                         stats[t_id]["ach_aw_3_6y_M"] = len(t_aw_daily[(t_aw_daily['_age'] > 3.0) & (t_aw_daily['_age'] <= 6.0) & (t_aw_daily['_g'] == 'M')])
                         stats[t_id]["ach_aw_3_6y_F"] = len(t_aw_daily[(t_aw_daily['_age'] > 3.0) & (t_aw_daily['_age'] <= 6.0) & (t_aw_daily['_g'] == 'F')])
 
-                        t_sch_daily = t_daily[(t_daily['Source'] == 'School') & (t_daily[date_col] >= '2026-03-01')]
+                        t_sch_daily = t_daily[(t_daily['Source'] == 'School') & (t_daily['Official_Date'] >= '2026-04-01')]
                         stats[t_id]["ach_sch"] = len(t_sch_daily)
                         stats[t_id]["ach_sch_M"] = len(t_sch_daily[t_sch_daily['_g'] == 'M'])
                         stats[t_id]["ach_sch_F"] = len(t_sch_daily[t_sch_daily['_g'] == 'F'])
