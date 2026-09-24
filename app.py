@@ -998,6 +998,7 @@ elif menu == "2. Child Screening":
         "[Delay] Learning Disorder",
         "[Delay] Attention Deficit Hyperactivity Disorder (ADHD)",
         "[Other] Specify Below",
+        "[Other] Gall bladder stones",
         "[Other] Delay in menstruation",
         "[Other] Pain during menstruation",
         "[Other] Irregular menstruation",
