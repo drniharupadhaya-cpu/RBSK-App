@@ -988,6 +988,7 @@ elif menu == "2. Child Screening":
         "[Disease] Rheumatic Heart Disease",
         "[Disease] Reactive Airways Disease",
         "[Disease] Convulsive Disorders",
+        "[Disease] Jaundice",
         "[Delay] Vision Impairment",
         "[Delay] Hearing Impairment",
         "[Delay] Neuro-motor Impairment",
