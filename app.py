@@ -958,59 +958,7 @@ elif menu == "1. Daily Tour Plan":
 # ==========================================
 elif menu == "2. Child Screening":
     render_header("Child Screening & EMR", "Record vitals and auto-calculate SAM/MAM", "🩺", "#10b981")
-        # 🏗️ PHASE 1: THE MASTER DICTIONARY (Zero-Lag Python Embedded)
-         MASTER_4D_DICT = [
-                "None",
-                "[Defect] Neural Tube Defect",
-                "[Defect] Down's Syndrome",
-                "[Defect] Cleft Lip & Palate / Cleft Palate alone",
-                "[Defect] Club Foot",
-                "[Defect] Juvenile Diabetes",
-                "[Defect] Developmental Dysplasia of the Hip",
-                "[Defect] Congenital Cataract",
-                "[Defect] Congenital Deafness",
-                "[Defect] Congenital Blindness",
-                "[Defect] Congenital Heart Disease",
-                "[Defect] Retinopathy of Prematurity",
-                "[Deficiency] Severe Acute Malnutrition (SAM)",
-                "[Deficiency] Goiter",
-                "[Deficiency] Thalessemia",
-                "[Deficiency] Sickle Cell Anemia",
-                "[Deficiency] Stunting",
-                "[Deficiency] Hypothyroidism",
-                "[Deficiency] Vitamin A Deficiency (Bitot Spots)",
-                "[Deficiency] Vitamin D Deficiency (Rickets)",
-                "[Disease] Dental Conditions / Dental Caries",
-                "[Disease] Skin Conditions",
-                "[Disease] Otitis Media",
-                "[Disease] Deviated nasal septum",
-                "[Disease] Rheumatic Heart Disease",
-                "[Disease] Reactive Airways Disease",
-                "[Disease] Convulsive Disorders",
-                "[Disease] Jaundice",
-                "[Delay] Vision Impairment",
-                "[Delay] Hearing Impairment",
-                "[Delay] Neuro-motor Impairment",
-                "[Delay] Motor Delay",
-                "[Delay] Cognitive Delay",
-                "[Delay] Language Delay",
-                "[Delay] Behavior Disorder (Autism)",
-                "[Delay] Learning Disorder",
-                "[Delay] Attention Deficit Hyperactivity Disorder (ADHD)",
-                "[Other] Specify Below",
-                "[Other] Gall bladder stones",
-                "[Other] Delay in menstruation",
-                "[Other] Pain during menstruation",
-                "[Other] Irregular menstruation",
-                "[Other] Substance Abuse",
-                "[Delay] Refractive error",
-                "[Delay] Worms",
-                "[Deficiency] G6PD ",
-                "[Deficiency] Obesity ",
-                "[Disease] Tonsilitis",
-                "[Delay] Locomotor Impairment"
-                
-            ]   
+
     # 🚀 NEW: The Manual Override Sync Button!
     if st.button("🔄 Sync & Refresh Roster"):
         try: get_recent_screenings.clear()
@@ -1026,6 +974,59 @@ elif menu == "2. Child Screening":
         clean_str = ''.join(c for c in str(val).replace(',', '.') if c.isdigit() or c == '.')
         try: return float(clean_str) if clean_str else 0.0
         except: return 0.0
+
+    # 🏗️ PHASE 1: THE MASTER DICTIONARY (Zero-Lag Python Embedded)
+    MASTER_4D_DICT = [
+        "None",
+        "[Defect] Neural Tube Defect",
+        "[Defect] Down's Syndrome",
+        "[Defect] Cleft Lip & Palate / Cleft Palate alone",
+        "[Defect] Club Foot",
+        "[Defect] Juvenile Diabetes",
+        "[Defect] Developmental Dysplasia of the Hip",
+        "[Defect] Congenital Cataract",
+        "[Defect] Congenital Deafness",
+        "[Defect] Congenital Blindness",
+        "[Defect] Congenital Heart Disease",
+        "[Defect] Retinopathy of Prematurity",
+        "[Deficiency] Severe Acute Malnutrition (SAM)",
+        "[Deficiency] Goiter",
+        "[Deficiency] Thalessemia",
+        "[Deficiency] Sickle Cell Anemia",
+        "[Deficiency] Stunting",
+        "[Deficiency] Hypothyroidism",
+        "[Deficiency] Vitamin A Deficiency (Bitot Spots)",
+        "[Deficiency] Vitamin D Deficiency (Rickets)",
+        "[Disease] Dental Conditions / Dental Caries",
+        "[Disease] Skin Conditions",
+        "[Disease] Otitis Media",
+        "[Disease] Deviated nasal septum",
+        "[Disease] Rheumatic Heart Disease",
+        "[Disease] Reactive Airways Disease",
+        "[Disease] Convulsive Disorders",
+        "[Disease] Jaundice",
+        "[Delay] Vision Impairment",
+        "[Delay] Hearing Impairment",
+        "[Delay] Neuro-motor Impairment",
+        "[Delay] Motor Delay",
+        "[Delay] Cognitive Delay",
+        "[Delay] Language Delay",
+        "[Delay] Behavior Disorder (Autism)",
+        "[Delay] Learning Disorder",
+        "[Delay] Attention Deficit Hyperactivity Disorder (ADHD)",
+        "[Other] Specify Below",
+        "[Other] Gall bladder stones",
+        "[Other] Delay in menstruation",
+        "[Other] Pain during menstruation",
+        "[Other] Irregular menstruation",
+        "[Other] Substance Abuse",
+        "[Delay] Refractive error",
+        "[Delay] Worms",
+        "[Deficiency] G6PD ",
+        "[Deficiency] Obesity ",
+        "[Disease] Tonsilitis",
+        "[Delay] Locomotor Impairment"
+    ]
 
     # 🚀 THE OFFICIAL WHO GOLD STANDARD ENGINE (Interpolation Method)
     def get_whz_status(gender, height_cm, weight_kg):
@@ -1271,7 +1272,7 @@ elif menu == "2. Child Screening":
                         with v3: m_str = st.text_input("MUAC (cm)") if category == "👶 Anganwadi" else "0"
                         with v4: hb_str = st.text_input("Hb %")
                         
-                        disease = st.text_input("🦠 Disease Identified (4D)", value="None")
+                        disease = st.selectbox("🦠 Disease Identified (4D)", options=MASTER_4D_DICT)
                         save_new = st.form_submit_button("💾 Save New Child & Screening")
                         
                     if save_new:
@@ -1305,6 +1306,7 @@ elif menu == "2. Child Screening":
                             ws.append_row(new_row)
                             
                             if category == "👶 Anganwadi" and final_status in ["SAM", "MAM"]:
+                                # 🛠️ FIX 1: SWAPPED HEIGHT AND WEIGHT HERE!
                                 spreadsheet.worksheet("cmtc_referral").append_row([screening_date, selected_inst, new_name, str(new_dob), new_contact, height_val, weight_val, muac_val, final_status, "Pending"])
                             
                             st.toast(f"✅ Successfully registered and screened {new_name}!", icon="🎉")
@@ -1389,7 +1391,7 @@ elif menu == "2. Child Screening":
                                 with v2: w_str = st.text_input("Weight (kg)")
                                 with v3: m_str = st.text_input("MUAC (cm)") if category == "👶 Anganwadi" else "0"
                                 with v4: hb_str = st.text_input("Hb %")
-                                disease = st.text_input("🦠 Disease Identified (4D)", value="None")
+                                disease = st.selectbox("🦠 Disease Identified (4D)", options=MASTER_4D_DICT)
                                 save_btn = st.form_submit_button("💾 Save Screening Data")
 
                             if save_btn:
@@ -1463,6 +1465,7 @@ elif menu == "2. Child Screening":
                                             if len(r) > 2 and r[0] == str(screening_date) and str(r[2]).strip() == final_child_name.strip():
                                                 cmtc_row = i + 1; break
                                                 
+                                        # 🛠️ FIX 2: SWAPPED HEIGHT AND WEIGHT HERE!
                                         cmtc_data = [str(screening_date), selected_inst, final_child_name, str(dob), merged_contact, merged_h, merged_w, merged_m, merged_status, "Pending"]
                                         
                                         if cmtc_row:
@@ -1495,6 +1498,7 @@ elif menu == "2. Child Screening":
                                     st.toast(f"✅ New screening saved for {final_child_name}!", icon="🎉")
                                     
                                     if category == "👶 Anganwadi" and final_status in ["SAM", "MAM"]:
+                                        # 🛠️ FIX 3: SWAPPED HEIGHT AND WEIGHT HERE!
                                         spreadsheet.worksheet("cmtc_referral").append_row([str(screening_date), selected_inst, final_child_name, str(dob), updated_contact, height_val, weight_val, muac_val, final_status, "Pending"])
                             
                                 get_recent_screenings.clear() 
@@ -1517,6 +1521,7 @@ elif menu == "2. Child Screening":
             
         @st.cache_data(ttl=300)
         def fetch_master_and_build_coverage(team_id, v_category):
+            # 1. Configuration Check
             if v_category == "👶 Anganwadis":
                 master_sheet_name = "aw new data"
                 inst_cols = ["INSTITUTE", "AWC", "CENTER", "AWC NAME"]
@@ -1533,12 +1538,14 @@ elif menu == "2. Child Screening":
             except:
                 return pd.DataFrame()
                 
+            # Find the exact columns
             def find_col(df, keys):
                 return next((c for c in df.columns if any(k in str(c).upper() for k in keys)), None)
                 
             loc_col = find_col(master_raw, inst_cols)
             team_col = find_col(master_raw, ["TEAM"])
             
+            # 2. Extract Total Kids (Denominator) filter exactly by the chosen Team!
             if team_col:
                 master_raw = master_raw[master_raw[team_col].astype(str).str.strip().str.upper() == team_id.upper()]
                 
@@ -1549,6 +1556,7 @@ elif menu == "2. Child Screening":
                     if inst and inst not in ['nan', 'None', '']:
                         master_counts[inst] = master_counts.get(inst, 0) + 1
                         
+            # 3. Fetch the Daily Logs to see actual Screenings (Numerator)
             daily_stats = {}
             try:
                 raw_daily = spreadsheet.worksheet(daily_sheet).get_all_values()
@@ -1556,6 +1564,7 @@ elif menu == "2. Child Screening":
                     if len(r) > 2:
                         d_date = str(r[0]).strip()
                         
+                        # 🚀 180-DAY RULE: Only count screenings that happened in the current semester!
                         if d_date >= cutoff_date_str:
                             d_inst = str(r[1]).strip()
                             d_child = str(r[2]).strip()
@@ -1570,10 +1579,12 @@ elif menu == "2. Child Screening":
             except:
                 pass
                 
+            # 4. Merge & Compute Progress Math
             coverage_list = []
             for inst, total_reg in master_counts.items():
                 stats = daily_stats.get(inst, {'children': {}, 'last_date': 'Not Visited'})
                 
+                # We don't count absent kids as "Screened". They are pending!
                 screened_children = [c for c, s in stats['children'].items() if s != 'ABSENT']
                 screened_count = len(screened_children)
                 pending_count = max(0, total_reg - screened_count)
@@ -1622,6 +1633,7 @@ elif menu == "2. Child Screening":
             
             display_df = cov_df.copy()
             if status_filter:
+                # Custom filter matching based on emoji tags
                 mask = display_df['Status'].apply(lambda x: any(f.split()[0] in x for f in status_filter))
                 display_df = display_df[mask]
                 
