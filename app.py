@@ -959,7 +959,7 @@ elif menu == "1. Daily Tour Plan":
 elif menu == "2. Child Screening":
     render_header("Child Screening & EMR", "Record vitals and auto-calculate SAM/MAM", "🩺", "#10b981")
     # 🏗️ PHASE 1: THE MASTER DICTIONARY (Zero-Lag Python Embedded)
-        MASTER_4D_DICT = [
+     MASTER_4D_DICT = [
             "None",
             "[Defect] Neural Tube Defect",
             "[Defect] Down's Syndrome",
@@ -1010,7 +1010,7 @@ elif menu == "2. Child Screening":
             "[Disease] Tonsilitis",
             "[Delay] Locomotor Impairment"
             
-        ]
+        ]   
     # 🚀 NEW: The Manual Override Sync Button!
     if st.button("🔄 Sync & Refresh Roster"):
         try: get_recent_screenings.clear()
