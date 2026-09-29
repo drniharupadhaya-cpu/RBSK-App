@@ -953,7 +953,7 @@ elif menu == "1. Daily Tour Plan":
                 except Exception as e:
                     st.error(f"Failed to generate PDF: {e}")
 
-# ==========================================
+    # ==========================================
     # MODULE 2: EMR SCREENING (180-Day Roster & Manual Sync)
     # ==========================================
     elif menu == "2. Child Screening":
