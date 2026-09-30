@@ -1003,6 +1003,7 @@ elif menu == "2. Child Screening":
         "[Disease] Deviated nasal septum",
         "[Disease] Rheumatic Heart Disease",
         "[Disease] Reactive Airways Disease",
+        "[Disease] Nephrotic sundrome",
         "[Disease] Convulsive Disorders",
         "[Disease] Jaundice",
         "[Delay] Vision Impairment",
