@@ -1022,6 +1022,7 @@ elif menu == "2. Child Screening":
         "[Other] Irregular menstruation",
         "[Other] Substance Abuse",
         "[Delay] Refractive error",
+        "[Delay] Intellectual disability",
         "[Delay] Worms",
         "[Deficiency] G6PD ",
         "[Deficiency] Obesity ",
