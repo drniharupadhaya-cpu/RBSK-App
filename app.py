@@ -1004,6 +1004,8 @@ elif menu == "2. Child Screening":
         "[Disease] Dental Conditions / Dental Caries",
         "[Disease] Skin Conditions",
         "[Disease] Otitis Media",
+        "[Disease] Septicemia",
+        "[Disease] LBW",
         "[Disease] Deviated nasal septum",
         "[Disease] Rheumatic Heart Disease",
         "[Disease] Reactive Airways Disease",
