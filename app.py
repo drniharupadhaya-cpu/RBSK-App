@@ -1120,6 +1120,27 @@ elif menu == "2. Child Screening":
 
     current_year = today_date.year
     current_month = today_date.month
+    # ==========================================
+    # 🚀 DUAL-TIMELINE CUTOFF ARCHITECTURE
+    # ==========================================
+    # 1. ANGANWADI (Bi-Annual Cycle)
+    if 4 <= current_month <= 9:
+        awc_cutoff_date = datetime.date(current_year, 4, 1)
+    else:
+        if current_month >= 10:
+            awc_cutoff_date = datetime.date(current_year, 10, 1)
+        else:
+            awc_cutoff_date = datetime.date(current_year - 1, 10, 1)
+            
+    # 2. SCHOOLS (Annual FY Cycle: April 1 to March 31)
+    if current_month >= 4:
+        school_cutoff_date = datetime.date(current_year, 4, 1)
+    else:
+        school_cutoff_date = datetime.date(current_year - 1, 4, 1)
+
+    awc_cutoff_date_str = awc_cutoff_date.strftime('%Y-%m-%d')
+    school_cutoff_date_str = school_cutoff_date.strftime('%Y-%m-%d')
+    
 
     # ==========================================
     # 🚀 DUAL TAB INTERFACE (SCREENING & COVERAGE)
