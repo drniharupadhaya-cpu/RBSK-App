@@ -1106,7 +1106,7 @@ elif menu == "2. Child Screening":
             elif hb_val < 11.5: return "🔵 Mild Anemia"
             else: return "Normal"
 
-    # 🚀 180-Day Bi-Annual Background Checker
+    # 🚀 Fixed-Cycle Background Checker
     @st.cache_data(ttl=60)
     def get_recent_screenings(sheet_name, inst_name):
         try:
@@ -1117,7 +1117,21 @@ elif menu == "2. Child Screening":
     import datetime
     today_date = datetime.date.today()
     today_string = today_date.strftime('%Y-%m-%d')
-    cutoff_date = today_date - datetime.timedelta(days=180) # The 6-Month Mark!
+
+    # 🚀 SMART CYCLE CUTOFF (Fixed Bi-Annual Cycle)
+    current_year = today_date.year
+    current_month = today_date.month
+
+    if 4 <= current_month <= 9:
+        # Cycle 1: April 1 to September 30
+        cutoff_date = datetime.date(current_year, 4, 1)
+    else:
+        # Cycle 2: October 1 to March 31
+        if current_month >= 10:
+            cutoff_date = datetime.date(current_year, 10, 1)
+        else:
+            cutoff_date = datetime.date(current_year - 1, 10, 1)
+
     cutoff_date_str = cutoff_date.strftime('%Y-%m-%d')
 
     # ==========================================
@@ -1169,7 +1183,7 @@ elif menu == "2. Child Screening":
                     if any(w in str(col).lower() for w in ['class', 'std', 'grade', 'ધોરણ']):
                         class_column = col; break
 
-            # 🚀 180-DAY ROSTER LOGIC: Scan the last 6 months to see who is already done!
+            # 🚀 FIXED BI-ANNUAL CYCLE LOGIC: Scan the current cycle to see who is already done!
             target_sheet = "daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools"
             inst_records = get_recent_screenings(target_sheet, selected_inst)
             
@@ -1584,7 +1598,7 @@ elif menu == "2. Child Screening":
                     if len(r) > 2:
                         d_date = str(r[0]).strip()
                         
-                        # 🚀 180-DAY RULE: Only count screenings that happened in the current semester!
+                        # 🚀 SMART CYCLE RULE: Only count screenings that happened in the current cycle!
                         if d_date >= cutoff_date_str:
                             d_inst = str(r[1]).strip()
                             d_child = str(r[2]).strip()
