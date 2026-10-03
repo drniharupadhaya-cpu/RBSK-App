@@ -1118,21 +1118,29 @@ elif menu == "2. Child Screening":
     today_date = datetime.date.today()
     today_string = today_date.strftime('%Y-%m-%d')
 
-    # 🚀 SMART CYCLE CUTOFF (Fixed Bi-Annual Cycle)
     current_year = today_date.year
     current_month = today_date.month
 
+    # ==========================================
+    # 🚀 DUAL-TIMELINE CUTOFF ARCHITECTURE
+    # ==========================================
+    # 1. ANGANWADI (Bi-Annual Cycle)
     if 4 <= current_month <= 9:
-        # Cycle 1: April 1 to September 30
-        cutoff_date = datetime.date(current_year, 4, 1)
+        awc_cutoff_date = datetime.date(current_year, 4, 1)
     else:
-        # Cycle 2: October 1 to March 31
         if current_month >= 10:
-            cutoff_date = datetime.date(current_year, 10, 1)
+            awc_cutoff_date = datetime.date(current_year, 10, 1)
         else:
-            cutoff_date = datetime.date(current_year - 1, 10, 1)
+            awc_cutoff_date = datetime.date(current_year - 1, 10, 1)
+            
+    # 2. SCHOOLS (Annual FY Cycle: April 1 to March 31)
+    if current_month >= 4:
+        school_cutoff_date = datetime.date(current_year, 4, 1)
+    else:
+        school_cutoff_date = datetime.date(current_year - 1, 4, 1)
 
-    cutoff_date_str = cutoff_date.strftime('%Y-%m-%d')
+    awc_cutoff_date_str = awc_cutoff_date.strftime('%Y-%m-%d')
+    school_cutoff_date_str = school_cutoff_date.strftime('%Y-%m-%d')
 
     # ==========================================
     # 🚀 DUAL TAB INTERFACE (SCREENING & COVERAGE)
@@ -1183,11 +1191,12 @@ elif menu == "2. Child Screening":
                     if any(w in str(col).lower() for w in ['class', 'std', 'grade', 'ધોરણ']):
                         class_column = col; break
 
-            # 🚀 FIXED BI-ANNUAL CYCLE LOGIC: Scan the current cycle to see who is already done!
+            # 🚀 APPLY CORRECT TIMELINE FILTER (AWC vs Schools)
             target_sheet = "daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools"
             inst_records = get_recent_screenings(target_sheet, selected_inst)
             
             recent_status = {} 
+            active_cutoff = awc_cutoff_date if category == "👶 Anganwadi" else school_cutoff_date 
             
             for r in inst_records:
                 try:
@@ -1558,7 +1567,7 @@ elif menu == "2. Child Screening":
             # 1. Configuration Check
             if v_category == "👶 Anganwadis":
                 master_sheet_name = "aw new data"
-                inst_cols = ["INSTITUTE", "AWC", "AWC NAME"]
+                inst_cols = ["INSTITUTE", "AWC", "CENTER", "AWC NAME"]
                 daily_sheet = "daily_screenings_aw"
                 status_idx = 12
             else:
@@ -1592,14 +1601,16 @@ elif menu == "2. Child Screening":
                         
             # 3. Fetch the Daily Logs to see actual Screenings (Numerator)
             daily_stats = {}
+            active_cutoff_str = awc_cutoff_date_str if v_category == "👶 Anganwadis" else school_cutoff_date_str
+            
             try:
                 raw_daily = spreadsheet.worksheet(daily_sheet).get_all_values()
                 for r in raw_daily[1:]: 
                     if len(r) > 2:
                         d_date = str(r[0]).strip()
                         
-                        # 🚀 SMART CYCLE RULE: Only count screenings that happened in the current cycle!
-                        if d_date >= cutoff_date_str:
+                        # 🚀 SMART CYCLE RULE: Separates Anganwadi and School timelines!
+                        if d_date >= active_cutoff_str:
                             d_inst = str(r[1]).strip()
                             d_child = str(r[2]).strip()
                             d_status = str(r[status_idx]).strip() if len(r) > status_idx else "SCREENED"
@@ -1618,8 +1629,13 @@ elif menu == "2. Child Screening":
             for inst, total_reg in master_counts.items():
                 stats = daily_stats.get(inst, {'children': {}, 'last_date': 'Not Visited'})
                 
-                # We don't count absent kids as "Screened". They are pending!
-                screened_children = [c for c, s in stats['children'].items() if s != 'ABSENT']
+                if v_category == "👶 Anganwadis":
+                    # Anganwadis do NOT count absences as screened
+                    screened_children = [c for c, s in stats['children'].items() if s != 'ABSENT']
+                else:
+                    # 🚀 NEW: Schools DO count absences as screened for completion progress!
+                    screened_children = [c for c, s in stats['children'].items()]
+                    
                 screened_count = len(screened_children)
                 pending_count = max(0, total_reg - screened_count)
                 last_visit = stats['last_date']
