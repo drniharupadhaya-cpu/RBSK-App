@@ -1121,19 +1121,20 @@ elif menu == "2. Child Screening":
     current_year = today_date.year
     current_month = today_date.month
 
-   # 🚀 FIX: DYNAMIC RBSK CYCLE DATE LOGIC (Replacing the flat 180-day rule)
-    if today_date.month >= 10:
-        # Oct, Nov, Dec -> Cycle 2 started Oct 1st of this year
-        aw_cutoff_date = datetime.date(today_date.year, 10, 1)
-        sch_cutoff_date = datetime.date(today_date.year, 4, 1) 
-    elif today_date.month <= 3:
-        # Jan, Feb, Mar -> Cycle 2 started Oct 1st of PREVIOUS year
-        aw_cutoff_date = datetime.date(today_date.year - 1, 10, 1)
-        sch_cutoff_date = datetime.date(today_date.year - 1, 4, 1)
-    else:
-        # Apr - Sept -> Cycle 1 started Apr 1st of this year
-        aw_cutoff_date = datetime.date(today_date.year, 4, 1)
-        sch_cutoff_date = datetime.date(today_date.year, 4, 1)
+   # 🚀 Fixed-Cycle Background Checker
+    @st.cache_data(ttl=60)
+    def get_recent_screenings(sheet_name, inst_name):
+        try:
+            records = spreadsheet.worksheet(sheet_name).get_all_values()
+            return [r for r in records if len(r) > 2 and r[1] == inst_name]
+        except: return []
+
+    import datetime
+    today_date = datetime.date.today()
+    today_string = today_date.strftime('%Y-%m-%d')
+
+    current_year = today_date.year
+    current_month = today_date.month
 
     # ==========================================
     # 🚀 DUAL TAB INTERFACE (SCREENING & COVERAGE)
