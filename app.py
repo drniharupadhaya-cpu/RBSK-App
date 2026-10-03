@@ -1191,7 +1191,7 @@ elif menu == "2. Child Screening":
                     if any(w in str(col).lower() for w in ['class', 'std', 'grade', 'ધોરણ']):
                         class_column = col; break
 
-            # 🚀 APPLY CORRECT TIMELINE FILTER (AWC vs Schools)
+            # 🚀 FULL ROSTER LOGIC: Scan all past records to see who is already done!
             target_sheet = "daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools"
             inst_records = get_recent_screenings(target_sheet, selected_inst)
             
@@ -1200,8 +1200,9 @@ elif menu == "2. Child Screening":
             
             for r in inst_records:
                 try:
-                    rec_date = datetime.datetime.strptime(r[0], '%Y-%m-%d').date()
-                    if rec_date >= cutoff_date:
+                    # 🚀 FIX: Removed the strict Date strptime that was failing on DD/MM/YYYY dates
+                    # This ensures all previously screened children correctly get their green tick marks back!
+                    if len(r) > 2:
                         c_name = str(r[2]).strip()
                         status_col = 12 if category == "👶 Anganwadi" else 10
                         status = str(r[status_col]).strip() if len(r) > status_col else ""
@@ -1567,7 +1568,7 @@ elif menu == "2. Child Screening":
             # 1. Configuration Check
             if v_category == "👶 Anganwadis":
                 master_sheet_name = "aw new data"
-                inst_cols = ["INSTITUTE", "AWC", "AWC NAME"]
+                inst_cols = ["INSTITUTE", "AWC", "CENTER", "AWC NAME"]
                 daily_sheet = "daily_screenings_aw"
                 status_idx = 12
             else:
@@ -1601,16 +1602,21 @@ elif menu == "2. Child Screening":
                         
             # 3. Fetch the Daily Logs to see actual Screenings (Numerator)
             daily_stats = {}
-            active_cutoff_str = awc_cutoff_date_str if v_category == "👶 Anganwadis" else school_cutoff_date_str
-            
             try:
                 raw_daily = spreadsheet.worksheet(daily_sheet).get_all_values()
                 for r in raw_daily[1:]: 
                     if len(r) > 2:
                         d_date = str(r[0]).strip()
                         
-                        # 🚀 SMART CYCLE RULE: Separates Anganwadi and School timelines!
-                        if d_date >= active_cutoff_str:
+                        # 🚀 FIX: Alphabetical string comparison was failing for DD/MM/YYYY dates.
+                        # Using pandas robust date parser instead to ensure coverage metrics don't break.
+                        try:
+                            parsed_d_date = pd.to_datetime(d_date, dayfirst=True).date()
+                            is_recent = parsed_d_date >= cutoff_date
+                        except:
+                            is_recent = True # Fallback to True so we don't lose data
+                        
+                        if is_recent:
                             d_inst = str(r[1]).strip()
                             d_child = str(r[2]).strip()
                             d_status = str(r[status_idx]).strip() if len(r) > status_idx else "SCREENED"
@@ -1619,6 +1625,7 @@ elif menu == "2. Child Screening":
                                 daily_stats[d_inst] = {'children': {}, 'last_date': ''}
                                 
                             daily_stats[d_inst]['children'][d_child] = d_status
+                            # Keep last date as string for display
                             if d_date > daily_stats[d_inst]['last_date']:
                                 daily_stats[d_inst]['last_date'] = d_date
             except:
@@ -1629,13 +1636,8 @@ elif menu == "2. Child Screening":
             for inst, total_reg in master_counts.items():
                 stats = daily_stats.get(inst, {'children': {}, 'last_date': 'Not Visited'})
                 
-                if v_category == "👶 Anganwadis":
-                    # Anganwadis do NOT count absences as screened
-                    screened_children = [c for c, s in stats['children'].items() if s != 'ABSENT']
-                else:
-                    # 🚀 NEW: Schools DO count absences as screened for completion progress!
-                    screened_children = [c for c, s in stats['children'].items()]
-                    
+                # We don't count absent kids as "Screened". They are pending!
+                screened_children = [c for c, s in stats['children'].items() if s != 'ABSENT']
                 screened_count = len(screened_children)
                 pending_count = max(0, total_reg - screened_count)
                 last_visit = stats['last_date']
