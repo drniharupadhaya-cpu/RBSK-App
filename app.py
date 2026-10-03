@@ -1121,26 +1121,19 @@ elif menu == "2. Child Screening":
     current_year = today_date.year
     current_month = today_date.month
 
-    # ==========================================
-    # 🚀 DUAL-TIMELINE CUTOFF ARCHITECTURE
-    # ==========================================
-    # 1. ANGANWADI (Bi-Annual Cycle)
-    if 4 <= current_month <= 9:
-        awc_cutoff_date = datetime.date(current_year, 4, 1)
+   # 🚀 FIX: DYNAMIC RBSK CYCLE DATE LOGIC (Replacing the flat 180-day rule)
+    if today_date.month >= 10:
+        # Oct, Nov, Dec -> Cycle 2 started Oct 1st of this year
+        aw_cutoff_date = datetime.date(today_date.year, 10, 1)
+        sch_cutoff_date = datetime.date(today_date.year, 4, 1) 
+    elif today_date.month <= 3:
+        # Jan, Feb, Mar -> Cycle 2 started Oct 1st of PREVIOUS year
+        aw_cutoff_date = datetime.date(today_date.year - 1, 10, 1)
+        sch_cutoff_date = datetime.date(today_date.year - 1, 4, 1)
     else:
-        if current_month >= 10:
-            awc_cutoff_date = datetime.date(current_year, 10, 1)
-        else:
-            awc_cutoff_date = datetime.date(current_year - 1, 10, 1)
-            
-    # 2. SCHOOLS (Annual FY Cycle: April 1 to March 31)
-    if current_month >= 4:
-        school_cutoff_date = datetime.date(current_year, 4, 1)
-    else:
-        school_cutoff_date = datetime.date(current_year - 1, 4, 1)
-
-    awc_cutoff_date_str = awc_cutoff_date.strftime('%Y-%m-%d')
-    school_cutoff_date_str = school_cutoff_date.strftime('%Y-%m-%d')
+        # Apr - Sept -> Cycle 1 started Apr 1st of this year
+        aw_cutoff_date = datetime.date(today_date.year, 4, 1)
+        sch_cutoff_date = datetime.date(today_date.year, 4, 1)
 
     # ==========================================
     # 🚀 DUAL TAB INTERFACE (SCREENING & COVERAGE)
