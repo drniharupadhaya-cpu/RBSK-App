@@ -958,7 +958,10 @@ elif menu == "1. Daily Tour Plan":
 # ==========================================
 elif menu == "2. Child Screening":
     render_header("Child Screening & EMR", "Record vitals and auto-calculate SAM/MAM", "🩺", "#10b981")
-
+    # 🚀 LOCAL SESSION CACHE: Keeps the UI instant without hitting Google API limits
+    if "local_saved_roster" not in st.session_state:
+        st.session_state.local_saved_roster = {}
+        
     # 🚀 NEW: The Manual Override Sync Button!
     if st.button("🔄 Sync & Refresh Roster"):
         try: get_recent_screenings.clear()
@@ -1276,7 +1279,12 @@ elif menu == "2. Child Screening":
                         with v3: m_str = st.text_input("MUAC (cm)") if category == "👶 Anganwadi" else "0"
                         with v4: hb_str = st.text_input("Hb %")
                         
-                        disease = st.selectbox("🦠 Disease Identified (4D)", options=MASTER_4D_DICT)
+                        # 🚀 MULTI-SELECT UPGRADE
+                        disease_selections = st.multiselect("🦠 Disease Identified (4D)", options=MASTER_4D_DICT, default=["None"])
+                        if "None" in disease_selections and len(disease_selections) > 1:
+                            disease_selections.remove("None")
+                        disease = " + ".join(disease_selections) if disease_selections else "None"
+                        
                         save_new = st.form_submit_button("💾 Save New Child & Screening")
                         
                     if save_new:
@@ -1350,7 +1358,7 @@ elif menu == "2. Child Screening":
                         with p_col2: st.info(f"**Gender:** {gender}")
                         with p_col3: st.info(f"**Parent:** {parent}")
 
-                        st.markdown("##### 🕰️ Last Recorded Vitals (Baseline)")
+                        st.markdown("##### 🕰️️ Last Recorded Vitals (Baseline)")
                         h_cols = st.columns(4)
                         h_cols[0].metric("Prev Height", f"{hist_h} cm")
                         h_cols[1].metric("Prev Weight", f"{hist_w} kg")
@@ -1395,7 +1403,13 @@ elif menu == "2. Child Screening":
                                 with v2: w_str = st.text_input("Weight (kg)")
                                 with v3: m_str = st.text_input("MUAC (cm)") if category == "👶 Anganwadi" else "0"
                                 with v4: hb_str = st.text_input("Hb %")
-                                disease = st.selectbox("🦠 Disease Identified (4D)", options=MASTER_4D_DICT)
+                                
+                                # 🚀 MULTI-SELECT UPGRADE
+                                disease_selections = st.multiselect("🦠 Disease Identified (4D)", options=MASTER_4D_DICT, default=["None"])
+                                if "None" in disease_selections and len(disease_selections) > 1:
+                                    disease_selections.remove("None")
+                                disease = " + ".join(disease_selections) if disease_selections else "None"
+                                
                                 save_btn = st.form_submit_button("💾 Save Screening Data")
 
                             if save_btn:
@@ -1502,7 +1516,7 @@ elif menu == "2. Child Screening":
                                     st.toast(f"✅ New screening saved for {final_child_name}!", icon="🎉")
                                     
                                     if category == "👶 Anganwadi" and final_status in ["SAM", "MAM"]:
-                                        # 🛠️ FIX 3: SWAPPED HEIGHT AND WEIGHT HERE!
+                                        # 🛠️️ FIX 3: SWAPPED HEIGHT AND WEIGHT HERE!
                                         spreadsheet.worksheet("cmtc_referral").append_row([str(screening_date), selected_inst, final_child_name, str(dob), updated_contact, height_val, weight_val, muac_val, final_status, "Pending"])
                             
                                 get_recent_screenings.clear() 
