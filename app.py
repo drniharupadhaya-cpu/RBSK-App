@@ -1120,26 +1120,22 @@ elif menu == "2. Child Screening":
 
     current_year = today_date.year
     current_month = today_date.month
-    # ==========================================
-    # 🚀 DUAL-TIMELINE CUTOFF ARCHITECTURE
-    # ==========================================
-    # 1. ANGANWADI (Bi-Annual Cycle)
-    if 4 <= current_month <= 9:
-        awc_cutoff_date = datetime.date(current_year, 4, 1)
+    # 🚀 FIX: STRICT RBSK CYCLE DATE LOGIC (Replacing the flat 180-day rule)
+    if today_date.month >= 10:
+        # Oct, Nov, Dec -> Cycle 2 started Oct 1st of this year
+        active_aw_cutoff = datetime.date(today_date.year, 10, 1)
+        active_sch_cutoff = datetime.date(today_date.year, 4, 1) 
+    elif today_date.month <= 3:
+        # Jan, Feb, Mar -> Cycle 2 started Oct 1st of PREVIOUS year
+        active_aw_cutoff = datetime.date(today_date.year - 1, 10, 1)
+        active_sch_cutoff = datetime.date(today_date.year - 1, 4, 1)
     else:
-        if current_month >= 10:
-            awc_cutoff_date = datetime.date(current_year, 10, 1)
-        else:
-            awc_cutoff_date = datetime.date(current_year - 1, 10, 1)
-            
-    # 2. SCHOOLS (Annual FY Cycle: April 1 to March 31)
-    if current_month >= 4:
-        school_cutoff_date = datetime.date(current_year, 4, 1)
-    else:
-        school_cutoff_date = datetime.date(current_year - 1, 4, 1)
-
-    awc_cutoff_date_str = awc_cutoff_date.strftime('%Y-%m-%d')
-    school_cutoff_date_str = school_cutoff_date.strftime('%Y-%m-%d')
+        # Apr - Sept -> Cycle 1 started Apr 1st of this year
+        active_aw_cutoff = datetime.date(today_date.year, 4, 1)
+        active_sch_cutoff = datetime.date(today_date.year, 4, 1)
+        
+    active_aw_cutoff_str = active_aw_cutoff.strftime('%Y-%m-%d')
+    active_sch_cutoff_str = active_sch_cutoff.strftime('%Y-%m-%d')
     
 
     # ==========================================
@@ -1191,18 +1187,20 @@ elif menu == "2. Child Screening":
                     if any(w in str(col).lower() for w in ['class', 'std', 'grade', 'ધોરણ']):
                         class_column = col; break
 
-            # 🚀 FULL ROSTER LOGIC: Scan all past records to see who is already done!
+            # 🚀 STRICT CYCLE ROSTER LOGIC: Scan ONLY the active cycle to find screened kids!
             target_sheet = "daily_screenings_aw" if category == "👶 Anganwadi" else "daily_screenings_schools"
             inst_records = get_recent_screenings(target_sheet, selected_inst)
             
+            current_cutoff_date = active_aw_cutoff if category == "👶 Anganwadi" else active_sch_cutoff
+            
             recent_status = {} 
-            active_cutoff = awc_cutoff_date if category == "👶 Anganwadi" else school_cutoff_date 
             
             for r in inst_records:
                 try:
-                    # 🚀 FIX: Removed the strict Date strptime that was failing on DD/MM/YYYY dates
-                    # This ensures all previously screened children correctly get their green tick marks back!
-                    if len(r) > 2:
+                    rec_date = datetime.datetime.strptime(r[0], '%Y-%m-%d').date()
+                    
+                    # 🚦 GATEKEEPER: If the screening is older than the cycle start date, IGNORE IT.
+                    if rec_date >= current_cutoff_date:
                         c_name = str(r[2]).strip()
                         status_col = 12 if category == "👶 Anganwadi" else 10
                         status = str(r[status_col]).strip() if len(r) > status_col else ""
