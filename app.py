@@ -1012,6 +1012,7 @@ elif menu == "2. Child Screening":
         "[Disease] Nephrotic syndrome",
         "[Disease] Convulsive Disorders",
         "[Disease] Jaundice",
+        "[Disease] Pterygium",
         "[Disease] Pneumonia",
         "[Delay] Vision Impairment",
         "[Delay] Hearing Impairment",
