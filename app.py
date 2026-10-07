@@ -1006,6 +1006,7 @@ elif menu == "2. Child Screening":
         "[Disease] Otitis Media",
         "[Disease] Septicemia",
         "[Disease] LBW",
+        "[Disease] Kidney stones/ disease",
         "[Disease] Deviated nasal septum",
         "[Disease] Rheumatic Heart Disease",
         "[Disease] Reactive Airways Disease",
