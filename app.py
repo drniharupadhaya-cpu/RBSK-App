@@ -5055,12 +5055,13 @@ elif menu == "15. Clinical & IFA Tracker":
                             if classes_found:
                                 min_std, max_std = str(min(classes_found)), str(max(classes_found))
 
-                # 2. Daily Log Aggregation
+                # 2. Daily Log Aggregation & Bulletproof Math Engine
                 total_screened_today = 0
                 d_counts = {
                     "birth_defects": 0, "deficiency": 0, "delays": 0,
-                    "vision": 0, "anemia": 0, "dental": 0,
-                    "skin": 0, "ear": 0, "other": 0, "total_ref": 0
+                    "vision": 0, "anemia": 0, "clinical_anemia": 0, "dental": 0,
+                    "skin": 0, "ear": 0, "other": 0, "total_ref": 0,
+                    "hb_screened": 0, "hb_normal": 0, "hb_mild": 0, "hb_moderate": 0, "hb_severe": 0
                 }
                 
                 if not logs_df.empty:
@@ -5074,7 +5075,10 @@ elif menu == "15. Clinical & IFA Tracker":
                         target_logs = logs_df[logs_df[inst_col_logs].astype(str).str.strip() == r_name].copy()
                         
                         if date_col:
-                            target_logs['Parsed_Date'] = pd.to_datetime(target_logs[date_col], dayfirst=True, errors='coerce').dt.date
+                            # 🚀 BULLETPROOF DATE PARSER (Fixes the "0 Screened" bug)
+                            strict_dates = pd.to_datetime(target_logs[date_col], format='%Y-%m-%d', errors='coerce')
+                            fallback_dates = pd.to_datetime(target_logs[date_col], dayfirst=True, format='mixed', errors='coerce')
+                            target_logs['Parsed_Date'] = strict_dates.fillna(fallback_dates).dt.date
                             target_logs = target_logs[target_logs['Parsed_Date'] == st.session_state.report_data['date']]
                             
                         if status_col:
@@ -5085,19 +5089,40 @@ elif menu == "15. Clinical & IFA Tracker":
                         total_screened_today = len(screened_logs)
 
                         for _, row in screened_logs.iterrows():
-                            hb_val = pd.to_numeric(row[hb_col], errors='coerce') if hb_col else 0
-                            if pd.notnull(hb_val) and hb_val > 0 and hb_val < 11.5:
-                                d_counts["anemia"] += 1
-                                d_counts["total_ref"] += 1
-                                
+                            # 🚀 UNIQUE CHILD REFERRAL LOCK (Fixes the Double Count bug)
+                            is_referred = False
+                            
+                            # Safely extract HB value
+                            try:
+                                clean_hb = ''.join(c for c in str(row[hb_col]) if c.isdigit() or c == '.')
+                                hb_val = float(clean_hb) if clean_hb else 0.0
+                            except:
+                                hb_val = 0.0
+
+                            # HB Screening Logic
+                            if hb_val > 0:
+                                d_counts["hb_screened"] += 1
+                                if r_level == "Anganwadi":
+                                    if hb_val < 7.0: d_counts["hb_severe"] += 1; is_referred = True
+                                    elif hb_val < 10.0: d_counts["hb_moderate"] += 1; is_referred = True
+                                    elif hb_val < 11.0: d_counts["hb_mild"] += 1; is_referred = True
+                                    else: d_counts["hb_normal"] += 1
+                                else:
+                                    if hb_val < 8.0: d_counts["hb_severe"] += 1; is_referred = True
+                                    elif hb_val < 11.0: d_counts["hb_moderate"] += 1; is_referred = True
+                                    elif hb_val < 11.5: d_counts["hb_mild"] += 1; is_referred = True
+                                    else: d_counts["hb_normal"] += 1
+
+                            # SAM/MAM Logic
                             status_val = str(row[status_col]).strip().upper() if status_col else ""
                             if status_val in ["SAM", "MAM"]:
                                 d_counts["deficiency"] += 1
-                                d_counts["total_ref"] += 1
+                                is_referred = True
                                 
+                            # 4D / Disease Logic
                             disease_val = str(row[disease_col]).upper().strip() if disease_col else ""
-                            if disease_val not in ['', 'NAN', 'NONE', 'NO', 'NULL', 'NA', 'FALSE']:
-                                d_counts["total_ref"] += 1
+                            if disease_val not in ['', 'NAN', 'NONE', 'NO', 'NULL', 'NA', 'FALSE', 'NORMAL']:
+                                is_referred = True
                                 if any(x in disease_val for x in ['CLEFT', 'CLUB', 'CHD', 'NEURAL', 'DOWN']):
                                     d_counts["birth_defects"] += 1
                                 elif any(x in disease_val for x in ['VISION', 'REFRACTIVE']):
@@ -5110,10 +5135,18 @@ elif menu == "15. Clinical & IFA Tracker":
                                     d_counts["ear"] += 1
                                 elif any(x in disease_val for x in ['DELAY', 'AUTISM', 'SPEECH', 'MOTOR', 'HEARING']):
                                     d_counts["delays"] += 1
-                                elif "ANEMIA" in disease_val and hb_val >= 11.5: 
-                                    d_counts["anemia"] += 1 
+                                elif "ANEMIA" in disease_val:
+                                    if hb_val <= 0:  # Only count clinical anemia if no HB value was recorded to prevent double counting
+                                        d_counts["clinical_anemia"] += 1
                                 else:
                                     d_counts["other"] += 1
+                                    
+                            # Increment total referrals ONLY ONCE per child
+                            if is_referred:
+                                d_counts["total_ref"] += 1
+
+                # Calculate True Total Anemia
+                d_counts["anemia"] = d_counts["hb_severe"] + d_counts["hb_moderate"] + d_counts["hb_mild"] + d_counts["clinical_anemia"]
 
                 # 3. Quick UI Preview before PDF Generation
                 st.markdown("### 📊 Verification Preview")
@@ -5219,7 +5252,17 @@ elif menu == "15. Clinical & IFA Tracker":
                             y += 25
                             draw_table_row(y, 5, "પાંડુરોગ / એનીમિયા", "(Anemia)", stats["anemia"], 10, "કુલ રીફર કરેલ બાળકો", "(Total Referred)", stats["total_ref"])
                             
-                            y += 45
+                            # 🚀 NEW HB BREAKDOWN BLOCK
+                            y += 40
+                            pdf.set_font('Gujarati', '', 11)
+                            pdf.text(30, y, "HB (હિમોગ્લોબિન) તપાસની વિગત:")
+                            y += 18
+                            pdf.set_font('Gujarati', '', 10)
+                            hb_str = f"કુલ HB તપાસેલ બાળકો: {stats['hb_screened']} | નોર્મલ: {stats['hb_normal']} | માઈલ્ડ: {stats['hb_mild']} | મોડરેટ: {stats['hb_moderate']} | સિવિયર: {stats['hb_severe']}"
+                            pdf.text(30, y, hb_str)
+                            pdf.line(30, y+5, 550, y+5)
+
+                            y += 25
                             pdf.set_font('Gujarati', '', 11)
                             pdf.text(30, y, f"આ સાથે સમાન્ય બીમારી ધરાવતા {data['phc_ref']} બાળકને PHC/CHC ખાતે તેમજ ગંભીર બીમારી ધરાવતા {data['deic_ref']} બાળકને")
                             y += 18
@@ -5242,7 +5285,6 @@ elif menu == "15. Clinical & IFA Tracker":
                             pdf.text(30, y, "RBSK TEAM SIGN & STAMP")
                             pdf.text(380, y, "INSTITUTION HEAD SIGN & STAMP")
                             
-                            # 🚀 FIX APPLIED: Using w= and h= for FPDF
                             sign_path = "sign.jpg"
                             if os.path.exists(sign_path):
                                 pdf.image(sign_path, x=40, y=y - 60, w=80, h=50)
@@ -5263,6 +5305,7 @@ elif menu == "15. Clinical & IFA Tracker":
                             village_name
                         )
                         
+                        import base64
                         b64 = base64.b64encode(pdf_bytes).decode()
                         st.markdown(f'<a href="data:application/pdf;base64,{b64}" download="RBSK_Report_{st.session_state.report_data["name"]}.pdf" style="display:block;padding:12px;background:#2563eb;color:white;text-align:center;font-weight:bold;border-radius:6px;text-decoration:none;">📄 Download Official PDF Report</a>', unsafe_allow_html=True)
 
