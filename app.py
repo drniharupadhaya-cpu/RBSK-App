@@ -1011,6 +1011,7 @@ elif menu == "2. Child Screening":
         "[Disease] Rheumatic Heart Disease",
         "[Disease] Reactive Airways Disease",
         "[Disease] Nephrotic syndrome",
+        "[Disease] Fecolith / intestinal infection",
         "[Disease] Convulsive Disorders",
         "[Disease] Jaundice",
         "[Disease] Pterygium",
