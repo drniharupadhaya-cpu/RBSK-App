@@ -542,6 +542,45 @@ elif menu == "1. Daily Tour Plan":
                                     pdf.cell(col_widths[6], 20, a_val[:22], border=1, align='C')
                                     pdf.ln()
                                     
+                                pdf.ln(15)
+                                
+                                # ==========================================
+                                # 🚀 NEW: SUMMARY & CERTIFICATE BLOCK
+                                # ==========================================
+                                pdf.set_font('Gujarati', '', 10)
+                                
+                                col1_labels = [
+                                    "માસના કુલ દિવસો",
+                                    "ઓફીસ કામગીરીના દિવસો",
+                                    "પ્રવાસના દિવસો",
+                                    "બિન પગારી રજા/ contract break",
+                                    "ચૂકવવા પાત્ર પગાર નાં દિવસો"
+                                ]
+                                col2_labels = [
+                                    "જાહેર રજા",
+                                    "CL",
+                                    "SICK LEAVE",
+                                    "SPECIAL LEAVE",
+                                    "MATERNITY LEAVE"
+                                ]
+                                
+                                # Draw the two-column layout dynamically
+                                for i in range(5):
+                                    pdf.cell(180, 20, col1_labels[i], border=0)
+                                    pdf.cell(60, 20, "__________", border=0)
+                                    pdf.cell(150, 20, col2_labels[i], border=0)
+                                    pdf.cell(60, 20, "__________", border=0)
+                                    pdf.ln()
+
+                                pdf.ln(10)
+                                pdf.set_font('Gujarati', '', 12)
+                                pdf.cell(0, 20, "પ્રમાણપત્ર", align='C', ln=True)
+                                
+                                pdf.set_font('Gujarati', '', 10)
+                                cert_text = "આથી પ્રમાણપત્ર આપવામાં આવે છે કે, ઉક્ત ડાયરીમાં દર્શાવેલ કામગીરીના દિવસો, CL, SICK LEAVE, SPECIAL LEAVE, LEAVE WITHOUT PAY, તેમજ કરવાની થતી કામગીરી તેમના દ્વારા સંતોષ કારક રીતે કરવામાં આવેલ છે અને તેમની કામગીરી તથા તમામ રાજા ની નોંધ અત્રેની કચેરીના રેકોર્ડ / HRMS સાથે સુસંગત છે જેની ખાતરી બદલ આથી પ્રમાણપત્ર આપવામાં આવે છે."
+                                
+                                # multi_cell handles wrapping natively so it doesn't push off the screen edge
+                                pdf.multi_cell(0, 15, cert_text, align='J')
                                 pdf.ln(30)
                                 
                                 # Signature & Seal Injection Block
@@ -574,8 +613,8 @@ elif menu == "1. Daily Tour Plan":
                     except Exception as e:
                         st.error(f"🚨 Error generating PDF: {e}")
                         
-        else:
-            st.info("No tour plans have been saved yet! Click 'Refresh Data & Load Table' to load data.")
+            else:
+                st.info("No tour plans have been saved yet! Click 'Refresh Data & Load Table' to load data.")
             
         st.divider()
         st.markdown("##### ✅ Daily Check-list for MHT-1")
